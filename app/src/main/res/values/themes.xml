@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Base theme: colours come from attrs so a palette overlay can swap them. -->
+    <style name="Theme.Animarvle" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="colorPrimary">@color/accent</item>
+        <item name="colorOnPrimary">@color/on_bg</item>
+        <item name="colorSurface">@color/surface</item>
+        <item name="colorSurfaceVariant">@color/surface_variant</item>
+        <item name="colorOnSurface">@color/on_bg</item>
+        <item name="colorOnSurfaceVariant">@color/on_bg_muted</item>
+        <item name="android:windowBackground">@color/bg</item>
+        <item name="android:statusBarColor">@color/bg</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:enforceNavigationBarContrast">false</item>
+    </style>
+
+    <!-- Palette overlays, applied at runtime by AppTheme. -->
+    <style name="Palette.Red" parent="">
+        <item name="colorPrimary">@color/red_accent</item>
+        <item name="android:windowBackground">@color/red_bg</item>
+        <item name="android:statusBarColor">@color/red_bg</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+
+    <style name="Palette.Green" parent="">
+        <item name="colorPrimary">@color/green_accent</item>
+        <item name="android:windowBackground">@color/green_bg</item>
+        <item name="android:statusBarColor">@color/green_bg</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+
+    <style name="Palette.Cyan" parent="">
+        <item name="colorPrimary">@color/cyan_accent</item>
+        <item name="android:windowBackground">@color/cyan_bg</item>
+        <item name="android:statusBarColor">@color/cyan_bg</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+
+    <!-- PROMPT §6: selected tab = accent icon + label, no pill behind it. -->
+    <style name="Widget.Animarvle.NoIndicator" parent="Widget.Material3.BottomNavigationView.ActiveIndicator">
+        <item name="android:color">@android:color/transparent</item>
+        <item name="android:width">0dp</item>
+        <item name="android:height">0dp</item>
+    </style>
+
+    <!-- AniVortex Floating Obsidian Glass Dialog (Landscape mode) -->
+    <style name="Theme.Animarvle.FloatingDialog" parent="Theme.Material3.Dark.Dialog">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowIsFloating">true</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:backgroundDimEnabled">true</item>
+        <item name="android:backgroundDimAmount">0.20</item>
+        <item name="android:windowAnimationStyle">@style/Animation.Animarvle.FloatingCard</item>
+    </style>
+
+    <style name="Animation.Animarvle.FloatingCard" parent="@android:style/Animation">
+        <item name="android:windowEnterAnimation">@anim/slide_in_bottom</item>
+        <item name="android:windowExitAnimation">@anim/slide_out_bottom</item>
+    </style>
+</resources>

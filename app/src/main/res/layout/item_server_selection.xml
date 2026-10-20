@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/serverCard"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginHorizontal="16dp"
+    android:layout_marginVertical="6dp"
+    android:background="@drawable/bg_server_card"
+    android:clickable="true"
+    android:focusable="true"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:padding="14dp">
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <!-- Server name -->
+        <TextView
+            android:id="@+id/textServerName"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/on_bg"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            tools:text="AllAnime" />
+
+        <!-- Badges row -->
+        <LinearLayout
+            android:id="@+id/badgesLayout"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <!-- Playing now (accent pill) -->
+            <TextView
+                android:id="@+id/badgePlayingNow"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="6dp"
+                android:background="@drawable/bg_badge_accent"
+                android:paddingHorizontal="6dp"
+                android:paddingVertical="2dp"
+                android:text="@string/server_badge_playing_now"
+                android:textColor="#FFFFFF"
+                android:textSize="10.5sp"
+                android:textStyle="bold"
+                android:visibility="gone"
+                tools:visibility="visible" />
+
+            <!-- Fast -->
+            <TextView
+                android:id="@+id/badgeFast"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="6dp"
+                android:background="@drawable/bg_badge_fast"
+                android:text="@string/server_badge_fast"
+                android:textColor="#00D4B2"
+                android:textSize="10.5sp"
+                android:textStyle="bold" />
+
+            <!-- Can download -->
+            <TextView
+                android:id="@+id/badgeDownload"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="6dp"
+                android:background="@drawable/bg_badge_download"
+                android:text="@string/server_badge_download"
+                android:textColor="#4D96FF"
+                android:textSize="10.5sp"
+                android:textStyle="bold" />
+
+            <!-- Audio (Subbed/Dubbed) -->
+            <TextView
+                android:id="@+id/badgeAudio"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="6dp"
+                android:background="@drawable/bg_badge_subtle"
+                android:textColor="@color/on_bg_muted"
+                android:textSize="10.5sp"
+                tools:text="Subbed" />
+
+            <!-- Language -->
+            <TextView
+                android:id="@+id/badgeLanguage"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_badge_subtle"
+                android:textColor="@color/on_bg_muted"
+                android:textSize="10.5sp"
+                tools:text="English" />
+
+        </LinearLayout>
+
+        <!-- Release / quality hint -->
+        <TextView
+            android:id="@+id/textServerHint"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="5dp"
+            android:textColor="@color/on_bg_muted"
+            android:textSize="12sp"
+            tools:text="Auto · Direct HLS · 1080p" />
+
+    </LinearLayout>
+
+    <!-- Radio check circle -->
+    <ImageView
+        android:id="@+id/radioCheck"
+        android:layout_width="22dp"
+        android:layout_height="22dp"
+        android:layout_marginStart="12dp"
+        android:contentDescription="@string/player_choose_server"
+        android:src="@drawable/ic_circle_unchecked" />
+
+</LinearLayout>

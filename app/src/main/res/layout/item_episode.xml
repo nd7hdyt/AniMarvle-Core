@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="52dp"
+    android:layout_margin="5dp">
+
+    <TextView
+        android:id="@+id/epLabel"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@drawable/bg_ep_tile"
+        android:gravity="center"
+        android:textColor="@color/on_bg"
+        android:textSize="14sp"
+        android:textStyle="bold" />
+</FrameLayout>

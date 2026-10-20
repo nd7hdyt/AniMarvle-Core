@@ -1,0 +1,13 @@
+{
+  "name": "animarvle-edge-relay",
+  "version": "1.0.0",
+  "description": "Animarvle Serverless Edge Relay (AniVortex-style HLS streaming backend)",
+  "main": "worker.js",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^3.80.0"
+  }
+}

@@ -1,0 +1,31 @@
+.gradle/
+build/
+*/build/
+local.properties
+.idea/
+*.iml
+captures/
+.externalNativeBuild/
+.cxx/
+node_modules/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Build artifacts & logs
+*.apk
+*.aab
+*.log
+
+# Scratch dumps & temporary captures in root
+/*.png
+/*.jpg
+/*.xml
+/*.txt
+/*.js
+/*.py
+/Apk Files/
+/anivortex_extracted/
+/downloaded_exts/

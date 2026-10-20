@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="56dp"
+    android:height="80dp"
+    android:viewportWidth="56"
+    android:viewportHeight="80">
+
+    <!-- Background card -->
+    <path
+        android:fillColor="#1F2330"
+        android:pathData="M 10,0 H 46 C 51.52,0 56,4.48 56,10 V 70 C 56,75.52 51.52,80 46,80 H 10 C 4.48,80 0,75.52 0,70 V 10 C 0,4.48 4.48,0 10,0 Z" />
+
+    <!-- Centered subtle film icon -->
+    <group
+        android:pivotX="12"
+        android:pivotY="12"
+        android:scaleX="1.1"
+        android:scaleY="1.1"
+        android:translateX="15"
+        android:translateY="27">
+        <path
+            android:fillColor="#454C62"
+            android:pathData="M18,3v2h-2L16,3H8v2L6,5L6,3L4,3v18h16L20,3h-2zM8,17L6,17v-2h2v2zM8,13L6,13v-2h2v2zM8,9L6,9L6,7h2v2zM14,19h-4v-6h4v6zM18,17h-2v-2h2v2zM18,13h-2v-2h2v2zM18,9h-2L16,7h2v2z" />
+    </group>
+</vector>

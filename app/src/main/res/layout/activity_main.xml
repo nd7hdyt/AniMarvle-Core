@@ -1,0 +1,288 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?android:attr/windowBackground">
+
+    <androidx.fragment.app.FragmentContainerView
+        android:id="@+id/nav_host"
+        android:name="androidx.navigation.fragment.NavHostFragment"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        app:defaultNavHost="true"
+        app:navGraph="@navigation/nav_main" />
+
+    <!-- Floating Bottom Navigation Bar (matches AniVortex reference) -->
+    <LinearLayout
+        android:id="@+id/bottomNavContainer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:orientation="vertical">
+
+        <!-- Top gradient scrim: softly blends scrolling content into pitch black -->
+        <View
+            android:id="@+id/bottomNavScrim"
+            android:layout_width="match_parent"
+            android:layout_height="16dp"
+            android:background="@drawable/bg_bottom_nav_top_scrim" />
+
+        <!-- Navigation Bar Items Row -->
+        <LinearLayout
+            android:id="@+id/bottomNavBar"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:background="#000000"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="4dp">
+
+            <!-- Tab 1: Home -->
+            <LinearLayout
+                android:id="@+id/navItemHome"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center"
+                android:orientation="vertical">
+
+                <ImageView
+                    android:id="@+id/navIconHome"
+                    android:layout_width="22dp"
+                    android:layout_height="22dp"
+                    android:contentDescription="@string/nav_home"
+                    android:src="@drawable/ic_nav_home"
+                    app:tint="#FFFFFF" />
+
+                <TextView
+                    android:id="@+id/navLabelHome"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:includeFontPadding="false"
+                    android:text="@string/nav_home"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+
+                <View
+                    android:id="@+id/navIndicatorHome"
+                    android:layout_width="18dp"
+                    android:layout_height="2.5dp"
+                    android:layout_marginTop="3dp"
+                    android:background="@drawable/bg_nav_indicator"
+                    android:visibility="visible" />
+            </LinearLayout>
+
+            <!-- Tab 2: Schedule -->
+            <LinearLayout
+                android:id="@+id/navItemSchedule"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center"
+                android:orientation="vertical">
+
+                <ImageView
+                    android:id="@+id/navIconSchedule"
+                    android:layout_width="22dp"
+                    android:layout_height="22dp"
+                    android:contentDescription="@string/nav_schedule"
+                    android:src="@drawable/ic_nav_schedule"
+                    app:tint="#8E8E93" />
+
+                <TextView
+                    android:id="@+id/navLabelSchedule"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:includeFontPadding="false"
+                    android:text="@string/nav_schedule"
+                    android:textColor="#8E8E93"
+                    android:textSize="11sp" />
+
+                <View
+                    android:id="@+id/navIndicatorSchedule"
+                    android:layout_width="18dp"
+                    android:layout_height="2.5dp"
+                    android:layout_marginTop="3dp"
+                    android:background="@drawable/bg_nav_indicator"
+                    android:visibility="invisible" />
+            </LinearLayout>
+
+            <!-- Tab 3: My List -->
+            <LinearLayout
+                android:id="@+id/navItemMyList"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center"
+                android:orientation="vertical">
+
+                <ImageView
+                    android:id="@+id/navIconMyList"
+                    android:layout_width="22dp"
+                    android:layout_height="22dp"
+                    android:contentDescription="@string/nav_my_list"
+                    android:src="@drawable/ic_nav_mylist"
+                    app:tint="#8E8E93" />
+
+                <TextView
+                    android:id="@+id/navLabelMyList"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:includeFontPadding="false"
+                    android:text="@string/nav_my_list"
+                    android:textColor="#8E8E93"
+                    android:textSize="11sp" />
+
+                <View
+                    android:id="@+id/navIndicatorMyList"
+                    android:layout_width="18dp"
+                    android:layout_height="2.5dp"
+                    android:layout_marginTop="3dp"
+                    android:background="@drawable/bg_nav_indicator"
+                    android:visibility="invisible" />
+            </LinearLayout>
+
+            <!-- Tab 4: Download -->
+            <LinearLayout
+                android:id="@+id/navItemDownload"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center"
+                android:orientation="vertical">
+
+                <ImageView
+                    android:id="@+id/navIconDownload"
+                    android:layout_width="22dp"
+                    android:layout_height="22dp"
+                    android:contentDescription="@string/nav_download"
+                    android:src="@drawable/ic_nav_download"
+                    app:tint="#8E8E93" />
+
+                <TextView
+                    android:id="@+id/navLabelDownload"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:includeFontPadding="false"
+                    android:text="@string/nav_download"
+                    android:textColor="#8E8E93"
+                    android:textSize="11sp" />
+
+                <View
+                    android:id="@+id/navIndicatorDownload"
+                    android:layout_width="18dp"
+                    android:layout_height="2.5dp"
+                    android:layout_marginTop="3dp"
+                    android:background="@drawable/bg_nav_indicator"
+                    android:visibility="invisible" />
+            </LinearLayout>
+
+            <!-- Tab 5: Profile -->
+            <LinearLayout
+                android:id="@+id/navItemProfile"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center"
+                android:orientation="vertical">
+
+                <ImageView
+                    android:id="@+id/navIconProfile"
+                    android:layout_width="22dp"
+                    android:layout_height="22dp"
+                    android:contentDescription="@string/nav_profile"
+                    android:src="@drawable/ic_nav_profile"
+                    app:tint="#8E8E93" />
+
+                <TextView
+                    android:id="@+id/navLabelProfile"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:includeFontPadding="false"
+                    android:text="@string/nav_profile"
+                    android:textColor="#8E8E93"
+                    android:textSize="11sp" />
+
+                <View
+                    android:id="@+id/navIndicatorProfile"
+                    android:layout_width="18dp"
+                    android:layout_height="2.5dp"
+                    android:layout_marginTop="3dp"
+                    android:background="@drawable/bg_nav_indicator"
+                    android:visibility="invisible" />
+            </LinearLayout>
+
+        </LinearLayout>
+
+        <!-- Dynamic Inset Spacer: fills gesture navigation bar area with pitch black -->
+        <View
+            android:id="@+id/bottomNavInsetSpacer"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:background="#000000" />
+
+    </LinearLayout>
+
+    <!-- Splash Screen overlay (matches reference flow: centered brand logo + circular progress indicator) -->
+    <FrameLayout
+        android:id="@+id/splashOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="?android:attr/windowBackground"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ImageView
+                android:id="@+id/splashLogo"
+                android:layout_width="96dp"
+                android:layout_height="96dp"
+                android:contentDescription="@string/app_name"
+                android:src="@drawable/animarvle_logo_white" />
+
+            <com.google.android.material.progressindicator.CircularProgressIndicator
+                android:id="@+id/splashLoader"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="36dp"
+                android:indeterminate="true"
+                app:indicatorColor="?attr/colorPrimary"
+                app:indicatorSize="38dp"
+                app:trackThickness="3.5dp"
+                app:trackColor="#26FFFFFF" />
+
+        </LinearLayout>
+
+    </FrameLayout>
+
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

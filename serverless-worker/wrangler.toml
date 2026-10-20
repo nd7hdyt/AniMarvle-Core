@@ -1,0 +1,6 @@
+name = "animarvle-edge"
+main = "worker.js"
+compatibility_date = "2024-09-23"
+
+# Cloudflare Free Tier compatible (100,000 requests/day at $0/month)
+workers_dev = true

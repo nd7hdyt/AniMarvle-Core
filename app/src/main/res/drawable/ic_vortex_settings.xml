@@ -1,0 +1,42 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <!-- Top slider track -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:pathData="M3.5,8 L12.5,8" />
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:pathData="M19.5,8 L20.5,8" />
+    <!-- Top circle knob -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.8"
+        android:fillColor="#00000000"
+        android:pathData="M16,4.5 C17.93,4.5 19.5,6.07 19.5,8 C19.5,9.93 17.93,11.5 16,11.5 C14.07,11.5 12.5,9.93 12.5,8 C12.5,6.07 14.07,4.5 16,4.5 Z" />
+
+    <!-- Bottom slider track -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:pathData="M3.5,16 L4.5,16" />
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:pathData="M11.5,16 L20.5,16" />
+    <!-- Bottom circle knob -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.8"
+        android:fillColor="#00000000"
+        android:pathData="M8,12.5 C9.93,12.5 11.5,14.07 11.5,16 C11.5,17.93 9.93,19.5 8,19.5 C6.07,19.5 4.5,17.93 4.5,16 C4.5,14.07 6.07,12.5 8,12.5 Z" />
+</vector>

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <!-- Deep translucent charcoal-obsidian fill that masks the seekbar underneath -->
+    <solid android:color="#CC121318" />
+    <!-- All 4 corners rounded to match the floating reference card -->
+    <corners android:radius="26dp" />
+</shape>

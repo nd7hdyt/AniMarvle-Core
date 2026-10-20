@@ -1,0 +1,91 @@
+import java.util.Properties
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
+val envFile = rootProject.file(".env")
+val envProperties = Properties().apply {
+    if (envFile.exists()) {
+        envFile.bufferedReader().use { load(it) }
+    }
+}
+
+fun getSecret(key: String, fallback: String = ""): String =
+    System.getenv(key) ?: envProperties.getProperty(key, fallback)
+
+plugins {
+    id("com.android.application")
+    alias(libs.plugins.kotlin.serialization)
+}
+
+android {
+    namespace = "com.animarvle.app"
+    compileSdk = 37
+
+    defaultConfig {
+        applicationId = "com.animarvle.app"
+        minSdk = 26
+        targetSdk = 37
+        versionCode = 1
+        versionName = "0.1.0"
+
+        val tmdbKey = getSecret("TMDB_API_KEY")
+        val googleClientId = getSecret("GOOGLE_WEB_CLIENT_ID")
+        buildConfigField("String", "TMDB_API_KEY", "\"$tmdbKey\"")
+        buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"$googleClientId\"")
+    }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    buildFeatures {
+        viewBinding = true
+        buildConfig = true
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_17)
+    }
+}
+
+dependencies {
+    implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.appcompat)
+    implementation(libs.material)
+    implementation(libs.androidx.fragment.ktx)
+    implementation(libs.androidx.navigation.fragment.ktx)
+    implementation(libs.androidx.navigation.ui.ktx)
+    implementation(libs.androidx.recyclerview)
+    implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.lifecycle.viewmodel.ktx)
+    implementation(libs.okhttp)
+    implementation(libs.kotlinx.serialization.json)
+    implementation(libs.coil)
+    implementation(libs.androidx.swiperefreshlayout)
+    implementation(libs.media3.exoplayer)
+    implementation(libs.media3.exoplayer.dash)
+    implementation(libs.media3.exoplayer.hls)
+    implementation(libs.media3.ui)
+    implementation(libs.media3.session)
+    implementation(libs.media3.datasource.okhttp)
+
+    implementation(project(":source-api"))
+    implementation(project(":domain"))
+    implementation(project(":source-sample"))
+
+    // Vendored Aniyomi source-api + core/common (Apache-2.0) — enables loading real Aniyomi
+    // extension APKs the user installs. See docs/DECISIONS.md "Vendoring the Aniyomi source-api".
+    implementation(project(":aniyomi-api"))
+
+    implementation(libs.play.services.auth)
+
+    testImplementation(libs.junit)
+}

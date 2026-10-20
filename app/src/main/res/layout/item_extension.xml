@@ -1,0 +1,193 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginHorizontal="16dp"
+    android:layout_marginVertical="5dp"
+    android:background="@drawable/bg_extension_card"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:padding="12dp">
+
+    <!-- Extension Icon Container -->
+    <FrameLayout
+        android:layout_width="48dp"
+        android:layout_height="48dp">
+
+        <ImageView
+            android:id="@+id/extensionIcon"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:contentDescription="@null"
+            android:scaleType="centerCrop"
+            tools:src="@drawable/ic_layers" />
+
+        <!-- Engine Badge Icon (bottom-end) -->
+        <ImageView
+            android:id="@+id/engineBadge"
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_gravity="bottom|end"
+            android:background="@drawable/bg_circle_scrim"
+            android:contentDescription="@null"
+            android:padding="2dp"
+            android:src="@drawable/ic_play_filled" />
+    </FrameLayout>
+
+    <!-- Info Column -->
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="14dp"
+        android:layout_marginEnd="8dp"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/extensionName"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="?attr/colorOnSurface"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            tools:text="AllAnime" />
+
+        <!-- Metadata Badges Row -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="5dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <!-- Language Badge -->
+            <TextView
+                android:id="@+id/langBadge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_badge_outline"
+                android:paddingHorizontal="6dp"
+                android:paddingVertical="2dp"
+                android:textColor="?attr/colorOnSurfaceVariant"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                tools:text="ENGLISH" />
+
+            <!-- Version Badge -->
+            <TextView
+                android:id="@+id/versionBadge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:background="@drawable/bg_badge_dark"
+                android:paddingHorizontal="6dp"
+                android:paddingVertical="2dp"
+                android:textColor="?attr/colorOnSurfaceVariant"
+                android:textSize="10sp"
+                tools:text="V0.2.2" />
+
+            <!-- NSFW Badge (if applicable) -->
+            <TextView
+                android:id="@+id/nsfwBadge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:background="@drawable/bg_badge_accent"
+                android:paddingHorizontal="6dp"
+                android:paddingVertical="2dp"
+                android:text="@string/ext_badge_nsfw_18"
+                android:textColor="@color/on_bg"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+            <!-- Engine label pill -->
+            <TextView
+                android:id="@+id/engineLabelBadge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:background="@drawable/bg_chip_tonal"
+                android:paddingHorizontal="6dp"
+                android:paddingVertical="2dp"
+                android:textColor="?attr/colorOnSurfaceVariant"
+                android:textSize="10sp"
+                tools:text="Aniyomi" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Trailing Action -->
+    <FrameLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content">
+
+        <!-- Available Action: Download Button -->
+        <ImageButton
+            android:id="@+id/actionDownload"
+            android:layout_width="38dp"
+            android:layout_height="38dp"
+            android:background="@drawable/bg_circle_action"
+            android:contentDescription="@string/ext_desc_download"
+            android:padding="8dp"
+            android:src="@drawable/ic_download"
+            app:tint="?attr/colorOnSurface" />
+
+        <!-- Download Progress Spinner -->
+        <ProgressBar
+            android:id="@+id/downloadProgress"
+            android:layout_width="38dp"
+            android:layout_height="38dp"
+            android:padding="4dp"
+            android:visibility="gone" />
+
+        <!-- Installed Actions Row -->
+        <LinearLayout
+            android:id="@+id/installedActions"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <!-- Update action (shown when update pending) -->
+            <ImageButton
+                android:id="@+id/actionUpdate"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_marginEnd="6dp"
+                android:background="@drawable/bg_card_update"
+                android:contentDescription="@string/ext_desc_update"
+                android:padding="8dp"
+                android:src="@drawable/ic_refresh"
+                android:visibility="gone"
+                app:tint="@android:color/white" />
+
+            <!-- Uninstall action (coral rounded button) -->
+            <ImageButton
+                android:id="@+id/actionUninstall"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:background="@drawable/bg_card_uninstall"
+                android:contentDescription="@string/ext_desc_uninstall"
+                android:padding="8dp"
+                android:src="@drawable/ic_delete"
+                app:tint="#2B1214" />
+
+            <!-- Settings action (slate rounded button) -->
+            <ImageButton
+                android:id="@+id/actionSettings"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_marginStart="6dp"
+                android:background="@drawable/bg_card_settings"
+                android:contentDescription="@string/ext_desc_settings"
+                android:padding="8dp"
+                android:src="@drawable/ic_settings"
+                app:tint="@android:color/white" />
+        </LinearLayout>
+    </FrameLayout>
+</LinearLayout>

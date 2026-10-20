@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="utf-8"?>
+<navigation xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/nav_main"
+    app:startDestination="@id/homeFragment">
+
+    <fragment
+        android:id="@+id/homeFragment"
+        android:name="com.animarvle.app.ui.home.HomeFragment"
+        android:label="@string/nav_home" />
+
+    <fragment
+        android:id="@+id/scheduleFragment"
+        android:name="com.animarvle.app.ui.schedule.ScheduleFragment"
+        android:label="@string/nav_schedule" />
+
+    <fragment
+        android:id="@+id/myListFragment"
+        android:name="com.animarvle.app.ui.mylist.MyListFragment"
+        android:label="@string/nav_my_list" />
+
+    <fragment
+        android:id="@+id/downloadFragment"
+        android:name="com.animarvle.app.ui.download.DownloadFragment"
+        android:label="@string/nav_download" />
+
+    <fragment
+        android:id="@+id/profileFragment"
+        android:name="com.animarvle.app.ui.profile.ProfileFragment"
+        android:label="@string/nav_profile" />
+
+    <!-- Details is a full-screen destination reached from posters/search (PROMPT §7.6). -->
+    <fragment
+        android:id="@+id/detailFragment"
+        android:name="com.animarvle.app.ui.detail.DetailFragment"
+        android:label="@string/details_title">
+        <argument
+            android:name="mediaId"
+            android:defaultValue="-1L"
+            app:argType="long" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/searchFragment"
+        android:name="com.animarvle.app.ui.search.SearchFragment"
+        android:label="@string/search_top_searches" />
+
+    <!-- Player: full-screen; reached from Details "Play" (PROMPT §8, ARCH §8). -->
+    <fragment
+        android:id="@+id/playerFragment"
+        android:name="com.animarvle.app.ui.player.PlayerFragment"
+        android:label="@string/player_title">
+        <argument
+            android:name="sourceId"
+            android:defaultValue="0L"
+            app:argType="long" />
+        <argument
+            android:name="mediaUrl"
+            android:defaultValue=""
+            app:argType="string" />
+        <argument
+            android:name="mediaTitle"
+            android:defaultValue=""
+            app:argType="string" />
+        <argument
+            android:name="mediaType"
+            android:defaultValue="ANIME"
+            app:argType="string" />
+        <argument
+            android:name="year"
+            android:defaultValue="0"
+            app:argType="integer" />
+        <argument
+            android:name="episodeCount"
+            android:defaultValue="0"
+            app:argType="integer" />
+        <argument
+            android:name="audio"
+            android:defaultValue="SUB"
+            app:argType="string" />
+    </fragment>
+
+    <!-- Extension Manager (AnymeX-style): reached from Profile tab -->
+    <fragment
+        android:id="@+id/extensionManagerFragment"
+        android:name="com.animarvle.app.ui.extensions.ExtensionManagerFragment"
+        android:label="@string/extensions_title" />
+
+    <!-- Extension Testing Screen (AnymeX-style): reached from Extension Manager wrench icon -->
+    <fragment
+        android:id="@+id/extensionTestingFragment"
+        android:name="com.animarvle.app.ui.extensions.ExtensionTestingFragment"
+        android:label="Extension Testing" />
+
+    <!-- Extension repos URLs management: reached from Extension Manager settings button -->
+    <fragment
+        android:id="@+id/extensionReposFragment"
+        android:name="com.animarvle.app.ui.profile.ExtensionReposFragment"
+        android:label="@string/extension_repos_title" />
+
+    <!-- Interface Settings (Look, Language & Titles) -->
+    <fragment
+        android:id="@+id/interfaceFragment"
+        android:name="com.animarvle.app.ui.profile.InterfaceFragment"
+        android:label="Interface" />
+
+    <!-- Player & Downloads Settings -->
+    <fragment
+        android:id="@+id/playerSettingsFragment"
+        android:name="com.animarvle.app.ui.profile.PlayerSettingsFragment"
+        android:label="@string/settings_player_downloads" />
+
+    <!-- Subtitle Settings -->
+    <fragment
+        android:id="@+id/subtitleSettingsFragment"
+        android:name="com.animarvle.app.ui.profile.SubtitleSettingsFragment"
+        android:label="@string/settings_subtitle" />
+
+    <!-- Sort & Filter: reached from Search (PROMPT §7.3b) -->
+    <fragment
+        android:id="@+id/sortFilterFragment"
+        android:name="com.animarvle.app.ui.search.SortFilterFragment"
+        android:label="@string/filter_title" />
+
+    <!-- Dedicated About Screen (from SettingsSections.kt) -->
+    <fragment
+        android:id="@+id/aboutFragment"
+        android:name="com.animarvle.app.ui.profile.AboutFragment"
+        android:label="@string/settings_about" />
+
+    <!-- Onboarding & Authentication Flow -->
+    <fragment
+        android:id="@+id/welcomeFragment"
+        android:name="com.animarvle.app.ui.auth.WelcomeFragment"
+        android:label="Welcome" />
+
+    <fragment
+        android:id="@+id/authLetYouInFragment"
+        android:name="com.animarvle.app.ui.auth.AuthLetYouInFragment"
+        android:label="@string/auth_let_you_in" />
+
+    <fragment
+        android:id="@+id/loginFragment"
+        android:name="com.animarvle.app.ui.auth.LoginFragment"
+        android:label="Sign In" />
+
+    <fragment
+        android:id="@+id/signUpFragment"
+        android:name="com.animarvle.app.ui.auth.SignUpFragment"
+        android:label="Sign Up" />
+</navigation>

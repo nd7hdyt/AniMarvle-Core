@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="160dp"
+    android:height="160dp"
+    android:viewportWidth="160"
+    android:viewportHeight="160">
+
+    <!-- Stylized tree canopy (circular accent/green layers) -->
+    <path
+        android:fillColor="?attr/colorPrimary"
+        android:pathData="M60,20 a32,32 0 1,0 0,64 a32,32 0 1,0 0,-64 z" />
+    <path
+        android:fillColor="#0D2E20"
+        android:pathData="M60,40 a20,20 0 1,0 0,40 a20,20 0 1,0 0,-40 z" />
+
+    <!-- Tree trunk -->
+    <path
+        android:fillColor="#2A3342"
+        android:pathData="M58,84 h4 v36 h-4 z" />
+
+    <!-- Circular Play button floating nearby -->
+    <path
+        android:fillColor="#252D3D"
+        android:pathData="M108,60 a20,20 0 1,0 0,40 a20,20 0 1,0 0,-40 z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M103,72 l14,8 l-14,8 z" />
+
+    <!-- Relaxing figure sitting under the tree -->
+    <path
+        android:fillColor="#3E4A5E"
+        android:pathData="M48,110 a6,6 0 1,0 0,-12 a6,6 0 1,0 0,12 z" />
+    <path
+        android:fillColor="#A0AEC0"
+        android:pathData="M44,110 l16,0 l12,10 l-6,4 l-14,-6 l-8,8 z" />
+    <path
+        android:fillColor="#1A202C"
+        android:pathData="M56,116 l20,4 l-10,4 z" />
+
+    <!-- Ground baseline -->
+    <path
+        android:fillColor="#1E2634"
+        android:pathData="M30,124 h100 v2 h-100 z" />
+</vector>

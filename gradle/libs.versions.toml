@@ -1,0 +1,70 @@
+[versions]
+agp = "9.4.1"
+coreKtx = "1.19.1"
+appcompat = "1.8.0"
+material = "1.14.0"
+fragmentKtx = "1.9.1"
+navigation = "2.10.2"
+recyclerview = "1.4.0"
+lifecycle = "2.11.0"
+okhttp = "5.5.0"
+serialization = "1.11.0"
+coil = "2.7.0"
+swiperefresh = "1.2.0"
+media3 = "1.11.1"
+junit = "4.13.2"
+coroutines = "1.11.0"
+# Vendored Aniyomi source-api deps (extensions link against these transitively).
+jsoup = "1.21.1"
+# Aniyomi's source-api uses RxJava 1 (package `rx.*`), NOT RxJava 2.
+rxjava = "1.3.8"
+preference = "1.2.1"
+nanohttpd = "2.3.1"
+okio = "3.10.2"
+logcat = "0.1"
+quickjs = "0.9.2"
+torrserver = "0.1.1"
+# DI used by the vendored Aniyomi source-api (Mihon fork of Injekt, pinned by commit as upstream does).
+injekt = "91edab2317"
+play-services-auth = "21.3.0"
+
+[libraries]
+androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
+androidx-appcompat = { module = "androidx.appcompat:appcompat", version.ref = "appcompat" }
+material = { module = "com.google.android.material:material", version.ref = "material" }
+androidx-fragment-ktx = { module = "androidx.fragment:fragment-ktx", version.ref = "fragmentKtx" }
+androidx-navigation-fragment-ktx = { module = "androidx.navigation:navigation-fragment-ktx", version.ref = "navigation" }
+androidx-navigation-ui-ktx = { module = "androidx.navigation:navigation-ui-ktx", version.ref = "navigation" }
+androidx-recyclerview = { module = "androidx.recyclerview:recyclerview", version.ref = "recyclerview" }
+androidx-lifecycle-runtime-ktx = { module = "androidx.lifecycle:lifecycle-runtime-ktx", version.ref = "lifecycle" }
+androidx-lifecycle-viewmodel-ktx = { module = "androidx.lifecycle:lifecycle-viewmodel-ktx", version.ref = "lifecycle" }
+okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }
+coil = { module = "io.coil-kt:coil", version.ref = "coil" }
+androidx-swiperefreshlayout = { module = "androidx.swiperefreshlayout:swiperefreshlayout", version.ref = "swiperefresh" }
+media3-exoplayer = { module = "androidx.media3:media3-exoplayer", version.ref = "media3" }
+media3-exoplayer-dash = { module = "androidx.media3:media3-exoplayer-dash", version.ref = "media3" }
+media3-exoplayer-hls = { module = "androidx.media3:media3-exoplayer-hls", version.ref = "media3" }
+media3-ui = { module = "androidx.media3:media3-ui", version.ref = "media3" }
+media3-session = { module = "androidx.media3:media3-session", version.ref = "media3" }
+media3-datasource-okhttp = { module = "androidx.media3:media3-datasource-okhttp", version.ref = "media3" }
+junit = { module = "junit:junit", version.ref = "junit" }
+kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
+jsoup = { module = "org.jsoup:jsoup", version.ref = "jsoup" }
+rxjava1 = { module = "io.reactivex:rxjava", version.ref = "rxjava" }
+nanohttpd = { module = "org.nanohttpd:nanohttpd", version.ref = "nanohttpd" }
+okio = { module = "com.squareup.okio:okio", version.ref = "okio" }
+okhttp-logging = { module = "com.squareup.okhttp3:logging-interceptor", version.ref = "okhttp" }
+okhttp-dnsoverhttps = { module = "com.squareup.okhttp3:okhttp-dnsoverhttps", version.ref = "okhttp" }
+kotlinx-serialization-json-okio = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json-okio", version.ref = "serialization" }
+logcat = { module = "com.squareup.logcat:logcat", version.ref = "logcat" }
+quickjs-android = { module = "app.cash.quickjs:quickjs-android", version.ref = "quickjs" }
+torrserver = { module = "io.github.secozzi:torrserver", version.ref = "torrserver" }
+androidx-preference-ktx = { module = "androidx.preference:preference-ktx", version.ref = "preference" }
+injekt = { module = "com.github.mihonapp:injekt", version.ref = "injekt" }
+play-services-auth = { module = "com.google.android.gms:play-services-auth", version.ref = "play-services-auth" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+android-library = { id = "com.android.library", version.ref = "agp" }
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version = "2.4.21" }
