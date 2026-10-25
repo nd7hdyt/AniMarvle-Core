@@ -19,6 +19,8 @@ import com.animarvle.app.data.account.GoogleAuthHelper
 import com.animarvle.app.databinding.FragmentAuthLetYouInBinding
 import com.google.android.gms.auth.api.signin.GoogleSignInStatusCodes
 import com.google.android.gms.common.api.ApiException
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import kotlinx.coroutines.launch
 
 class AuthLetYouInFragment : Fragment() {
 
@@ -114,8 +116,11 @@ class AuthLetYouInFragment : Fragment() {
             if (e.statusCode == 12501 || e.statusCode == GoogleSignInStatusCodes.SIGN_IN_CANCELLED) {
                 return
             }
+            if (e.statusCode == 10) {
+                showDeveloperErrorDialog()
+                return
+            }
             val errorMsg = when (e.statusCode) {
-                10 -> "Google Sign-In Developer Error (10): Ensure SHA-1 is registered in Google Cloud Console."
                 7 -> "Network error during Google Sign-In. Please check your connection."
                 12500 -> "Google Sign-In failed (12500). Please verify Google Play Services."
                 else -> "Google Sign-In failed (code ${e.statusCode}): ${e.message}"
@@ -125,6 +130,48 @@ class AuthLetYouInFragment : Fragment() {
             binding.loadingOverlay.isVisible = false
             Toast.makeText(requireContext(), "Google Sign-In error: ${e.localizedMessage ?: e.message}", Toast.LENGTH_LONG).show()
         }
+    }
+
+    private fun showDeveloperErrorDialog() {
+        val sha1 = GoogleAuthHelper.getSigningSha1(requireContext())
+        val accountRepo = (requireActivity().application as AnimarvleApp).container.account
+
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle("Google Sign-In (Code 10)")
+            .setMessage(
+                "Google Play Services requires registering this build's SHA-1 fingerprint in the Google Cloud Console for package:\n" +
+                "com.animarvle.app\n\n" +
+                "SHA-1 Fingerprint:\n$sha1\n\n" +
+                "Would you like to copy the SHA-1 or proceed immediately with a Demo Google Account?"
+            )
+            .setPositiveButton("Use Demo Account") { _, _ ->
+                lifecycleScope.launch {
+                    binding.loadingOverlay.isVisible = true
+                    val result = accountRepo.signInWithGoogle()
+                    binding.loadingOverlay.isVisible = false
+                    result.onSuccess { account ->
+                        Toast.makeText(requireContext(), "Signed in as ${account.username}", Toast.LENGTH_SHORT).show()
+                        val prev = findNavController().previousBackStackEntry?.destination?.id
+                        if (prev == R.id.welcomeFragment || prev == null) {
+                            findNavController().navigate(
+                                R.id.homeFragment,
+                                null,
+                                navOptions { popUpTo(R.id.welcomeFragment) { inclusive = true } },
+                            )
+                        } else {
+                            findNavController().popBackStack()
+                        }
+                    }
+                }
+            }
+            .setNeutralButton("Copy SHA-1") { _, _ ->
+                val clipboard = requireContext().getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                val clip = android.content.ClipData.newPlainText("SHA-1 Fingerprint", sha1)
+                clipboard.setPrimaryClip(clip)
+                Toast.makeText(requireContext(), "SHA-1 copied to clipboard", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     override fun onDestroyView() {
