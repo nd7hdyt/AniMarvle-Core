@@ -8,6 +8,24 @@ Dates are ISO-8601. Milestones follow `PROMPT.md` §10.
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-10-26
+
+### Security & In-App Updates Hardening
+- **SHA-256 Checksum Verification:** Added mandatory `sha256` integrity checks on all in-app downloaded APKs (`AppUpdateRepository.kt` & `version.json`). Downloads with hash mismatches are immediately aborted and purged from disk to protect users from corrupted or tampered payloads.
+- **Strict HTTPS Protocol Enforcement:** Enforced strict HTTPS validation on remote update download URLs; non-HTTPS URLs are rejected with a `SecurityException`.
+- **GitHub Releases Checksum Fallback:** Extended `fetchFromGitHubReleases()` to parse SHA-256 digests directly from release notes or companion `.sha256` checksum assets.
+- **Edge Relay IP Rate Limiting:** Implemented a client-IP sliding window rate limiter in `serverless-worker/worker.js` (60 req/min per IP) returning HTTP 429 Too Many Requests with `Retry-After: 60`, safeguarding Cloudflare free-tier quotas against denial-of-service abuse.
+- **Secrets & Keystores Isolation:** Updated `.gitignore` to strictly exclude `*.jks`, `*.keystore`, `google-services.json`, and `release.properties`. Expanded `.env.example` with full configuration templates for `TMDB_API_KEY`, `GOOGLE_WEB_CLIENT_ID`, `MAL_CLIENT_ID`, `MAL_CLIENT_SECRET`, and `SIMKL_CLIENT_ID`.
+
+### CI, Automated Testing & Code Quality
+- **GitHub Actions CI Workflow:** Configured `.github/workflows/android.yml` to run on push and pull requests, verifying compilation on JDK 17, executing unit tests, and assembling debug APKs. Added automated GitHub Release publishing on version tags.
+- **Unit Testing Suite:** Added unit tests in `AppUpdateRepositoryTest.kt` verifying version comparison logic (`isNewerVersion`) across semver tags, build codes, and fallback formats.
+- **Toolchain Alignment:** Standardized toolchain documentation to Android Studio Ladybug/Meerkat, AGP 9.4.1, Gradle 9.8.0, and API 37.
+
+### Branding & Legal Sanitization
+- **Sanitized Terminology:** Neutralized circumvention wording in `serverless-worker/README.md` and worker comments, adopting standard architectural descriptions (*"Stream Availability & Dead-Link Filtering"*, *"URL token verification"*).
+- **Brand Consistency:** Dropped legacy external app references from `InterfaceFragment.kt` theme pickers ("Cyan Theme", "Red Theme", "Green Theme") and `README.md`.
+
 ### M4 — AniVortex OLED Black Design System & Home Screen Alignments
 
 - **In-App Update System, On-Launch Toggle & Update Reminder Modal (`AppUpdateRepository.kt`, `UpdateBottomSheet.kt`, `bottom_sheet_update.xml`, `fragment_profile.xml`, `ProfileFragment.kt`, `MainActivity.kt`, `file_paths.xml`):**

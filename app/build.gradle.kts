@@ -24,8 +24,8 @@ android {
         applicationId = "com.animarvle.app"
         minSdk = 26
         targetSdk = 37
-        versionCode = 2
-        versionName = "0.1.1"
+        versionCode = 4
+        versionName = "0.1.3"
 
         val tmdbKey = getSecret("TMDB_API_KEY")
         val googleClientId = getSecret("GOOGLE_WEB_CLIENT_ID")
@@ -38,6 +38,10 @@ android {
         buildConfigField("String", "MAL_CLIENT_ID", "\"$malClientId\"")
         buildConfigField("String", "MAL_CLIENT_SECRET", "\"$malClientSecret\"")
         buildConfigField("String", "SIMKL_CLIENT_ID", "\"$simklClientId\"")
+
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+        }
     }
 
     buildTypes {

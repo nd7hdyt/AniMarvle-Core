@@ -186,13 +186,29 @@ object AppUpdateRepository {
             val htmlUrl = json.optString("html_url", "https://github.com/nd7hdyt/AniMarvle/releases")
 
             var apkUrl = ""
+            var shaAssetUrl = ""
             val assets = json.optJSONArray("assets") ?: JSONArray()
             for (i in 0 until assets.length()) {
                 val asset = assets.optJSONObject(i) ?: continue
                 val name = asset.optString("name", "")
                 if (name.endsWith(".apk", ignoreCase = true)) {
                     apkUrl = asset.optString("browser_download_url", "")
-                    break
+                } else if (name.endsWith(".sha256", ignoreCase = true) || name.endsWith(".sha256.txt", ignoreCase = true)) {
+                    shaAssetUrl = asset.optString("browser_download_url", "")
+                }
+            }
+
+            // Extract SHA-256 hash from release body or companion checksum asset
+            val shaRegex = Regex("""(?i)(?:sha-?256|checksum)[:\s]+([a-f0-9]{64})""")
+            var sha256 = shaRegex.find(releaseNotes)?.groupValues?.get(1).orEmpty()
+            if (sha256.isBlank() && shaAssetUrl.isNotBlank()) {
+                runCatching {
+                    val shaReq = Request.Builder().url(shaAssetUrl).build()
+                    val shaRes = httpClient.newCall(shaReq).execute()
+                    if (shaRes.isSuccessful) {
+                        val shaBody = shaRes.body?.string().orEmpty()
+                        sha256 = Regex("[a-f0-9]{64}", RegexOption.IGNORE_CASE).find(shaBody)?.value.orEmpty()
+                    }
                 }
             }
 
@@ -203,6 +219,7 @@ object AppUpdateRepository {
                 versionCode = extractVersionCode(tagName),
                 versionName = if (tagName.isNotBlank()) "v$tagName" else releaseName,
                 apkUrl = apkUrl,
+                sha256 = sha256,
                 releaseNotes = releaseNotes,
                 githubUrl = htmlUrl,
                 hasUpdate = hasUpdate,

@@ -80,9 +80,9 @@ class InterfaceFragment : Fragment() {
     private fun showThemePickerDialog() {
         val currentPalette = AppTheme.palette(requireContext())
         val palettes = listOf(
-            AppTheme.PALETTE_CYAN to "Zangetsu Cyan",
-            AppTheme.PALETTE_RED to "AniLab Red",
-            AppTheme.PALETTE_GREEN to "Th3-Anime Green",
+            AppTheme.PALETTE_CYAN to "Cyan Theme",
+            AppTheme.PALETTE_RED to "Red Theme",
+            AppTheme.PALETTE_GREEN to "Green Theme",
         )
 
         val items = palettes.map { it.second }.toTypedArray()

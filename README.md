@@ -1,5 +1,9 @@
 # Animarvle
 
+[![Android CI](https://github.com/nd7hdyt/AniMarvle/actions/workflows/android.yml/badge.svg)](https://github.com/nd7hdyt/AniMarvle/actions/workflows/android.yml)
+[![Latest Release](https://img.shields.io/github/v/release/nd7hdyt/AniMarvle?color=00D4B2&label=version)](https://github.com/nd7hdyt/AniMarvle/releases)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+
 An Android application for streaming Anime, Movies, and TV series, built with native Kotlin, AndroidX Media3 / ExoPlayer, Jetpack Architecture Components, Room, and a refined obsidian frosted-glass UI with pure OLED black theming.
 
 ---
@@ -81,7 +85,7 @@ An Android application for streaming Anime, Movies, and TV series, built with na
 - **Dual-Source Update Resolution**:
   - Automatically queries raw repository `version.json` with fallback to GitHub Releases API.
   - Compares semantic versioning and build codes against `BuildConfig.VERSION_CODE`.
-- **Zangetsu-Inspired Obsidian Modal**:
+- **Modern Obsidian Update Modal**:
   - 28dp rounded obsidian sheet with cyan squircle badge, version details, and release notes.
   - Streaming in-app APK download with real-time progress bar and automatic `FileProvider` package installation.
 - **Settings & Profile Integration**:
@@ -89,8 +93,9 @@ An Android application for streaming Anime, Movies, and TV series, built with na
   - Interactive "Check for updates" row with version badges and instant live check.
 
 ### 👤 10. User Account, Preferences & Profile System
-- **Google Play Services Authentication**:
+- **Google Play Services Authentication (`play-services-auth`)**:
   - Account sync with high-resolution Google avatar loading via Coil circular crop.
+  - Migration to Android Credential Manager (`androidx.credentials`) is queued on the technical roadmap.
 - **OLED Obsidian Preferences Suite**:
   - **Player & Downloads**: Quality, audio language, download paths, and concurrency.
   - **Subtitle Settings**: Real-time typography styling, font size, text colors, outline thickness, and subtitle positioning.
@@ -120,9 +125,10 @@ An Android application for streaming Anime, Movies, and TV series, built with na
 ## 🚀 Building & Running
 
 ### Prerequisites
-- **Android Studio Ladybug (2024.2+)** or newer
-- **JDK 17** (configured in Gradle settings)
-- **Android SDK**: `compileSdk = 37`, `targetSdk = 37`, `minSdk = 26` (Android 8.0+)
+- **Android Studio Ladybug (2024.2+)** or **Android Studio Meerkat / 2025+**
+- **Gradle 9.8.0** (bundled via `./gradlew`) & **AGP 9.4.1**
+- **JDK 17 or 21**
+- **Android SDK Platforms**: `compileSdk = 37`, `targetSdk = 37`, `minSdk = 26` (Android 8.0+)
 
 ### Clone & Build
 ```bash
