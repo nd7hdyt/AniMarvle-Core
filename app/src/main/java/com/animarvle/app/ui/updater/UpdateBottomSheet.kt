@@ -103,6 +103,7 @@ class UpdateBottomSheet : BottomSheetDialogFragment() {
             context = requireContext(),
             apkUrl = info.apkUrl,
             versionName = info.versionName,
+            expectedSha256 = info.sha256,
             onProgress = { percent, _, _ ->
                 activity?.runOnUiThread {
                     if (_binding != null) {

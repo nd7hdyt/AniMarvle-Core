@@ -2,6 +2,7 @@
   "version_code": 3,
   "version_name": "0.1.2",
   "apk_url": "https://raw.githubusercontent.com/nd7hdyt/AniMarvle/release-assets/app-debug.apk",
+  "sha256": "63870db0b6d9fce875ba15eae7330b52092c79ec22490feb2cca91a5230af2f6",
   "release_notes": "• All-new OLED black app icon with crisp vector geometry\n• 1:1 real-UI skeleton loading animation on Details, Home, and Provider Catalog\n• In-app update checker and automatic launch prompts\n• General stability improvements & optimizations",
   "github_url": "https://github.com/nd7hdyt/AniMarvle/releases"
 }

@@ -8,5 +8,6 @@ data class AppUpdateInfo(
     val apkUrl: String,
     val releaseNotes: String,
     val githubUrl: String = "https://github.com/nd7hdyt/AniMarvle/releases",
+    val sha256: String = "",
     val hasUpdate: Boolean = false,
 ) : Serializable

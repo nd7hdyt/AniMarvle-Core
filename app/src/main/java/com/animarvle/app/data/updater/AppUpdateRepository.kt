@@ -120,6 +120,7 @@ object AppUpdateRepository {
                     val remoteVersionCode = json.optInt("version_code", 0)
                     val remoteVersionName = json.optString("version_name", "")
                     val apkUrl = json.optString("apk_url", "")
+                    val sha256 = json.optString("sha256", "").trim()
                     val releaseNotes = json.optString("release_notes", "")
                     val githubUrl = json.optString("github_url", "https://github.com/nd7hdyt/AniMarvle/releases")
 
@@ -131,6 +132,7 @@ object AppUpdateRepository {
                         versionCode = remoteVersionCode,
                         versionName = remoteVersionName.ifBlank { "v$remoteVersionCode" },
                         apkUrl = apkUrl,
+                        sha256 = sha256,
                         releaseNotes = releaseNotes,
                         githubUrl = githubUrl,
                         hasUpdate = hasUpdate,
@@ -218,10 +220,17 @@ object AppUpdateRepository {
         context: Context,
         apkUrl: String,
         versionName: String,
+        expectedSha256: String = "",
         onProgress: (percent: Int, downloaded: Long, total: Long) -> Unit,
         onComplete: (File) -> Unit,
         onError: (Throwable) -> Unit,
     ): Call {
+        if (!apkUrl.startsWith("https://", ignoreCase = true)) {
+            val err = SecurityException("Insecure download URL rejected. HTTPS is strictly required.")
+            onError(err)
+            throw err
+        }
+
         val updatesDir = File(context.cacheDir, "updates")
         if (!updatesDir.exists()) updatesDir.mkdirs()
 
@@ -245,15 +254,11 @@ object AppUpdateRepository {
                 }
 
                 val body = response.body
-                if (body == null) {
-                    onError(IOException("Response body is null"))
-                    return
-                }
-
                 try {
                     val contentLength = body.contentLength()
                     val inputStream = body.byteStream()
                     val outputStream = FileOutputStream(apkFile)
+                    val digest = java.security.MessageDigest.getInstance("SHA-256")
 
                     val buffer = ByteArray(8192)
                     var bytesRead: Int
@@ -261,6 +266,7 @@ object AppUpdateRepository {
 
                     while (inputStream.read(buffer).also { bytesRead = it } != -1) {
                         outputStream.write(buffer, 0, bytesRead)
+                        digest.update(buffer, 0, bytesRead)
                         totalRead += bytesRead
                         if (contentLength > 0) {
                             val percent = ((totalRead * 100) / contentLength).toInt().coerceIn(0, 100)
@@ -272,8 +278,19 @@ object AppUpdateRepository {
                     outputStream.close()
                     inputStream.close()
 
+                    // SHA-256 checksum integrity verification
+                    if (expectedSha256.isNotBlank()) {
+                        val computedHash = digest.digest().joinToString("") { "%02x".format(it) }
+                        if (!computedHash.equals(expectedSha256.trim(), ignoreCase = true)) {
+                            apkFile.delete()
+                            onError(SecurityException("SHA-256 checksum mismatch! Expected $expectedSha256 but got $computedHash"))
+                            return
+                        }
+                    }
+
                     onComplete(apkFile)
                 } catch (t: Throwable) {
+                    apkFile.delete()
                     onError(t)
                 }
             }
