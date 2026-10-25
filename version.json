@@ -1,7 +1,7 @@
 {
-  "version_code": 2,
-  "version_name": "0.1.1",
-  "apk_url": "https://github.com/nd7hdyt/AniMarvle/releases/download/v0.1.1/app-debug.apk",
-  "release_notes": "• All-new OLED black app icon with crisp vector geometry\n• 1:1 real-UI skeleton loading animation on Details, Home, and Provider Catalog\n• Dynamic TMDB/Anime Continue Watching separation\n• In-app update checker and automatic launch prompts",
+  "version_code": 3,
+  "version_name": "0.1.2",
+  "apk_url": "https://github.com/nd7hdyt/AniMarvle/releases/download/v0.1.2/app-debug.apk",
+  "release_notes": "• All-new OLED black app icon with crisp vector geometry\n• 1:1 real-UI skeleton loading animation on Details, Home, and Provider Catalog\n• In-app update checker and automatic launch prompts\n• General stability improvements & optimizations",
   "github_url": "https://github.com/nd7hdyt/AniMarvle/releases"
 }
