@@ -15,10 +15,14 @@ node_modules/
 .env.local
 .env.*.local
 
-# Build artifacts & logs
+# Build artifacts, keystores & logs
 *.apk
 *.aab
 *.log
+*.jks
+*.keystore
+google-services.json
+release.properties
 
 # Scratch dumps & temporary captures in root
 /*.png

@@ -60,6 +60,31 @@ function isAllowedTargetUrl(urlString) {
   }
 }
 
+// --- In-Memory Rate Limiting (Cloudflare Edge Free-Tier Protection) ---------
+const ipRequestCounts = new Map();
+const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1-minute sliding window
+const MAX_REQUESTS_PER_MINUTE = 60;     // 60 requests/minute per client IP
+
+function isRateLimited(clientIp) {
+  if (!clientIp || clientIp === "127.0.0.1" || clientIp === "localhost") return false;
+  const now = Date.now();
+  let record = ipRequestCounts.get(clientIp);
+  if (!record || now - record.windowStart > RATE_LIMIT_WINDOW_MS) {
+    ipRequestCounts.set(clientIp, { count: 1, windowStart: now });
+    // Keep map bounded to avoid worker memory leaks
+    if (ipRequestCounts.size > 2000) {
+      for (const [ip, rec] of ipRequestCounts.entries()) {
+        if (now - rec.windowStart > RATE_LIMIT_WINDOW_MS) {
+          ipRequestCounts.delete(ip);
+        }
+      }
+    }
+    return false;
+  }
+  record.count++;
+  return record.count > MAX_REQUESTS_PER_MINUTE;
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -70,16 +95,34 @@ export default {
       return handleCors();
     }
 
+    // Rate limiting check
+    const clientIp = request.headers.get("cf-connecting-ip") ||
+                     request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+                     "unknown";
+    if (isRateLimited(clientIp)) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: "Too many requests. Please slow down."
+      }), {
+        status: 429,
+        headers: {
+          ...corsHeaders(),
+          "Content-Type": "application/json; charset=utf-8",
+          "Retry-After": "60"
+        }
+      });
+    }
+
     try {
       // 1. Health check
       if (path === "/" || path === "/health") {
         return jsonResponse({
           status: "online",
-          service: "Animarvle Edge Relay (AniVortex Model)",
+          service: "Animarvle Edge Relay",
           version: "2.1.0",
           colo: request.cf?.colo || "edge",
           servers: ["Spiral", "Turbo", "FastX"],
-          features: ["instant-playback", "206-range-streaming", "hls-adaptive", "multi-subtitle", "edge-cache", "ssrf-protected"]
+          features: ["instant-playback", "206-range-streaming", "hls-adaptive", "multi-subtitle", "edge-cache", "ssrf-protected", "rate-limited"]
         });
       }
 
