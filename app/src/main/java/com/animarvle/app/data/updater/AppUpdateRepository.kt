@@ -102,11 +102,13 @@ object AppUpdateRepository {
 
     private fun fetchFromVersionJson(): Result<AppUpdateInfo?> {
         return runCatching {
+            var fallbackCandidate: AppUpdateInfo? = null
             for (url in VERSION_JSON_URLS) {
                 try {
                     val request = Request.Builder()
                         .url(url)
                         .header("User-Agent", "Animarvle-App/${BuildConfig.VERSION_NAME}")
+                        .header("Cache-Control", "no-cache")
                         .build()
 
                     val response = httpClient.newCall(request).execute()
@@ -125,7 +127,7 @@ object AppUpdateRepository {
                     val hasUpdate = remoteVersionCode > currentCode ||
                         (remoteVersionCode == 0 && remoteVersionName.isNotBlank() && remoteVersionName != BuildConfig.VERSION_NAME)
 
-                    return@runCatching AppUpdateInfo(
+                    val info = AppUpdateInfo(
                         versionCode = remoteVersionCode,
                         versionName = remoteVersionName.ifBlank { "v$remoteVersionCode" },
                         apkUrl = apkUrl,
@@ -133,11 +135,19 @@ object AppUpdateRepository {
                         githubUrl = githubUrl,
                         hasUpdate = hasUpdate,
                     )
+
+                    // If an endpoint reports a newer version, use it immediately
+                    if (hasUpdate) {
+                        return@runCatching info
+                    }
+                    if (fallbackCandidate == null) {
+                        fallbackCandidate = info
+                    }
                 } catch (_: Exception) {
                     continue
                 }
             }
-            null
+            fallbackCandidate
         }
     }
 

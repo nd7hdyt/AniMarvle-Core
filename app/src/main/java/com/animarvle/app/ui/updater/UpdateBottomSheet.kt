@@ -55,8 +55,8 @@ class UpdateBottomSheet : BottomSheetDialogFragment() {
             return
         }
 
-        val buildSuffix = if (info.versionCode > 0) " (build ${info.versionCode})" else ""
-        binding.tvNewVersion.text = "Version ${info.versionName}$buildSuffix"
+        val rawVersion = info.versionName.removePrefix("v").removePrefix("Version ").trim()
+        binding.tvNewVersion.text = "Version $rawVersion"
         binding.tvCurrentVersion.text = "You have v${BuildConfig.VERSION_NAME} (build ${BuildConfig.VERSION_CODE})."
 
         val notes = info.releaseNotes.trim()
@@ -94,10 +94,10 @@ class UpdateBottomSheet : BottomSheetDialogFragment() {
     private fun startDownload(info: AppUpdateInfo) {
         binding.llDownloadProgress.visibility = View.VISIBLE
         binding.scrollReleaseNotes.visibility = View.GONE
+        binding.tvWhatsNewHeader.visibility = View.GONE
         binding.btnSkip.visibility = View.GONE
+        binding.btnUpdate.visibility = View.GONE
         binding.btnLater.text = "Cancel"
-        binding.btnUpdate.isEnabled = false
-        binding.btnUpdate.text = "Downloading…"
 
         downloadCall = AppUpdateRepository.downloadApk(
             context = requireContext(),
@@ -118,7 +118,7 @@ class UpdateBottomSheet : BottomSheetDialogFragment() {
                         binding.tvDownloadTitle.text = "Download Complete!"
                         binding.tvDownloadPercent.text = "Ready to install"
                         binding.pbDownload.progress = 100
-                        binding.btnUpdate.isEnabled = true
+                        binding.btnUpdate.visibility = View.VISIBLE
                         binding.btnUpdate.text = "Install Now"
                         binding.btnLater.text = "Close"
                         AppUpdateRepository.installApk(requireContext(), file)

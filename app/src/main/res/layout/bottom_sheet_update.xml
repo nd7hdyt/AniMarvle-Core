@@ -7,32 +7,40 @@
     android:background="@drawable/bg_bottom_sheet_update"
     android:orientation="vertical"
     android:paddingHorizontal="24dp"
-    android:paddingTop="12dp"
+    android:paddingTop="20dp"
     android:paddingBottom="28dp">
 
-    <!-- Drag Handle -->
+    <!-- Subtle Drag Handle -->
     <View
-        android:layout_width="40dp"
+        android:layout_width="36dp"
         android:layout_height="4dp"
         android:layout_gravity="center_horizontal"
-        android:layout_marginBottom="18dp"
+        android:layout_marginBottom="16dp"
         android:background="@drawable/bg_capsule_active"
-        android:backgroundTint="#40FFFFFF" />
+        android:backgroundTint="#26FFFFFF" />
 
-    <!-- Header: Icon + Title -->
+    <!-- Header: Teal Squircle Icon + Title -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:gravity="center_vertical"
         android:orientation="horizontal">
 
-        <ImageView
-            android:id="@+id/ivUpdateIcon"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:layout_marginEnd="12dp"
-            android:contentDescription="@null"
-            android:src="@drawable/ic_update_available_badge" />
+        <FrameLayout
+            android:layout_width="38dp"
+            android:layout_height="38dp"
+            android:layout_marginEnd="14dp"
+            android:background="@drawable/bg_update_badge_squircle">
+
+            <ImageView
+                android:id="@+id/ivUpdateIcon"
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:layout_gravity="center"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_system_update"
+                app:tint="#31D7C6" />
+        </FrameLayout>
 
         <TextView
             android:id="@+id/tvUpdateTitle"
@@ -40,7 +48,7 @@
             android:layout_height="wrap_content"
             android:text="Update available"
             android:textColor="#FFFFFF"
-            android:textSize="22sp"
+            android:textSize="20sp"
             android:textStyle="bold" />
     </LinearLayout>
 
@@ -49,11 +57,11 @@
         android:id="@+id/tvNewVersion"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
-        android:textColor="#00E5FF"
+        android:layout_marginTop="8dp"
+        android:textColor="#31D7C6"
         android:textSize="14.5sp"
         android:textStyle="bold"
-        tools:text="Version 0.2.0 (build 3)" />
+        tools:text="Version 2.3.3" />
 
     <TextView
         android:id="@+id/tvCurrentVersion"
@@ -61,7 +69,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="2dp"
         android:textColor="#8E8E93"
-        android:textSize="13sp"
+        android:textSize="12.5sp"
         tools:text="You have v0.1.1 (build 2)." />
 
     <!-- Release Notes Header -->
@@ -70,10 +78,10 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
-        android:layout_marginBottom="6dp"
+        android:layout_marginBottom="8dp"
         android:text="What's new"
-        android:textColor="#FFFFFF"
-        android:textSize="14.5sp"
+        android:textColor="#9E9EA6"
+        android:textSize="13.5sp"
         android:textStyle="bold" />
 
     <!-- Release Notes Scroll Container -->
@@ -88,8 +96,8 @@
             android:id="@+id/tvReleaseNotes"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:lineSpacingExtra="4dp"
-            android:textColor="#D1D1D6"
+            android:lineSpacingExtra="5dp"
+            android:textColor="#E0E0E6"
             android:textSize="13.5sp"
             tools:text="• Browse source catalogues directly from Home\n• Smoother transitions\n• Cleaner Sources screen" />
     </androidx.core.widget.NestedScrollView>
@@ -109,7 +117,7 @@
             android:layout_height="wrap_content"
             android:text="Downloading Update…"
             android:textColor="#FFFFFF"
-            android:textSize="15.5sp"
+            android:textSize="16sp"
             android:textStyle="bold" />
 
         <TextView
@@ -117,20 +125,20 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
-            android:layout_marginBottom="8dp"
+            android:layout_marginBottom="10dp"
             android:text="Downloading the latest version: 0%"
             android:textColor="#8E8E93"
-            android:textSize="12.5sp" />
+            android:textSize="13sp" />
 
         <ProgressBar
             android:id="@+id/pbDownload"
             style="?android:attr/progressBarStyleHorizontal"
             android:layout_width="match_parent"
-            android:layout_height="8dp"
+            android:layout_height="6dp"
             android:max="100"
             android:progress="0"
-            android:progressBackgroundTint="#333333"
-            android:progressTint="#00E5FF" />
+            android:progressBackgroundTint="#2C2C34"
+            android:progressTint="#31D7C6" />
     </LinearLayout>
 
     <!-- Action Buttons -->
@@ -138,18 +146,19 @@
         android:id="@+id/llButtons"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
         android:gravity="center_vertical|end"
         android:orientation="horizontal">
 
         <TextView
             android:id="@+id/btnSkip"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            android:layout_height="44dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:clickable="true"
             android:focusable="true"
-            android:paddingHorizontal="14dp"
-            android:paddingVertical="10dp"
+            android:gravity="center"
+            android:paddingHorizontal="16dp"
             android:text="Skip"
             android:textColor="#8E8E93"
             android:textSize="14.5sp"
@@ -158,12 +167,12 @@
         <TextView
             android:id="@+id/btnLater"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            android:layout_height="44dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:clickable="true"
             android:focusable="true"
-            android:paddingHorizontal="14dp"
-            android:paddingVertical="10dp"
+            android:gravity="center"
+            android:paddingHorizontal="16dp"
             android:text="Later"
             android:textColor="#FFFFFF"
             android:textSize="14.5sp"
@@ -172,17 +181,18 @@
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnUpdate"
             android:layout_width="wrap_content"
-            android:layout_height="48dp"
+            android:layout_height="46dp"
             android:layout_marginStart="8dp"
-            android:background="@drawable/bg_btn_update_cyan"
-            android:backgroundTint="@null"
-            android:minWidth="120dp"
+            android:minWidth="110dp"
             android:paddingHorizontal="24dp"
             android:text="Update"
-            android:textColor="#000000"
-            android:textSize="15sp"
+            android:textColor="#081A18"
+            android:textSize="14.5sp"
             android:textStyle="bold"
-            app:cornerRadius="24dp" />
+            app:backgroundTint="#31D7C6"
+            app:cornerRadius="23dp"
+            app:elevation="0dp"
+            app:rippleColor="#4D000000" />
     </LinearLayout>
 
 </LinearLayout>
