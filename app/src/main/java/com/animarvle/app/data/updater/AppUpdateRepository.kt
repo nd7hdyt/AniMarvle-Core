@@ -67,6 +67,20 @@ object AppUpdateRepository {
         prefs.edit().putLong(KEY_LAST_UPDATE_CHECK, System.currentTimeMillis()).apply()
     }
 
+    fun isNewerVersion(
+        remoteVersionCode: Int,
+        remoteVersionName: String,
+        currentVersionCode: Int = BuildConfig.VERSION_CODE,
+        currentVersionName: String = BuildConfig.VERSION_NAME,
+    ): Boolean {
+        if (remoteVersionCode > currentVersionCode) return true
+        if (remoteVersionCode in 1..currentVersionCode) return false
+        // Fallback for non-code tagged builds
+        val cleanRemote = remoteVersionName.trim().removePrefix("v").removePrefix("V")
+        val cleanCurrent = currentVersionName.trim().removePrefix("v").removePrefix("V")
+        return cleanRemote.isNotBlank() && cleanRemote != cleanCurrent
+    }
+
     suspend fun checkForUpdate(context: Context): Result<AppUpdateInfo> = withContext(Dispatchers.IO) {
         recordCheckTime(context)
 
@@ -125,8 +139,7 @@ object AppUpdateRepository {
                     val githubUrl = json.optString("github_url", "https://github.com/nd7hdyt/AniMarvle/releases")
 
                     val currentCode = BuildConfig.VERSION_CODE
-                    val hasUpdate = remoteVersionCode > currentCode ||
-                        (remoteVersionCode == 0 && remoteVersionName.isNotBlank() && remoteVersionName != BuildConfig.VERSION_NAME)
+                    val hasUpdate = isNewerVersion(remoteVersionCode, remoteVersionName, currentCode, BuildConfig.VERSION_NAME)
 
                     val info = AppUpdateInfo(
                         versionCode = remoteVersionCode,
