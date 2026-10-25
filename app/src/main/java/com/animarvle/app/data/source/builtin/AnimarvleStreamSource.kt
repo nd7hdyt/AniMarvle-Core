@@ -45,7 +45,7 @@ class AnimarvleStreamSource(
 
     override val capabilities: SourceCapabilities = SourceCapabilities(
         sub = true,
-        dub = true,
+        dub = false, // worker provides Sub for anime; Dub must route to anime extensions (Zoro/Gogoanime)
         multiServer = true,
         qualities = true,
         skipTimes = true,
@@ -143,12 +143,13 @@ class AnimarvleStreamSource(
         val tmdbId = media.extra["tmdbId"].orEmpty()
         val title = media.extra["title"] ?: media.title
         val year = media.extra["year"].orEmpty()
-        val mediaType = media.extra["mediaType"] ?: if (media.type == MediaType.MOVIE) "movie" else "tv"
+        val mediaType = media.extra["mediaType"] ?: if (media.type == MediaType.MOVIE) "movie" else if (media.type == MediaType.ANIME) "anime" else "tv"
+        val season = media.extra["season"] ?: "1"
         val count = media.episodeCount ?: 1
 
         (1..count).map { epNum ->
             SourceEpisode(
-                url = "${media.url}&season=1&episode=$epNum",
+                url = "${media.url}&season=$season&episode=$epNum",
                 number = epNum.toFloat(),
                 title = if (count == 1) title else "Episode $epNum",
                 thumbnail = media.poster,
@@ -157,7 +158,7 @@ class AnimarvleStreamSource(
                     put("title", title)
                     put("year", year)
                     put("mediaType", mediaType)
-                    put("season", "1")
+                    put("season", season)
                     put("episode", epNum.toString())
                 },
             )
@@ -171,7 +172,7 @@ class AnimarvleStreamSource(
         val title = episode.extra["title"] ?: episode.title
         val tmdbId = episode.extra["tmdbId"].orEmpty()
         val year = episode.extra["year"].orEmpty()
-        val mediaType = episode.extra["mediaType"] ?: "movie"
+        val mediaType = episode.extra["mediaType"] ?: "anime"
         val season = episode.extra["season"] ?: "1"
         val epNum = episode.extra["episode"] ?: "1"
 
@@ -183,6 +184,7 @@ class AnimarvleStreamSource(
             append("&type=").append(mediaType)
             append("&season=").append(season)
             append("&episode=").append(epNum)
+            append("&v=2")
         }
 
         val serverList = mutableListOf<ServerOption>()
@@ -201,8 +203,16 @@ class AnimarvleStreamSource(
                     if (streams != null) {
                         for (i in 0 until streams.length()) {
                             val s = streams.optJSONObject(i) ?: continue
-                            val rawServer = s.optString("server", "")
+                            val isAnime = mediaType.equals("anime", ignoreCase = true)
+                            val rawAudio = s.optString("audioLanguage", s.optString("audio", "")).trim()
+                            val audioLang = if (isAnime) {
+                                if (rawAudio.contains("dub", ignoreCase = true)) "English" else "Japanese"
+                            } else {
+                                rawAudio.ifBlank { "English" }
+                            }
+                            val rawServer = s.optString("server", "").trim()
                             val serverName = when {
+                                rawServer.isNotBlank() && !rawServer.startsWith("Edge ") -> rawServer
                                 rawServer.contains("spiral", ignoreCase = true) || i == 0 -> "Spiral"
                                 rawServer.contains("turbo", ignoreCase = true) || i == 1 -> "Turbo"
                                 rawServer.contains("fast", ignoreCase = true) || i == 2 -> "FastX"
@@ -251,44 +261,15 @@ class AnimarvleStreamSource(
                                 }
                             }
 
-                            val audioLang = s.optString("audioLanguage", s.optString("audio", "English")).ifBlank { "English" }
-
                             if (streamUrl.isNotBlank()) {
                                 serverList.add(
                                     ServerOption(
                                         key = "turbo:$i|$quality|$streamUrl|$kindStr",
                                         label = serverName,
-                                        hint = "AniVortex Ultra Edge · $quality",
+                                        hint = "$audioLang · $quality",
                                         audioLanguage = audioLang,
                                     ),
                                 )
-                            }
-                        }
-
-                        // Aggregate all qualities across all streams so any chosen server provides the full quality ladder
-                        val aggregatedQualities = mutableMapOf<String, String>()
-                        for (i in 0 until streams.length()) {
-                            val s = streams.optJSONObject(i) ?: continue
-                            val u = s.optString("url", "")
-                            val q = s.optString("quality", "")
-                            if (u.isNotBlank() && q.isNotBlank()) aggregatedQualities[q] = u
-                            val qObj = s.optJSONObject("qualities")
-                            if (qObj != null) {
-                                val keys = qObj.keys()
-                                while (keys.hasNext()) {
-                                    val k = keys.next()
-                                    val qu = qObj.optString(k)
-                                    if (qu.isNotBlank()) aggregatedQualities[k] = qu
-                                }
-                            }
-                        }
-                        if (aggregatedQualities.size > 1) {
-                            for (i in 0 until streams.length()) {
-                                val s = streams.optJSONObject(i) ?: continue
-                                val u = s.optString("url", "")
-                                if (u.isNotBlank()) {
-                                    qualitiesCache[u] = aggregatedQualities
-                                }
                             }
                         }
                     }
@@ -306,14 +287,29 @@ class AnimarvleStreamSource(
         }
 
         val byAudio = mutableMapOf<Audio, List<ServerOption>>()
-        if (mediaType == "movie") {
+        val isAnime = mediaType.equals("anime", ignoreCase = true)
+
+        if (isAnime) {
+            val explicitDub = serverList.filter {
+                it.audioLanguage?.contains("dub", ignoreCase = true) == true ||
+                it.hint?.contains("dub", ignoreCase = true) == true ||
+                it.label.contains("dub", ignoreCase = true)
+            }
+            val explicitSub = serverList.filter {
+                it.audioLanguage?.contains("sub", ignoreCase = true) == true ||
+                it.audioLanguage?.contains("japanese", ignoreCase = true) == true ||
+                it.audioLanguage?.contains("chinese", ignoreCase = true) == true ||
+                it.hint?.contains("sub", ignoreCase = true) == true ||
+                it.label.contains("sub", ignoreCase = true)
+            }
+
+            byAudio[Audio.SUB] = explicitSub.ifEmpty { serverList }
+            byAudio[Audio.RAW] = explicitSub.ifEmpty { serverList }
+            byAudio[Audio.DUB] = explicitDub.ifEmpty { serverList }
+        } else {
             byAudio[Audio.RAW] = serverList
             byAudio[Audio.SUB] = serverList
-        } else {
-            val subList = serverList.filter { it.audioLanguage?.equals("English", ignoreCase = true) != true }
-            val dubList = serverList.filter { it.audioLanguage?.equals("Japanese", ignoreCase = true) != true }
-            byAudio[Audio.SUB] = if (subList.isNotEmpty()) subList else serverList
-            byAudio[Audio.DUB] = if (dubList.isNotEmpty()) dubList else serverList
+            byAudio[Audio.DUB] = serverList
         }
 
         EpisodeOptions(byAudio = byAudio)
@@ -334,6 +330,26 @@ class AnimarvleStreamSource(
         val cachedSubs = subtitlesCache[streamUrl] ?: emptyList()
         val qMap = qualitiesCache[streamUrl]
 
+        fun makeHeaders(url: String): Map<String, String> = when {
+            url.contains("googleusercontent.com") || url.contains("video-downloads") -> mapOf(
+                "User-Agent" to USER_AGENT,
+                "Accept" to "*/*",
+            )
+            url.contains("pelisplushd") || url.contains("embed69") -> mapOf(
+                "Referer" to "https://pelisplushd.bz/",
+                "User-Agent" to USER_AGENT,
+                "Accept" to "*/*",
+            )
+            url.contains("/proxy/") -> mapOf(
+                "Accept" to "*/*",
+            )
+            else -> mapOf(
+                "Origin" to "https://vidlink.pro",
+                "Referer" to "https://vidlink.pro/",
+                "Accept" to "*/*",
+            )
+        }
+
         val streams = if (!qMap.isNullOrEmpty()) {
             val list = mutableListOf<Stream>()
             val sortedKeys = qMap.keys.sortedByDescending { it.replace("p", "").toIntOrNull() ?: 0 }
@@ -348,10 +364,7 @@ class AnimarvleStreamSource(
                         kind = qKind,
                         qualityLabel = qKey,
                         height = h,
-                        headers = mapOf(
-                            "Origin" to "https://vidlink.pro",
-                            "Accept" to "*/*",
-                        ),
+                        headers = makeHeaders(qUrl),
                     ),
                 )
             }
@@ -364,10 +377,7 @@ class AnimarvleStreamSource(
                     kind = streamKind,
                     qualityLabel = quality,
                     height = h,
-                    headers = mapOf(
-                        "Origin" to "https://vidlink.pro",
-                        "Accept" to "*/*",
-                    ),
+                    headers = makeHeaders(streamUrl),
                 ),
             )
         }

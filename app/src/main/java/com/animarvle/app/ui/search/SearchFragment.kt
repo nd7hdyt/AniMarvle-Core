@@ -163,14 +163,14 @@ class SearchFragment : Fragment() {
         fun highlight(item: View, icon: ImageView, text: TextView, isSelected: Boolean) {
             if (isSelected) {
                 item.setBackgroundResource(R.drawable.bg_search_dropdown_item_selected)
-                val cyan = ContextCompat.getColor(context, R.color.cyan_accent)
-                icon.imageTintList = ColorStateList.valueOf(cyan)
-                text.setTextColor(cyan)
-            } else {
-                item.setBackgroundResource(android.R.color.transparent)
                 val white = ContextCompat.getColor(context, android.R.color.white)
                 icon.imageTintList = ColorStateList.valueOf(white)
                 text.setTextColor(white)
+            } else {
+                item.setBackgroundResource(android.R.color.transparent)
+                val muted = ContextCompat.getColor(context, R.color.on_bg_muted)
+                icon.imageTintList = ColorStateList.valueOf(muted)
+                text.setTextColor(muted)
             }
         }
 
@@ -347,15 +347,25 @@ class SearchFragment : Fragment() {
             viewModel.commitSearchQuery(currentQuery)
         }
         val isMovie = media.format.equals("MOVIE", ignoreCase = true)
-        openDetails(media.id, if (isMovie) "movie" else "tv")
+        val curSearchType = viewModel.state.value.type
+        val isMovieTvMode = com.animarvle.app.data.MediaTypeManager.getInstance(requireContext())
+            .currentMode.value == com.animarvle.app.data.AppMediaMode.MOVIES_TV
+        val preferTmdb = media.isTmdb || when (curSearchType) {
+            SearchType.MOVIE, SearchType.TV_SHOW -> true
+            SearchType.ANIME -> false
+            SearchType.ASIAN -> isMovieTvMode || media.isTmdb
+            SearchType.ALL -> isMovieTvMode || media.isTmdb
+        }
+        openDetails(media.id, if (isMovie) "movie" else "tv", preferTmdb)
     }
 
-    private fun openDetails(id: Long, mediaType: String? = null) {
+    private fun openDetails(id: Long, mediaType: String? = null, preferTmdb: Boolean = false) {
         val args = Bundle().apply {
             putLong("mediaId", id)
             if (mediaType != null) putString("mediaType", mediaType)
+            putBoolean("preferTmdb", preferTmdb)
         }
-        findNavController().navigate(R.id.detailFragment, args)
+        findNavController().navigate(com.animarvle.app.R.id.detailsFragment, args)
     }
 
     private fun dp(value: Int): Int =

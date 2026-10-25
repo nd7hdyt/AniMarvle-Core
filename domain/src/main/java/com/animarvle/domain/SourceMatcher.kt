@@ -120,12 +120,12 @@ class SourceMatcher(
 
         val titleLower = media.title.lowercase()
         val isExplicitDub = titleLower.contains("(dub)") || titleLower.contains(" dub") || titleLower.contains("[dub]")
-        if (meta.requestedAudio == com.animarvle.sourceapi.Audio.DUB) {
+        if (meta.requestedAudio == com.animarvle.sourceapi.Audio.DUB && meta.type == com.animarvle.sourceapi.MediaType.ANIME) {
             if (isExplicitDub) {
                 score += DUB_MATCH_BONUS
                 reasons += "dub match +$DUB_MATCH_BONUS"
             }
-        } else if (meta.requestedAudio == com.animarvle.sourceapi.Audio.SUB) {
+        } else if (meta.requestedAudio == com.animarvle.sourceapi.Audio.SUB && meta.type == com.animarvle.sourceapi.MediaType.ANIME) {
             if (isExplicitDub) {
                 score -= DUB_PENALTY_FOR_SUB
                 reasons += "dub penalty for sub -$DUB_PENALTY_FOR_SUB"

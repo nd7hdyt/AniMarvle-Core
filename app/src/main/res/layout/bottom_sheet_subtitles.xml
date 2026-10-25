@@ -2,15 +2,17 @@
 <!-- AniVortex Subtitles Glassy Bottom Sheet -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/cardRoot"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="@drawable/bg_sheet_bottom"
+    android:background="@android:color/transparent"
     android:orientation="vertical"
     android:paddingTop="12dp"
-    android:paddingBottom="28dp">
+    android:paddingBottom="14dp">
 
     <!-- Drag Handle -->
     <View
+        android:id="@+id/dragHandle"
         android:layout_width="40dp"
         android:layout_height="4dp"
         android:layout_gravity="center_horizontal"
@@ -86,10 +88,10 @@
     </LinearLayout>
 
     <!-- Subtitle Options List -->
-    <androidx.recyclerview.widget.RecyclerView
+    <com.animarvle.app.ui.player.MaxHeightRecyclerView
         android:id="@+id/subtitlesList"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:maxHeight="380dp"
+        android:clipToPadding="false"
         android:overScrollMode="never" />
 </LinearLayout>

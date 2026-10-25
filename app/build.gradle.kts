@@ -24,13 +24,20 @@ android {
         applicationId = "com.animarvle.app"
         minSdk = 26
         targetSdk = 37
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.1.1"
 
         val tmdbKey = getSecret("TMDB_API_KEY")
         val googleClientId = getSecret("GOOGLE_WEB_CLIENT_ID")
+        val malClientId = getSecret("MAL_CLIENT_ID")
+        val malClientSecret = getSecret("MAL_CLIENT_SECRET")
+        val simklClientId = getSecret("SIMKL_CLIENT_ID")
+
         buildConfigField("String", "TMDB_API_KEY", "\"$tmdbKey\"")
         buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"$googleClientId\"")
+        buildConfigField("String", "MAL_CLIENT_ID", "\"$malClientId\"")
+        buildConfigField("String", "MAL_CLIENT_SECRET", "\"$malClientSecret\"")
+        buildConfigField("String", "SIMKL_CLIENT_ID", "\"$simklClientId\"")
     }
 
     buildTypes {

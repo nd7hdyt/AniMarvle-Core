@@ -71,16 +71,25 @@ class AuthLetYouInFragment : Fragment() {
         }
 
         binding.btnGoogle.setOnClickListener {
-            binding.loadingOverlay.isVisible = true
-            val signInIntent = GoogleAuthHelper.getSignInIntent(requireActivity())
-            googleSignInLauncher.launch(signInIntent)
+            try {
+                binding.loadingOverlay.isVisible = true
+                val signInIntent = GoogleAuthHelper.getSignInIntent(requireActivity())
+                googleSignInLauncher.launch(signInIntent)
+            } catch (e: Exception) {
+                binding.loadingOverlay.isVisible = false
+                Toast.makeText(
+                    requireContext(),
+                    "Unable to start Google Sign-In: ${e.localizedMessage ?: e.message}",
+                    Toast.LENGTH_LONG,
+                ).show()
+            }
         }
     }
 
     private fun handleGoogleSignInResult(data: android.content.Intent?) {
-        val task = GoogleAuthHelper.getSignedInAccountFromIntent(data)
         val accountRepo = (requireActivity().application as AnimarvleApp).container.account
         try {
+            val task = GoogleAuthHelper.getSignedInAccountFromIntent(data)
             val googleAccount = task.getResult(ApiException::class.java)
             val userAccount = accountRepo.onGoogleSignInSuccess(googleAccount)
             binding.loadingOverlay.isVisible = false
@@ -106,12 +115,15 @@ class AuthLetYouInFragment : Fragment() {
                 return
             }
             val errorMsg = when (e.statusCode) {
-                10 -> "Google Sign-In Developer Error (10): Ensure SHA-1 (DD:1B:59:E1...) is registered in Google Cloud Console."
+                10 -> "Google Sign-In Developer Error (10): Ensure SHA-1 is registered in Google Cloud Console."
                 7 -> "Network error during Google Sign-In. Please check your connection."
                 12500 -> "Google Sign-In failed (12500). Please verify Google Play Services."
                 else -> "Google Sign-In failed (code ${e.statusCode}): ${e.message}"
             }
             Toast.makeText(requireContext(), errorMsg, Toast.LENGTH_LONG).show()
+        } catch (e: Exception) {
+            binding.loadingOverlay.isVisible = false
+            Toast.makeText(requireContext(), "Google Sign-In error: ${e.localizedMessage ?: e.message}", Toast.LENGTH_LONG).show()
         }
     }
 

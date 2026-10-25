@@ -14,6 +14,7 @@ data class DetailEpisodeUi(
     val title: String,
     val thumbnailUrl: String?,
     val history: HistoryItem?,
+    val durationMinutes: Int? = null,
 )
 
 class DetailEpisodeAdapter(
@@ -44,6 +45,13 @@ class DetailEpisodeAdapter(
             holder.binding.epThumbnail.load(it) {
                 crossfade(true)
             }
+        }
+
+        if (item.durationMinutes != null && item.durationMinutes > 0) {
+            holder.binding.epDuration.isVisible = true
+            holder.binding.epDuration.text = "${item.durationMinutes}m"
+        } else {
+            holder.binding.epDuration.isVisible = false
         }
 
         val history = item.history

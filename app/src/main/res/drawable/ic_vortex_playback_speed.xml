@@ -1,5 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- AniVortex Playback Speed Icon: Circle with speed tick notches and center play triangle -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
@@ -9,20 +8,39 @@
     <path
         android:fillColor="#FFFFFF"
         android:pathData="M10,8.5v7l5.5,-3.5z" />
-    <!-- Segmented Speed Dashes on Left & Continuous Arc on Right -->
+    <!-- Continuous Right Arc (from 12 o'clock to 6 o'clock) -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M12,2A10,10 0 0,1 22,12A10,10 0 0,1 12,22A9.9,9.9 0 0,1 4.93,19.07l1.41,-1.41A7.9,7.9 0 0,0 12,20A8,8 0 0,0 20,12A8,8 0 0,0 12,4A7.9,7.9 0 0,0 6.34,6.34l-1.41,-1.41A9.9,9.9 0 0,1 12,2z" />
-    <!-- Top-left notch -->
+        android:fillColor="#00000000"
+        android:pathData="M12,3A9,9 0 0,1 21,12A9,9 0 0,1 12,21"
+        android:strokeWidth="1.9"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round" />
+    <!-- Top-Left Arc Dash 1 -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M3.5,8h2v2h-2z" />
-    <!-- Mid-left notch -->
+        android:fillColor="#00000000"
+        android:pathData="M8.5,3.7A9,9 0 0,0 5.6,5.6"
+        android:strokeWidth="1.9"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round" />
+    <!-- Mid-Top-Left Arc Dash 2 -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M2,11h2v2h-2z" />
-    <!-- Bottom-left notch -->
+        android:fillColor="#00000000"
+        android:pathData="M3.7,8.5A9,9 0 0,0 3,11"
+        android:strokeWidth="1.9"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round" />
+    <!-- Mid-Bottom-Left Arc Dash 3 -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M3.5,14h2v2h-2z" />
+        android:fillColor="#00000000"
+        android:pathData="M3,13A9,9 0 0,0 3.7,15.5"
+        android:strokeWidth="1.9"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round" />
+    <!-- Bottom-Left Arc Dash 4 -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M5.6,18.4A9,9 0 0,0 8.5,20.3"
+        android:strokeWidth="1.9"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round" />
 </vector>

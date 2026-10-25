@@ -1,16 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:layout_width="180dp"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="118dp"
     android:layout_height="wrap_content"
-    android:layout_marginEnd="14dp"
+    android:layout_marginEnd="12dp"
     android:orientation="vertical">
 
     <com.google.android.material.card.MaterialCardView
         android:layout_width="match_parent"
-        android:layout_height="104dp"
-        app:cardBackgroundColor="@color/surface"
-        app:cardCornerRadius="14dp"
+        android:layout_height="170dp"
+        app:cardBackgroundColor="#121217"
+        app:cardCornerRadius="12dp"
         app:cardElevation="0dp"
         app:strokeWidth="0dp">
 
@@ -25,22 +26,7 @@
                 android:contentDescription="@null"
                 android:scaleType="centerCrop" />
 
-            <!-- Soft dark tint so play icon pops -->
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:background="#1A000000" />
-
-            <!-- Centered play icon -->
-            <ImageView
-                android:layout_width="32dp"
-                android:layout_height="32dp"
-                android:layout_gravity="center"
-                android:contentDescription="@null"
-                android:src="@drawable/ic_play_filled"
-                app:tint="#FFFFFF" />
-
-            <!-- Progress bar across bottom edge of thumbnail -->
+            <!-- Subtle progress bar along the very bottom edge -->
             <ProgressBar
                 android:id="@+id/progressBar"
                 style="?android:attr/progressBarStyleHorizontal"
@@ -53,17 +39,20 @@
         </FrameLayout>
     </com.google.android.material.card.MaterialCardView>
 
+    <!-- Strong White Title below card -->
     <TextView
         android:id="@+id/title"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="6dp"
         android:ellipsize="end"
         android:maxLines="1"
-        android:textColor="@color/on_bg"
-        android:textSize="14sp"
-        android:textStyle="bold" />
+        android:textColor="#FFFFFF"
+        android:textSize="13sp"
+        android:textStyle="bold"
+        tools:text="The Apothecary Diaries" />
 
+    <!-- Episode & Time Left cleanly below title -->
     <TextView
         android:id="@+id/episodeLabel"
         android:layout_width="match_parent"
@@ -71,7 +60,8 @@
         android:layout_marginTop="2dp"
         android:ellipsize="end"
         android:maxLines="1"
-        android:textColor="?attr/colorPrimary"
-        android:textSize="12sp" />
+        android:textColor="#B3FFFFFF"
+        android:textSize="11.5sp"
+        tools:text="Ep 1 • 21m left" />
 
 </LinearLayout>

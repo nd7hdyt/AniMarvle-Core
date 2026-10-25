@@ -81,26 +81,39 @@ class PlayerSettingsFragment : Fragment() {
 
         // Audio preference (SUB vs DUB)
         var isDub = prefs.getBoolean(KEY_DEFAULT_DUB, false)
+        val activeBg = android.content.res.ColorStateList.valueOf(android.graphics.Color.WHITE)
+        val inactiveBg = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#2C2C2E"))
+        val activeTextColor = android.graphics.Color.BLACK
+        val inactiveTextColor = android.graphics.Color.WHITE
+
         fun updateAudioButtons() {
             if (isDub) {
-                binding.btnAudioSub.strokeWidth = 0
-                binding.btnAudioDub.strokeWidth = 2
+                binding.btnAudioDub.backgroundTintList = activeBg
+                binding.btnAudioDub.setTextColor(activeTextColor)
+                binding.btnAudioSub.backgroundTintList = inactiveBg
+                binding.btnAudioSub.setTextColor(inactiveTextColor)
             } else {
-                binding.btnAudioSub.strokeWidth = 2
-                binding.btnAudioDub.strokeWidth = 0
+                binding.btnAudioSub.backgroundTintList = activeBg
+                binding.btnAudioSub.setTextColor(activeTextColor)
+                binding.btnAudioDub.backgroundTintList = inactiveBg
+                binding.btnAudioDub.setTextColor(inactiveTextColor)
             }
         }
         updateAudioButtons()
 
         binding.btnAudioSub.setOnClickListener {
-            isDub = false
-            prefs.edit().putBoolean(KEY_DEFAULT_DUB, false).apply()
-            updateAudioButtons()
+            if (isDub) {
+                isDub = false
+                prefs.edit().putBoolean(KEY_DEFAULT_DUB, false).apply()
+                updateAudioButtons()
+            }
         }
         binding.btnAudioDub.setOnClickListener {
-            isDub = true
-            prefs.edit().putBoolean(KEY_DEFAULT_DUB, true).apply()
-            updateAudioButtons()
+            if (!isDub) {
+                isDub = true
+                prefs.edit().putBoolean(KEY_DEFAULT_DUB, true).apply()
+                updateAudioButtons()
+            }
         }
 
         // Default Quality chooser (Auto, 4K, 1080p, 720p, 480p)
@@ -134,12 +147,16 @@ class PlayerSettingsFragment : Fragment() {
             }
         }
 
-        // Double-Tap Seek Duration chooser (5s, 10s, 15s, 30s)
+        // Double-Tap Seek Duration chooser (5s, 10s, 15s, 20s, 30s, 45s, 60s, 90s)
         val seekDurations = listOf(
-            5 to getString(R.string.settings_seek_5s),
-            10 to getString(R.string.settings_seek_10s),
-            15 to getString(R.string.settings_seek_15s),
-            30 to getString(R.string.settings_seek_30s),
+            5 to "5s",
+            10 to "10s",
+            15 to "15s",
+            20 to "20s",
+            30 to "30s",
+            45 to "45s",
+            60 to "60s",
+            90 to "90s",
         )
         var savedSeekSeconds = prefs.getInt(KEY_SEEK_DURATION, 10)
         fun updateSeekDisplay() {
@@ -331,6 +348,8 @@ class PlayerSettingsFragment : Fragment() {
 
     companion object {
         const val PREFS_NAME = "player_settings"
+        const val KEY_ADULT_MODE = "adult_mode_enabled"
+        const val KEY_NOTIFICATIONS = "notifications_enabled"
         const val KEY_AUTOPLAY = "autoplay_next"
         const val KEY_AUTO_SKIP = "auto_skip_intro"
         const val KEY_SHOW_SKIP = "show_skip_buttons"

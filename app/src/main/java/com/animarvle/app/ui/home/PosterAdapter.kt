@@ -47,6 +47,7 @@ class PosterAdapter(
             binding.poster.load(media.coverUrl)
             binding.scoreBadge.visibility = android.view.View.VISIBLE
             binding.scoreBadge.text = "HD"
+            binding.scoreBadge.setTextColor(android.graphics.Color.BLACK)
             val score = media.score
             if (score != null) {
                 binding.ratingBadge.visibility = android.view.View.VISIBLE

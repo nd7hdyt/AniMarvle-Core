@@ -15,16 +15,21 @@ object GoogleAuthHelper {
 
     fun getGoogleSignInOptions(context: Context): GoogleSignInOptions {
         val serverClientId = try {
-            context.getString(R.string.default_web_client_id)
+            val fromRes = context.getString(R.string.default_web_client_id)
+            if (fromRes.isNotBlank()) fromRes else WEB_CLIENT_ID
         } catch (_: Exception) {
             WEB_CLIENT_ID
-        }
+        }.trim()
 
-        return GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-            .requestIdToken(serverClientId)
+        val builder = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
             .requestEmail()
             .requestProfile()
-            .build()
+
+        if (serverClientId.isNotEmpty()) {
+            builder.requestIdToken(serverClientId)
+        }
+
+        return builder.build()
     }
 
     fun getClient(activity: Activity): GoogleSignInClient {

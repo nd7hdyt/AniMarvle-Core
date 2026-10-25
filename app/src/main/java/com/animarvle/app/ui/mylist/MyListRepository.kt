@@ -40,6 +40,7 @@ class MyListRepository(context: Context) {
                     progress = o.optInt("progress", 0),
                     totalEpisodes = if (o.has("totalEpisodes")) o.optInt("totalEpisodes") else null,
                     updatedAtMs = o.optLong("updatedAtMs", System.currentTimeMillis()),
+                    year = if (o.has("year") && !o.isNull("year")) o.optInt("year") else null,
                 )
             }
             _itemsFlow.value = list
@@ -78,6 +79,7 @@ class MyListRepository(context: Context) {
                 put("progress", item.progress)
                 if (item.totalEpisodes != null) put("totalEpisodes", item.totalEpisodes)
                 put("updatedAtMs", item.updatedAtMs)
+                if (item.year != null && item.year > 0) put("year", item.year)
             })
         }
         prefs.edit().putString(KEY_ITEMS, arr.toString()).apply()

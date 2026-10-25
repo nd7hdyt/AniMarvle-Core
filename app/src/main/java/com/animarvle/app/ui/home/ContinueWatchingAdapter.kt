@@ -1,23 +1,18 @@
 package com.animarvle.app.ui.home
 
+import android.content.res.ColorStateList
+import android.graphics.Color
 import android.view.LayoutInflater
 import android.view.ViewGroup
+import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import coil.load
 import com.animarvle.app.R
 import com.animarvle.app.databinding.ItemContinueWatchingBinding
-import com.animarvle.app.ui.player.HistoryItem
 
 class ContinueWatchingAdapter(
-    private val onResume: (HistoryItem) -> Unit,
-) : RecyclerView.Adapter<ContinueWatchingAdapter.Holder>() {
-
-    private var items = listOf<HistoryItem>()
-
-    fun submit(newItems: List<HistoryItem>) {
-        items = newItems
-        notifyDataSetChanged()
-    }
+    private val onResume: (Media) -> Unit,
+) : ListAdapter<Media, ContinueWatchingAdapter.Holder>(MediaDiffCallback()) {
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
         val binding = ItemContinueWatchingBinding.inflate(
@@ -28,26 +23,32 @@ class ContinueWatchingAdapter(
         return Holder(binding)
     }
 
-    override fun onBindViewHolder(holder: Holder, position: Int) = holder.bind(items[position])
-
-    override fun getItemCount(): Int = items.size
+    override fun onBindViewHolder(holder: Holder, position: Int) = holder.bind(getItem(position))
 
     inner class Holder(private val b: ItemContinueWatchingBinding) : RecyclerView.ViewHolder(b.root) {
-        fun bind(item: HistoryItem) {
+        fun bind(item: Media) {
             b.title.text = item.title
-            b.episodeLabel.text = if (item.mediaType.equals("MOVIE", ignoreCase = true)) {
-                "Movie"
+            val isMovie = item.mediaType?.equals("MOVIE", ignoreCase = true) == true || item.tags.contains("MOVIE")
+            b.episodeLabel.text = if (isMovie) {
+                item.timeLeft ?: "Movie"
             } else {
-                b.root.context.getString(R.string.player_watching_episode, item.episodeNumber)
+                val epNum = item.episodeNumber ?: 1
+                val left = item.timeLeft
+                if (left != null) "Ep $epNum • $left" else "Episode $epNum"
             }
-            val accent = com.animarvle.app.ui.theme.AppTheme.accent(b.root.context)
-            b.episodeLabel.setTextColor(accent)
-            b.progressBar.progressTintList = android.content.res.ColorStateList.valueOf(accent)
-            b.progressBar.progress = item.progressPercent
-            if (!item.posterUrl.isNullOrBlank()) {
-                b.poster.load(item.posterUrl)
+            b.progressBar.progressTintList = ColorStateList.valueOf(Color.WHITE)
+            b.progressBar.progress = ((item.progress ?: 0f) * 100).toInt().coerceIn(0, 100)
+
+            // Always use the Anime/Movie vertical posterUrl
+            val img = item.posterUrl.ifBlank { item.backdropUrl.orEmpty() }
+            if (img.isNotBlank()) {
+                b.poster.load(img) {
+                    crossfade(true)
+                    placeholder(R.drawable.bg_search_poster_placeholder)
+                    error(R.drawable.bg_search_poster_placeholder)
+                }
             } else {
-                b.poster.setImageResource(R.drawable.bg_chip_tonal)
+                b.poster.setImageResource(R.drawable.bg_search_poster_placeholder)
             }
             b.root.setOnClickListener { onResume(item) }
         }

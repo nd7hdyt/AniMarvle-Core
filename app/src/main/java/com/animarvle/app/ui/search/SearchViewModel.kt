@@ -137,7 +137,9 @@ class SearchViewModel(
             runCatching {
                 when (_state.value.type) {
                     SearchType.ALL -> {
-                        if (isMovieTv) repo.tmdbSearch(q) else repo.search(q)
+                        val primary = runCatching { if (isMovieTv) repo.tmdbSearch(q) else repo.search(q) }.getOrDefault(emptyList())
+                        val secondary = runCatching { if (isMovieTv) repo.search(q) else repo.tmdbSearch(q) }.getOrDefault(emptyList())
+                        (primary + secondary).distinctBy { "${it.id}:${it.format}" }
                     }
                     SearchType.MOVIE -> repo.tmdbSearch(q).filter { it.format.equals("MOVIE", ignoreCase = true) }
                     SearchType.TV_SHOW -> repo.tmdbSearch(q).filter { !it.format.equals("MOVIE", ignoreCase = true) }

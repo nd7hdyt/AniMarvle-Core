@@ -1,0 +1,20 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="100dp"
+    android:height="100dp"
+    android:viewportWidth="100"
+    android:viewportHeight="100">
+    <!-- Rounded card outline -->
+    <path
+        android:strokeColor="#1FFFFFFF"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M 60,18 C 76,18 84,26 84,42 L 84,58 C 84,74 76,82 60,82" />
+    <!-- Forward arrow -->
+    <path
+        android:strokeColor="#1FFFFFFF"
+        android:strokeWidth="6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M 30,50 L 76,50 M 58,34 L 76,50 L 58,66" />
+</vector>

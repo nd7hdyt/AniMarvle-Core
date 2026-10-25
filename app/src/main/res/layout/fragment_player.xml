@@ -16,7 +16,7 @@
         android:background="#000000"
         android:orientation="vertical">
 
-        <!-- Status bar spacer: ensures in portrait the video starts cleanly BELOW the status bar, matching Th3-Anime -->
+        <!-- Status bar spacer: ensures in portrait the video starts cleanly BELOW the status bar -->
         <View
             android:id="@+id/statusBarSpacer"
             android:layout_width="match_parent"
@@ -26,7 +26,7 @@
         <FrameLayout
             android:id="@+id/stage"
             android:layout_width="match_parent"
-            android:layout_height="220dp">
+            android:layout_height="230dp">
 
             <androidx.media3.ui.PlayerView
                 android:id="@+id/playerView"
@@ -37,16 +37,6 @@
                 app:surface_type="texture_view"
                 app:use_controller="false" />
 
-
-
-            <!-- Accent spinner while buffering -->
-            <ProgressBar
-                android:id="@+id/bufferSpinner"
-                android:layout_width="46dp"
-                android:layout_height="46dp"
-                android:layout_gravity="center"
-                android:indeterminateTint="?attr/colorPrimary"
-                android:visibility="gone" />
 
             <!-- Double-tap seek overlays (PROMPT §7.7) -->
             <LinearLayout
@@ -105,14 +95,14 @@
 
             </LinearLayout>
 
-            <!-- Swipe gesture HUDs matching AniVortex Screenshots 4 & 5 -->
-            <!-- Brightness HUD Capsule: Floating on right side -->
+            <!-- Swipe gesture HUDs matching Reference Screenshots 3 & 4 -->
+            <!-- Brightness HUD Capsule: Floating on right side (triggered by LEFT side vertical swipe) -->
             <LinearLayout
                 android:id="@+id/brightnessIndicator"
-                android:layout_width="46dp"
-                android:layout_height="190dp"
+                android:layout_width="52dp"
+                android:layout_height="188dp"
                 android:layout_gravity="center_vertical|end"
-                android:layout_marginEnd="56dp"
+                android:layout_marginEnd="64dp"
                 android:background="@drawable/bg_vortex_hud_capsule"
                 android:gravity="center_horizontal"
                 android:orientation="vertical"
@@ -121,8 +111,8 @@
 
                 <ImageView
                     android:id="@+id/brightnessIcon"
-                    android:layout_width="20dp"
-                    android:layout_height="20dp"
+                    android:layout_width="22dp"
+                    android:layout_height="22dp"
                     android:contentDescription="Brightness"
                     android:src="@drawable/ic_vortex_brightness"
                     app:tint="#FFFFFF" />
@@ -130,15 +120,16 @@
                 <FrameLayout
                     android:id="@+id/brightnessTrackContainer"
                     android:layout_width="30dp"
-                    android:layout_height="94dp"
-                    android:layout_marginTop="8dp"
-                    android:layout_marginBottom="6dp">
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:layout_marginTop="10dp"
+                    android:layout_marginBottom="10dp">
 
                     <View
                         android:layout_width="3dp"
                         android:layout_height="match_parent"
                         android:layout_gravity="center_horizontal"
-                        android:background="#33FFFFFF" />
+                        android:background="#4DFFFFFF" />
 
                     <View
                         android:id="@+id/brightnessProgressFill"
@@ -161,18 +152,18 @@
                     android:layout_height="wrap_content"
                     android:text="0%"
                     android:textColor="#FFFFFF"
-                    android:textSize="11sp"
+                    android:textSize="11.5sp"
                     android:textStyle="bold" />
 
             </LinearLayout>
 
-            <!-- Sound / Volume HUD Capsule: Floating on left side -->
+            <!-- Sound / Volume HUD Capsule: Floating on left side (triggered by RIGHT side vertical swipe) -->
             <LinearLayout
                 android:id="@+id/volumeIndicator"
-                android:layout_width="46dp"
-                android:layout_height="190dp"
+                android:layout_width="52dp"
+                android:layout_height="188dp"
                 android:layout_gravity="center_vertical|start"
-                android:layout_marginStart="56dp"
+                android:layout_marginStart="64dp"
                 android:background="@drawable/bg_vortex_hud_capsule"
                 android:gravity="center_horizontal"
                 android:orientation="vertical"
@@ -181,8 +172,8 @@
 
                 <ImageView
                     android:id="@+id/volumeIcon"
-                    android:layout_width="20dp"
-                    android:layout_height="20dp"
+                    android:layout_width="22dp"
+                    android:layout_height="22dp"
                     android:contentDescription="Volume"
                     android:src="@drawable/ic_volume"
                     app:tint="#FFFFFF" />
@@ -190,15 +181,16 @@
                 <FrameLayout
                     android:id="@+id/volumeTrackContainer"
                     android:layout_width="30dp"
-                    android:layout_height="94dp"
-                    android:layout_marginTop="8dp"
-                    android:layout_marginBottom="6dp">
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:layout_marginTop="10dp"
+                    android:layout_marginBottom="10dp">
 
                     <View
                         android:layout_width="3dp"
                         android:layout_height="match_parent"
                         android:layout_gravity="center_horizontal"
-                        android:background="#33FFFFFF" />
+                        android:background="#4DFFFFFF" />
 
                     <View
                         android:id="@+id/volumeProgressFill"
@@ -221,7 +213,7 @@
                     android:layout_height="wrap_content"
                     android:text="25%"
                     android:textColor="#FFFFFF"
-                    android:textSize="11sp"
+                    android:textSize="11.5sp"
                     android:textStyle="bold" />
 
             </LinearLayout>
@@ -299,15 +291,14 @@
                 android:textSize="12sp"
                 android:visibility="gone" />
 
-            <!-- HUD Controls Overlay: Top bar + Bottom controls (scrims + seekbar + actions) -->
-            <!-- HUD Controls Overlay: Top bar + Bottom controls (scrims + seekbar + actions) -->
-            <!-- AniVortex Glassy Minimal Player HUD Controls Overlay -->
+            <!-- HUD Controls Overlay: Full dark scrim + Top bar + Center transport + Skip 90s + Bottom timeline -->
             <FrameLayout
                 android:id="@+id/controlsOverlay"
                 android:layout_width="match_parent"
-                android:layout_height="match_parent">
+                android:layout_height="match_parent"
+                android:background="#59000000">
 
-                <!-- Top bar: Chevron back · Show & Episode title · [CC] · [Settings] -->
+                <!-- Top bar: Chevron back · Show & Episode title · [Episodes (Landscape only)] · [CC] · [Settings] -->
                 <LinearLayout
                     android:id="@+id/topBar"
                     android:layout_width="match_parent"
@@ -316,17 +307,18 @@
                     android:background="@drawable/bg_player_scrim_top"
                     android:gravity="center_vertical"
                     android:orientation="horizontal"
-                    android:paddingHorizontal="16dp"
+                    android:paddingHorizontal="14dp"
                     android:paddingTop="10dp"
-                    android:paddingBottom="14dp">
+                    android:paddingBottom="18dp">
 
                     <androidx.appcompat.widget.AppCompatImageButton
                         android:id="@+id/backButton"
-                        android:layout_width="40dp"
-                        android:layout_height="40dp"
+                        android:layout_width="38dp"
+                        android:layout_height="38dp"
                         android:background="?android:attr/selectableItemBackgroundBorderless"
                         android:contentDescription="@string/player_back"
-                        android:padding="8dp"
+                        android:padding="6dp"
+                        android:scaleType="fitCenter"
                         android:src="@drawable/ic_vortex_back"
                         android:tint="#FFFFFF"
                         app:tint="#FFFFFF" />
@@ -346,21 +338,21 @@
                             android:ellipsize="end"
                             android:maxLines="1"
                             android:textColor="#FFFFFF"
-                            android:textSize="16sp"
+                            android:textSize="16.5sp"
                             android:textStyle="bold" />
 
                         <TextView
                             android:id="@+id/episodeSubtitleText"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="2dp"
+                            android:layout_marginTop="1dp"
                             android:ellipsize="end"
                             android:maxLines="1"
                             android:textColor="#B3FFFFFF"
                             android:textSize="12sp" />
                     </LinearLayout>
 
-                    <!-- Top right actions: Episodes · CC · Settings/Tune -->
+                    <!-- Top right actions: Episodes (Landscape only) · CC · Settings/Tune -->
                     <androidx.appcompat.widget.AppCompatImageButton
                         android:id="@+id/btnEpisodes"
                         android:layout_width="40dp"
@@ -370,17 +362,18 @@
                         android:padding="8dp"
                         android:src="@drawable/ic_vortex_episodes"
                         android:tint="#FFFFFF"
+                        android:visibility="gone"
                         app:tint="#FFFFFF" />
 
                     <androidx.appcompat.widget.AppCompatImageButton
                         android:id="@+id/ccButton"
                         android:layout_width="40dp"
                         android:layout_height="40dp"
-                        android:layout_marginStart="4dp"
+                        android:layout_marginStart="6dp"
                         android:background="?android:attr/selectableItemBackgroundBorderless"
                         android:contentDescription="@string/player_subtitles"
                         android:padding="8dp"
-                        android:src="@drawable/ic_subtitles"
+                        android:src="@drawable/ic_vortex_cc"
                         android:tint="#FFFFFF"
                         app:tint="#FFFFFF" />
 
@@ -388,7 +381,7 @@
                         android:id="@+id/settingsButton"
                         android:layout_width="40dp"
                         android:layout_height="40dp"
-                        android:layout_marginStart="4dp"
+                        android:layout_marginStart="6dp"
                         android:background="?android:attr/selectableItemBackgroundBorderless"
                         android:contentDescription="@string/player_settings"
                         android:padding="8dp"
@@ -397,21 +390,22 @@
                         app:tint="#FFFFFF" />
                 </LinearLayout>
 
-                <!-- AniVortex Circular Lock Button on Left (Screenshot 1) -->
+                <!-- Circular Lock Button on Left (Landscape only) -->
                 <androidx.appcompat.widget.AppCompatImageButton
                     android:id="@+id/btnLock"
                     android:layout_width="44dp"
                     android:layout_height="44dp"
                     android:layout_gravity="center_vertical|start"
-                    android:layout_marginStart="24dp"
+                    android:layout_marginStart="28dp"
                     android:background="@drawable/bg_player_lock_circle"
                     android:contentDescription="@string/player_lock"
-                    android:padding="11dp"
-                    android:src="@drawable/ic_lock"
+                    android:padding="10dp"
+                    android:src="@drawable/ic_vortex_lock"
                     android:tint="#FFFFFF"
+                    android:visibility="gone"
                     app:tint="#FFFFFF" />
 
-                <!-- Center Transport Controls: Previous · Play/Pause · Next (transparent, NO disc) -->
+                <!-- Center Transport Controls: Previous · Play/Pause · Next -->
                 <LinearLayout
                     android:id="@+id/centerControls"
                     android:layout_width="wrap_content"
@@ -422,53 +416,68 @@
 
                     <ImageButton
                         android:id="@+id/btnPrevious"
-                        android:layout_width="52dp"
-                        android:layout_height="52dp"
+                        android:layout_width="42dp"
+                        android:layout_height="42dp"
                         android:background="?android:attr/selectableItemBackgroundBorderless"
                         android:contentDescription="@string/player_previous_episode"
-                        android:padding="10dp"
-                        android:scaleType="centerInside"
+                        android:padding="6dp"
+                        android:scaleType="fitCenter"
                         android:src="@drawable/ic_player_previous"
                         app:tint="#FFFFFF" />
 
-                    <ImageButton
-                        android:id="@+id/playPause"
-                        android:layout_width="60dp"
-                        android:layout_height="60dp"
-                        android:layout_marginHorizontal="32dp"
-                        android:background="?android:attr/selectableItemBackgroundBorderless"
-                        android:contentDescription="@string/player_play_pause"
-                        android:padding="10dp"
-                        android:scaleType="centerInside"
-                        android:src="@drawable/ic_pause"
-                        app:tint="#FFFFFF" />
+                    <!-- Center Slot: Holds Play/Pause OR the Morphing White Loading Polygon -->
+                    <FrameLayout
+                        android:id="@+id/playPauseContainer"
+                        android:layout_width="56dp"
+                        android:layout_height="56dp"
+                        android:layout_marginStart="36dp"
+                        android:layout_marginEnd="36dp">
+
+                        <ImageButton
+                            android:id="@+id/playPause"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:background="?android:attr/selectableItemBackgroundBorderless"
+                            android:contentDescription="@string/player_play_pause"
+                            android:padding="4dp"
+                            android:scaleType="fitCenter"
+                            android:src="@drawable/ic_vortex_pause"
+                            app:tint="#FFFFFF" />
+
+                        <!-- Replaces the thin green ProgressBar with Material 3 Expressive morphing white polygon -->
+                        <com.animarvle.app.ui.player.VortexMorphLoadingView
+                            android:id="@+id/playerLoadingIndicator"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:visibility="gone" />
+                    </FrameLayout>
 
                     <ImageButton
                         android:id="@+id/btnNext"
-                        android:layout_width="52dp"
-                        android:layout_height="52dp"
+                        android:layout_width="42dp"
+                        android:layout_height="42dp"
                         android:background="?android:attr/selectableItemBackgroundBorderless"
                         android:contentDescription="@string/player_next_episode"
-                        android:padding="10dp"
-                        android:scaleType="centerInside"
+                        android:padding="6dp"
+                        android:scaleType="fitCenter"
                         android:src="@drawable/ic_player_next"
                         app:tint="#FFFFFF" />
                 </LinearLayout>
 
-                <!-- AniVortex Skip 90s Pill: Translucent dark capsule floating above timeline on bottom right -->
+                <!-- Skip 90s Pill: Dark capsule floating above timeline on bottom right -->
                 <LinearLayout
                     android:id="@+id/skipPill"
                     android:layout_width="wrap_content"
-                    android:layout_height="32dp"
+                    android:layout_height="36dp"
                     android:layout_gravity="bottom|end"
-                    android:layout_marginEnd="16dp"
-                    android:layout_marginBottom="48dp"
+                    android:layout_marginEnd="14dp"
+                    android:layout_marginBottom="50dp"
                     android:background="@drawable/bg_player_skip_pill"
                     android:clickable="true"
                     android:focusable="true"
                     android:gravity="center_vertical"
                     android:orientation="horizontal"
-                    android:paddingHorizontal="14dp">
+                    android:paddingHorizontal="15dp">
 
                     <ImageView
                         android:layout_width="14dp"
@@ -487,7 +496,7 @@
                         android:textStyle="bold" />
                 </LinearLayout>
 
-                <!-- AniVortex Single-Line Bottom Timeline Bar: [Time] [SeekBar] [Duration] [PiP] [Fullscreen] -->
+                <!-- Single-Line Bottom Timeline Bar -->
                 <LinearLayout
                     android:id="@+id/bottomControls"
                     android:layout_width="match_parent"
@@ -496,27 +505,28 @@
                     android:background="@drawable/bg_player_scrim_bottom"
                     android:gravity="center_vertical"
                     android:orientation="horizontal"
-                    android:paddingHorizontal="16dp"
-                    android:paddingTop="12dp"
+                    android:paddingHorizontal="14dp"
+                    android:paddingTop="16dp"
                     android:paddingBottom="12dp">
 
                     <TextView
                         android:id="@+id/positionText"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        tools:text="10:08"
+                        android:fontFamily="sans-serif-medium"
                         android:textColor="#FFFFFF"
-                        android:textSize="13sp" />
+                        android:textSize="13sp"
+                        tools:text="0:20" />
 
                     <SeekBar
                         android:id="@+id/seekBar"
                         android:layout_width="0dp"
-                        android:layout_height="22dp"
-                        android:layout_weight="1"
+                        android:layout_height="24dp"
                         android:layout_marginHorizontal="10dp"
+                        android:layout_weight="1"
                         android:max="1000"
-                        android:maxHeight="2dp"
-                        android:minHeight="2dp"
+                        android:maxHeight="3dp"
+                        android:minHeight="3dp"
                         android:paddingStart="0dp"
                         android:paddingEnd="0dp"
                         android:progressDrawable="@drawable/player_seekbar_progress"
@@ -527,9 +537,10 @@
                         android:id="@+id/durationText"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        tools:text="25:43"
+                        android:fontFamily="sans-serif-medium"
                         android:textColor="#FFFFFF"
-                        android:textSize="13sp" />
+                        android:textSize="13sp"
+                        tools:text="23:59" />
 
                     <androidx.appcompat.widget.AppCompatImageButton
                         android:id="@+id/btnDisplayMode"
@@ -541,6 +552,7 @@
                         android:padding="6dp"
                         android:src="@drawable/ic_vortex_aspect_ratio"
                         android:tint="#FFFFFF"
+                        android:visibility="gone"
                         app:tint="#FFFFFF" />
 
                     <androidx.appcompat.widget.AppCompatImageButton
@@ -569,7 +581,7 @@
                 </LinearLayout>
             </FrameLayout>
 
-            <!-- In-Player Episodes Drawer Overlay (AniVortex Screenshot 3) -->
+            <!-- In-Player Episodes Drawer Overlay -->
             <FrameLayout
                 android:id="@+id/episodesOverlay"
                 android:layout_width="match_parent"
@@ -703,18 +715,18 @@
                     android:layout_width="44dp"
                     android:layout_height="44dp"
                     android:layout_gravity="center_vertical|start"
-                    android:layout_marginStart="24dp"
+                    android:layout_marginStart="28dp"
                     android:background="@drawable/bg_player_lock_circle"
                     android:contentDescription="@string/player_unlock"
-                    android:padding="11dp"
-                    android:src="@drawable/ic_lock"
+                    android:padding="10dp"
+                    android:src="@drawable/ic_vortex_lock"
                     android:tint="#FFFFFF"
                     app:tint="#FFFFFF" />
             </FrameLayout>
         </FrameLayout>
     </LinearLayout>
 
-    <!-- Details below the player (PROMPT §7.7) -->
+    <!-- Details below the player (PROMPT §7.7) — UNTOUCHED -->
     <androidx.core.widget.NestedScrollView
         android:id="@+id/playerScrollView"
         android:layout_width="match_parent"
@@ -730,17 +742,186 @@
             android:orientation="vertical"
             android:paddingBottom="48dp">
 
-            <!-- "You are watching Episode N" -->
-            <TextView
-                android:id="@+id/watchingText"
+            <!-- Title & Watching metadata row -->
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:orientation="vertical"
                 android:paddingHorizontal="16dp"
                 android:paddingTop="16dp"
-                android:paddingBottom="6dp"
-                android:textColor="?attr/colorPrimary"
-                android:textSize="17sp"
-                android:textStyle="bold" />
+                android:paddingBottom="4dp">
+
+                <TextView
+                    android:id="@+id/detailTitleText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:maxLines="2"
+                    android:textColor="#FFFFFF"
+                    android:textSize="20sp"
+                    android:textStyle="bold"
+                    tools:text="Lupin" />
+
+                <LinearLayout
+                    android:id="@+id/detailMetaRow"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="5dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/detailRatingBadge"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textColor="#FFD700"
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        tools:text="★ 8.2" />
+
+                    <TextView
+                        android:id="@+id/detailBadgeDot"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:text="•"
+                        android:textColor="#555555"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:id="@+id/detailYearText"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:textColor="#9E9E9E"
+                        android:textSize="13sp"
+                        tools:text="2017" />
+
+                    <TextView
+                        android:id="@+id/detailBadgeDot2"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:text="•"
+                        android:textColor="#555555"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:id="@+id/watchingText"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:textColor="#FFFFFF"
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        tools:text="S1 E1" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- Action Buttons Row: [ + Add to List ] [ 📺 Cast ] [ 📥 Download ] -->
+            <LinearLayout
+                android:id="@+id/actionButtonsRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="16dp"
+                android:layout_marginTop="14dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:id="@+id/btnAddToList"
+                    android:layout_width="0dp"
+                    android:layout_height="40dp"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="8dp"
+                    android:background="@drawable/bg_chip_tonal"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="8dp">
+
+                    <ImageView
+                        android:id="@+id/ivAddToList"
+                        android:layout_width="17dp"
+                        android:layout_height="17dp"
+                        android:src="@drawable/ic_bookmark"
+                        app:tint="#FFFFFF" />
+
+                    <TextView
+                        android:id="@+id/tvAddToList"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        android:ellipsize="end"
+                        android:maxLines="1"
+                        android:text="+ Add to List"
+                        android:textColor="#FFFFFF"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/btnCast"
+                    android:layout_width="0dp"
+                    android:layout_height="40dp"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="8dp"
+                    android:background="@drawable/bg_chip_tonal"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="8dp">
+
+                    <ImageView
+                        android:layout_width="17dp"
+                        android:layout_height="17dp"
+                        android:src="@drawable/ic_cast"
+                        app:tint="#FFFFFF" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        android:ellipsize="end"
+                        android:maxLines="1"
+                        android:text="Cast"
+                        android:textColor="#FFFFFF"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/btnDownload"
+                    android:layout_width="0dp"
+                    android:layout_height="40dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_chip_tonal"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="8dp">
+
+                    <ImageView
+                        android:layout_width="17dp"
+                        android:layout_height="17dp"
+                        android:src="@drawable/ic_download"
+                        app:tint="#FFFFFF" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        android:ellipsize="end"
+                        android:maxLines="1"
+                        android:text="Download"
+                        android:textColor="#FFFFFF"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+            </LinearLayout>
 
             <!-- Active Source Card (Hidden in AniVortex Minimalist Layout) -->
             <LinearLayout
@@ -895,6 +1076,55 @@
                 </HorizontalScrollView>
             </LinearLayout>
 
+            <!-- Season Selector Row (Option 1: Dropdown pill) -->
+            <LinearLayout
+                android:id="@+id/seasonSelectorRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="16dp"
+                android:layout_marginTop="12dp"
+                android:layout_marginBottom="4dp"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:id="@+id/btnSeasonDropdown"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:background="@drawable/bg_season_dropdown_pill"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="10dp">
+
+                    <ImageView
+                        android:id="@+id/ivSeasonDropdownIcon"
+                        android:layout_width="15dp"
+                        android:layout_height="15dp"
+                        android:src="@drawable/ic_layers"
+                        app:tint="#B3B3BF" />
+
+                    <TextView
+                        android:id="@+id/tvSeasonDropdownLabel"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="7dp"
+                        android:textColor="#FFFFFF"
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        tools:text="Season 1" />
+
+                    <ImageView
+                        android:id="@+id/ivSeasonDropdownArrow"
+                        android:layout_width="14dp"
+                        android:layout_height="14dp"
+                        android:layout_marginStart="4dp"
+                        android:src="@drawable/ic_chevron_down"
+                        app:tint="#8E8E9A" />
+                </LinearLayout>
+            </LinearLayout>
+
             <!-- List of episodes (omitted for movies) -->
             <LinearLayout
                 android:id="@+id/episodesBlock"
@@ -902,43 +1132,88 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical">
 
+                <!-- Redesigned Episodes Header Row -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="24dp"
+                    android:layout_marginTop="16dp"
                     android:gravity="center_vertical"
                     android:orientation="horizontal"
                     android:paddingHorizontal="16dp">
 
+                    <!-- Title -->
                     <TextView
-                        android:layout_width="0dp"
+                        android:id="@+id/tvEpisodesTitle"
+                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="@string/player_list_episodes"
+                        android:text="@string/player_episodes_title"
                         android:textColor="@color/on_bg"
-                        android:textSize="17sp"
+                        android:textSize="18sp"
                         android:textStyle="bold" />
+
+                    <!-- Subheader: EPS range selector (e.g. EPS: 1-100 v) -->
+                    <LinearLayout
+                        android:id="@+id/epsRangeBtn"
+                        android:layout_width="wrap_content"
+                        android:layout_height="32dp"
+                        android:layout_marginStart="10dp"
+                        android:background="@drawable/bg_season_dropdown_pill"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:paddingHorizontal="10dp">
+
+                        <ImageView
+                            android:id="@+id/epsRangeIcon"
+                            android:layout_width="13dp"
+                            android:layout_height="13dp"
+                            android:src="@drawable/ic_layers"
+                            app:tint="#B3B3BF" />
+
+                        <TextView
+                            android:id="@+id/epsRangeText"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="5dp"
+                            android:textColor="#FFFFFF"
+                            android:textSize="12sp"
+                            android:textStyle="bold"
+                            tools:text="EPS: 1–100" />
+
+                        <ImageView
+                            android:id="@+id/epsRangeArrow"
+                            android:layout_width="13dp"
+                            android:layout_height="13dp"
+                            android:layout_marginStart="3dp"
+                            android:src="@drawable/ic_chevron_down"
+                            app:tint="#8E8E9A" />
+                    </LinearLayout>
+
+                    <View
+                        android:layout_width="0dp"
+                        android:layout_height="0dp"
+                        android:layout_weight="1" />
 
                     <!-- Search No. of Ep pill with EditText -->
                     <LinearLayout
                         android:id="@+id/searchEpContainer"
                         android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:background="@drawable/bg_chip_tonal"
+                        android:layout_height="32dp"
+                        android:background="@drawable/bg_season_dropdown_pill"
                         android:gravity="center_vertical"
                         android:orientation="horizontal"
-                        android:paddingHorizontal="12dp"
-                        android:paddingVertical="5dp">
+                        android:paddingHorizontal="10dp">
 
                         <ImageView
-                            android:layout_width="16dp"
-                            android:layout_height="16dp"
+                            android:layout_width="13dp"
+                            android:layout_height="13dp"
                             android:src="@drawable/ic_search"
-                            app:tint="@color/on_bg_muted" />
+                            app:tint="#8E8E9A" />
 
                         <EditText
                             android:id="@+id/searchEpInput"
-                            android:layout_width="85dp"
+                            android:layout_width="72dp"
                             android:layout_height="wrap_content"
                             android:background="@null"
                             android:hint="@string/player_no_of_ep"
@@ -948,47 +1223,22 @@
                             android:paddingStart="6dp"
                             android:paddingEnd="0dp"
                             android:textColor="@color/on_bg"
-                            android:textColorHint="@color/on_bg_muted"
+                            android:textColorHint="#666670"
                             android:textSize="12sp" />
                     </LinearLayout>
-                </LinearLayout>
 
-                <!-- Subheader: EPS range selector (e.g. EPS: 1-100 v) -->
-                <LinearLayout
-                    android:id="@+id/epsRangeBtn"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="14dp"
-                    android:layout_marginHorizontal="16dp"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-
-                    <ImageView
-                        android:id="@+id/epsRangeIcon"
-                        android:layout_width="18dp"
-                        android:layout_height="18dp"
-                        android:src="@drawable/ic_layers"
-                        app:tint="?attr/colorPrimary" />
-
-                    <TextView
-                        android:id="@+id/epsRangeText"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
+                    <!-- View mode toggle button: [ ▦ ] -->
+                    <androidx.appcompat.widget.AppCompatImageButton
+                        android:id="@+id/btnToggleViewMode"
+                        android:layout_width="32dp"
+                        android:layout_height="32dp"
                         android:layout_marginStart="8dp"
-                        android:textColor="?attr/colorPrimary"
-                        android:textSize="14sp"
-                        android:textStyle="bold"
-                        tools:text="EPS: 1-100" />
-
-                    <ImageView
-                        android:id="@+id/epsRangeArrow"
-                        android:layout_width="18dp"
-                        android:layout_height="18dp"
-                        android:layout_marginStart="4dp"
-                        android:src="@drawable/ic_chevron_down"
-                        app:tint="?attr/colorPrimary" />
+                        android:background="@drawable/bg_season_dropdown_pill"
+                        android:contentDescription="Toggle View Mode"
+                        android:padding="6dp"
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/ic_grid_view"
+                        app:tint="#FFFFFF" />
                 </LinearLayout>
 
                 <TextView

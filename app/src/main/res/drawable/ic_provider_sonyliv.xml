@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="36dp"
+    android:height="36dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <!-- "SONY" Header Text -->
+    <path
+        android:fillColor="#E6FFFFFF"
+        android:pathData="M9,13 c0,-0.6 0.4,-1 1,-1 h4 c0.6,0 1,0.4 1,1 v1.5 h-4.2 v1 h3.2 c0.6,0 1,0.4 1,1 v2 c0,0.6 -0.4,1 -1,1 h-4 c-0.6,0 -1,-0.4 -1,-1 v-1.5 h4.2 v-1 h-3.2 c-0.6,0 -1,-0.4 -1,-1 Z M18,12 h4 c1.1,0 2,0.9 2,2 v3.5 c0,1.1 -0.9,2 -2,2 h-4 c-1.1,0 -2,-0.9 -2,-2 v-3.5 c0,-1.1 0.9,-2 2,-2 Z M19.8,14.5 v2.5 h2.4 v-2.5 Z M26,12 h2 l3.5,5.5 v-5.5 h1.8 v7.5 h-2 l-3.5,-5.5 v5.5 h-1.8 Z M37,12 l2.2,3.8 2.2,-3.8 h2.1 l-3.2,5 v2.5 h-2.2 v-2.5 l-3.2,-5 Z" />
+    <!-- Glowing background pill behind LIV -->
+    <path
+        android:fillColor="#FF007F"
+        android:pathData="M11,27 h26 c4.4,0 8,3.6 8,8 0,4.4 -3.6,8 -8,8 h-26 c-4.4,0 -8,-3.6 -8,-8 0,-4.4 3.6,-8 8,-8 Z" />
+    <path
+        android:fillColor="#FFD700"
+        android:pathData="M23,27 h14 c4.4,0 8,3.6 8,8 0,4.4 -3.6,8 -8,8 h-14 c4,-2.5 6,-5.5 6,-8 0,-2.5 -2,-5.5 -6,-8 Z" />
+    <!-- "liv" Text -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M14,29 h3 v12 h-3 Z M20,29 h3 v12 h-3 Z M25.5,29 h3 l2.5,8.5 2.5,-8.5 h3 l-4,12 h-3 Z" />
+</vector>

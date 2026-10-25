@@ -24,6 +24,7 @@ class AddToMyListBottomSheet : BottomSheetDialogFragment() {
     private var score: Double? = null
 
     private var totalEpisodes: Int? = null
+    private var year: Int? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -34,6 +35,7 @@ class AddToMyListBottomSheet : BottomSheetDialogFragment() {
             format = it.getString(ARG_FORMAT)
             score = if (it.containsKey(ARG_SCORE)) it.getDouble(ARG_SCORE) else null
             totalEpisodes = if (it.containsKey(ARG_TOTAL_EPISODES)) it.getInt(ARG_TOTAL_EPISODES) else null
+            year = if (it.containsKey(ARG_YEAR)) it.getInt(ARG_YEAR) else null
         }
     }
 
@@ -49,6 +51,8 @@ class AddToMyListBottomSheet : BottomSheetDialogFragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
+        binding.tvMediaTitle.text = title
+
         val repository = (requireActivity().application as com.animarvle.app.AnimarvleApp).container.myList
 
         viewLifecycleOwner.lifecycleScope.launch {
@@ -59,14 +63,17 @@ class AddToMyListBottomSheet : BottomSheetDialogFragment() {
 
         fun saveStatus(status: MyListStatus) {
             viewLifecycleOwner.lifecycleScope.launch {
+                val existing = repository.itemsFlow.value.firstOrNull { it.mediaId == mediaId }
                 val item = MyListItem(
                     mediaId = mediaId,
-                    title = title,
-                    posterUrl = posterUrl,
-                    format = format,
-                    score = score,
+                    title = title.ifBlank { existing?.title ?: "" },
+                    posterUrl = posterUrl ?: existing?.posterUrl,
+                    format = format ?: existing?.format,
+                    score = score ?: existing?.score,
                     status = status,
-                    totalEpisodes = totalEpisodes,
+                    progress = existing?.progress ?: 0,
+                    totalEpisodes = totalEpisodes ?: existing?.totalEpisodes,
+                    year = year ?: existing?.year,
                 )
                 repository.upsert(item)
                 Toast.makeText(
@@ -78,11 +85,9 @@ class AddToMyListBottomSheet : BottomSheetDialogFragment() {
             }
         }
 
+        binding.btnPending.setOnClickListener { saveStatus(MyListStatus.PLAN_TO_WATCH) }
         binding.btnWatching.setOnClickListener { saveStatus(MyListStatus.WATCHING) }
-        binding.btnPlanToWatch.setOnClickListener { saveStatus(MyListStatus.PLAN_TO_WATCH) }
         binding.btnCompleted.setOnClickListener { saveStatus(MyListStatus.COMPLETED) }
-        binding.btnOnHold.setOnClickListener { saveStatus(MyListStatus.ON_HOLD) }
-        binding.btnDropped.setOnClickListener { saveStatus(MyListStatus.DROPPED) }
 
         binding.btnRemove.setOnClickListener {
             viewLifecycleOwner.lifecycleScope.launch {
@@ -94,21 +99,59 @@ class AddToMyListBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun highlightActiveStatus(currentStatus: MyListStatus?) {
-        val buttons = mapOf(
-            MyListStatus.WATCHING to binding.btnWatching,
-            MyListStatus.PLAN_TO_WATCH to binding.btnPlanToWatch,
-            MyListStatus.COMPLETED to binding.btnCompleted,
-            MyListStatus.ON_HOLD to binding.btnOnHold,
-            MyListStatus.DROPPED to binding.btnDropped,
+        val isPending = currentStatus == MyListStatus.PLAN_TO_WATCH || currentStatus?.key == "pending"
+        val isWatching = currentStatus == MyListStatus.WATCHING
+        val isCompleted = currentStatus == MyListStatus.COMPLETED
+
+        updateOptionUi(
+            container = binding.btnPending,
+            icon = binding.ivPendingIcon,
+            title = binding.tvPendingTitle,
+            subtitle = binding.tvPendingSubtitle,
+            check = binding.ivPendingCheck,
+            isSelected = isPending
         )
 
-        buttons.forEach { (status, button) ->
-            if (status == currentStatus) {
-                button.strokeWidth = 2
-                button.strokeColor = resources.getColorStateList(R.color.green_accent, null)
-            } else {
-                button.strokeWidth = 0
-            }
+        updateOptionUi(
+            container = binding.btnWatching,
+            icon = binding.ivWatchingIcon,
+            title = binding.tvWatchingTitle,
+            subtitle = binding.tvWatchingSubtitle,
+            check = binding.ivWatchingCheck,
+            isSelected = isWatching
+        )
+
+        updateOptionUi(
+            container = binding.btnCompleted,
+            icon = binding.ivCompletedIcon,
+            title = binding.tvCompletedTitle,
+            subtitle = binding.tvCompletedSubtitle,
+            check = binding.ivCompletedCheck,
+            isSelected = isCompleted
+        )
+    }
+
+    private fun updateOptionUi(
+        container: View,
+        icon: android.widget.ImageView,
+        title: android.widget.TextView,
+        subtitle: android.widget.TextView,
+        check: android.widget.ImageView,
+        isSelected: Boolean
+    ) {
+        if (isSelected) {
+            container.setBackgroundResource(R.drawable.bg_mylist_option_selected)
+            icon.imageTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.BLACK)
+            title.setTextColor(android.graphics.Color.BLACK)
+            subtitle.setTextColor(android.graphics.Color.parseColor("#444444"))
+            check.isVisible = true
+            check.imageTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.BLACK)
+        } else {
+            container.setBackgroundResource(R.drawable.bg_mylist_option_unselected)
+            icon.imageTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.WHITE)
+            title.setTextColor(android.graphics.Color.WHITE)
+            subtitle.setTextColor(android.graphics.Color.parseColor("#8E8E93"))
+            check.isVisible = false
         }
     }
 
@@ -125,6 +168,7 @@ class AddToMyListBottomSheet : BottomSheetDialogFragment() {
         private const val ARG_FORMAT = "format"
         private const val ARG_SCORE = "score"
         private const val ARG_TOTAL_EPISODES = "total_episodes"
+        private const val ARG_YEAR = "year"
 
         fun newInstance(
             mediaId: Long,
@@ -133,6 +177,7 @@ class AddToMyListBottomSheet : BottomSheetDialogFragment() {
             format: String? = null,
             score: Double? = null,
             totalEpisodes: Int? = null,
+            year: Int? = null,
         ): AddToMyListBottomSheet {
             return AddToMyListBottomSheet().apply {
                 arguments = Bundle().apply {
@@ -142,6 +187,7 @@ class AddToMyListBottomSheet : BottomSheetDialogFragment() {
                     putString(ARG_FORMAT, format)
                     if (score != null) putDouble(ARG_SCORE, score)
                     if (totalEpisodes != null) putInt(ARG_TOTAL_EPISODES, totalEpisodes)
+                    if (year != null) putInt(ARG_YEAR, year)
                 }
             }
         }

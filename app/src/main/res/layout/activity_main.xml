@@ -14,27 +14,21 @@
         app:defaultNavHost="true"
         app:navGraph="@navigation/nav_main" />
 
-    <!-- Floating Bottom Navigation Bar (matches AniVortex reference) -->
+    <!-- Floating Bottom Navigation Bar (1:1 AniVortex Frosted Glass without border line) -->
     <LinearLayout
         android:id="@+id/bottomNavContainer"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom"
-        android:orientation="vertical">
-
-        <!-- Top gradient scrim: softly blends scrolling content into pitch black -->
-        <View
-            android:id="@+id/bottomNavScrim"
-            android:layout_width="match_parent"
-            android:layout_height="16dp"
-            android:background="@drawable/bg_bottom_nav_top_scrim" />
+        android:orientation="vertical"
+        android:paddingTop="14dp">
 
         <!-- Navigation Bar Items Row -->
         <LinearLayout
             android:id="@+id/bottomNavBar"
             android:layout_width="match_parent"
-            android:layout_height="52dp"
-            android:background="#000000"
+            android:layout_height="54dp"
+            android:background="@android:color/transparent"
             android:gravity="center_vertical"
             android:orientation="horizontal"
             android:paddingHorizontal="4dp">
@@ -64,6 +58,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
+                    android:fontFamily="sans-serif-medium"
                     android:includeFontPadding="false"
                     android:text="@string/nav_home"
                     android:textColor="#FFFFFF"
@@ -72,8 +67,8 @@
 
                 <View
                     android:id="@+id/navIndicatorHome"
-                    android:layout_width="18dp"
-                    android:layout_height="2.5dp"
+                    android:layout_width="34dp"
+                    android:layout_height="3dp"
                     android:layout_marginTop="3dp"
                     android:background="@drawable/bg_nav_indicator"
                     android:visibility="visible" />
@@ -97,22 +92,23 @@
                     android:layout_height="22dp"
                     android:contentDescription="@string/nav_schedule"
                     android:src="@drawable/ic_nav_schedule"
-                    app:tint="#8E8E93" />
+                    app:tint="#D9FFFFFF" />
 
                 <TextView
                     android:id="@+id/navLabelSchedule"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
+                    android:fontFamily="sans-serif-medium"
                     android:includeFontPadding="false"
                     android:text="@string/nav_schedule"
-                    android:textColor="#8E8E93"
+                    android:textColor="#E6FFFFFF"
                     android:textSize="11sp" />
 
                 <View
                     android:id="@+id/navIndicatorSchedule"
-                    android:layout_width="18dp"
-                    android:layout_height="2.5dp"
+                    android:layout_width="34dp"
+                    android:layout_height="3dp"
                     android:layout_marginTop="3dp"
                     android:background="@drawable/bg_nav_indicator"
                     android:visibility="invisible" />
@@ -136,22 +132,23 @@
                     android:layout_height="22dp"
                     android:contentDescription="@string/nav_my_list"
                     android:src="@drawable/ic_nav_mylist"
-                    app:tint="#8E8E93" />
+                    app:tint="#D9FFFFFF" />
 
                 <TextView
                     android:id="@+id/navLabelMyList"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
+                    android:fontFamily="sans-serif-medium"
                     android:includeFontPadding="false"
                     android:text="@string/nav_my_list"
-                    android:textColor="#8E8E93"
+                    android:textColor="#E6FFFFFF"
                     android:textSize="11sp" />
 
                 <View
                     android:id="@+id/navIndicatorMyList"
-                    android:layout_width="18dp"
-                    android:layout_height="2.5dp"
+                    android:layout_width="34dp"
+                    android:layout_height="3dp"
                     android:layout_marginTop="3dp"
                     android:background="@drawable/bg_nav_indicator"
                     android:visibility="invisible" />
@@ -175,22 +172,23 @@
                     android:layout_height="22dp"
                     android:contentDescription="@string/nav_download"
                     android:src="@drawable/ic_nav_download"
-                    app:tint="#8E8E93" />
+                    app:tint="#D9FFFFFF" />
 
                 <TextView
                     android:id="@+id/navLabelDownload"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
+                    android:fontFamily="sans-serif-medium"
                     android:includeFontPadding="false"
                     android:text="@string/nav_download"
-                    android:textColor="#8E8E93"
+                    android:textColor="#E6FFFFFF"
                     android:textSize="11sp" />
 
                 <View
                     android:id="@+id/navIndicatorDownload"
-                    android:layout_width="18dp"
-                    android:layout_height="2.5dp"
+                    android:layout_width="34dp"
+                    android:layout_height="3dp"
                     android:layout_marginTop="3dp"
                     android:background="@drawable/bg_nav_indicator"
                     android:visibility="invisible" />
@@ -214,22 +212,23 @@
                     android:layout_height="22dp"
                     android:contentDescription="@string/nav_profile"
                     android:src="@drawable/ic_nav_profile"
-                    app:tint="#8E8E93" />
+                    app:tint="#D9FFFFFF" />
 
                 <TextView
                     android:id="@+id/navLabelProfile"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
+                    android:fontFamily="sans-serif-medium"
                     android:includeFontPadding="false"
                     android:text="@string/nav_profile"
-                    android:textColor="#8E8E93"
+                    android:textColor="#E6FFFFFF"
                     android:textSize="11sp" />
 
                 <View
                     android:id="@+id/navIndicatorProfile"
-                    android:layout_width="18dp"
-                    android:layout_height="2.5dp"
+                    android:layout_width="34dp"
+                    android:layout_height="3dp"
                     android:layout_marginTop="3dp"
                     android:background="@drawable/bg_nav_indicator"
                     android:visibility="invisible" />
@@ -237,12 +236,12 @@
 
         </LinearLayout>
 
-        <!-- Dynamic Inset Spacer: fills gesture navigation bar area with pitch black -->
+        <!-- Dynamic Inset Spacer: transparent to let container gradient cover navigation bar area -->
         <View
             android:id="@+id/bottomNavInsetSpacer"
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:background="#000000" />
+            android:background="@android:color/transparent" />
 
     </LinearLayout>
 

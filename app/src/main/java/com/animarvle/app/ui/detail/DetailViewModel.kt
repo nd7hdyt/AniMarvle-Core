@@ -22,7 +22,7 @@ sealed interface DetailState {
 
 class DetailViewModel(
     private val repo: MetadataRepository,
-    private val mediaId: Long,
+    private var mediaId: Long,
     private val preferTmdb: Boolean = false,
     private val mediaType: String? = null,
 ) : ViewModel() {
@@ -34,11 +34,13 @@ class DetailViewModel(
         load()
     }
 
-    fun load() {
-        if (mediaId <= 0) {
+    fun load(newMediaId: Long? = null) {
+        val targetId = newMediaId ?: mediaId
+        if (targetId <= 0) {
             _state.value = DetailState.Error("Missing media id")
             return
         }
+        mediaId = targetId
         _state.value = DetailState.Loading
         viewModelScope.launch {
             runCatching {

@@ -21,6 +21,7 @@ import eu.kanade.tachiyomi.animesource.AnimeCatalogueSource
 import eu.kanade.tachiyomi.animesource.AnimeSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.Hoster
+import com.animarvle.app.ui.player.SpokenLanguage
 import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SAnimeImpl
 import eu.kanade.tachiyomi.animesource.model.SEpisode
@@ -136,7 +137,7 @@ class TachiyomiAnimeSource(
         val allServers = if (hosters.isNotEmpty()) {
             hosters.mapIndexed { idx, h ->
                 val rawName = h.hosterName.ifEmpty { source.name }
-                val detectedLang = when {
+                val detectedLang = SpokenLanguage.fromRawTag(rawName)?.displayName ?: when {
                     rawName.contains("chinese", ignoreCase = true) || rawName.contains("mandarin", ignoreCase = true) || rawName.contains("[zh]", ignoreCase = true) || rawName.contains("donghua", ignoreCase = true) || rawName.contains("c-drama", ignoreCase = true) -> "Chinese"
                     rawName.contains("korean", ignoreCase = true) || rawName.contains("[ko]", ignoreCase = true) || rawName.contains("k-drama", ignoreCase = true) -> "Korean"
                     rawName.contains("hindi", ignoreCase = true) || rawName.contains("[hi]", ignoreCase = true) -> "Hindi"

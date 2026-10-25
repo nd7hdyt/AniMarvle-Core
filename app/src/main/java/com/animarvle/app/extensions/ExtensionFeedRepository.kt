@@ -47,7 +47,81 @@ class ExtensionFeedRepository(
             return@withContext items
         }
 
+        // 3. Try CloudStream repo.json or plugins.json (Redowan's BDIX, etc.)
+        val csUrl = if (normalized.endsWith(".json", ignoreCase = true)) normalized else "$normalized/repo.json"
+        val csResult = runCatching { fetchCloudStreamIndex(csUrl, normalized) }.getOrNull()
+        if (!csResult.isNullOrEmpty()) {
+            items.addAll(csResult)
+            return@withContext items
+        }
+
         items
+    }
+
+    private fun fetchCloudStreamIndex(url: String, baseUrl: String): List<AvailableExtension> {
+        val request = Request.Builder().url(url).build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) return emptyList()
+            val body = response.body?.string() ?: return emptyList()
+            val list = mutableListOf<AvailableExtension>()
+
+            if (body.trimStart().startsWith("[")) {
+                parseCloudStreamPluginArray(JSONArray(body), baseUrl, list)
+            } else {
+                val obj = JSONObject(body)
+                val pluginLists = obj.optJSONArray("pluginLists")
+                if (pluginLists != null) {
+                    for (i in 0 until pluginLists.length()) {
+                        val pUrl = pluginLists.getString(i)
+                        runCatching {
+                            client.newCall(Request.Builder().url(pUrl).build()).execute().use { pRes ->
+                                if (pRes.isSuccessful) {
+                                    val pBody = pRes.body?.string().orEmpty()
+                                    if (pBody.trimStart().startsWith("[")) {
+                                        parseCloudStreamPluginArray(JSONArray(pBody), baseUrl, list)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            return list
+        }
+    }
+
+    private fun parseCloudStreamPluginArray(arr: JSONArray, baseUrl: String, out: MutableList<AvailableExtension>) {
+        for (i in 0 until arr.length()) {
+            val obj = arr.getJSONObject(i)
+            val name = obj.optString("name", "")
+            if (name.isBlank()) continue
+            val internalName = obj.optString("internalName", name)
+            val pluginUrl = obj.optString("url", "")
+            val lang = obj.optString("language", "all")
+            val ver = obj.optString("version", "1.0")
+            val icon = obj.optString("iconUrl", "")
+            val isNsfw = obj.optJSONArray("tvTypes")?.let { tvArr ->
+                (0 until tvArr.length()).any { tvArr.optString(it).equals("NSFW", ignoreCase = true) }
+            } ?: false
+
+            out.add(
+                AvailableExtension(
+                    id = "cloudstream.$internalName",
+                    name = name,
+                    pkg = "cloudstream.$internalName",
+                    versionName = ver,
+                    versionCode = obj.optLong("version", 0),
+                    lang = lang,
+                    isNsfw = isNsfw,
+                    iconUrl = icon.takeIf { it.isNotBlank() },
+                    apkUrl = pluginUrl.takeIf { it.isNotBlank() },
+                    sourceCodeUrl = obj.optString("repositoryUrl", null),
+                    engine = ExtensionEngine.CLOUDSTREAM,
+                    isMovieOrAnime = true,
+                    repoBaseUrl = baseUrl,
+                )
+            )
+        }
     }
 
     private fun fetchAniyomiIndex(url: String, baseUrl: String): List<AvailableExtension> {

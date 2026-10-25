@@ -1,39 +1,36 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Shared neutrals (PROMPT §5: bg / surface / text tokens) -->
+    <!-- Pure AniVortex OLED Black Foundation (#000000) -->
+    <color name="bg">#000000</color>
     <color name="on_bg">#FFFFFF</color>
-    <color name="on_bg_muted">#A1A1A1</color>
-    <color name="surface">#1E2129</color>
-    <color name="surface_variant">#262A34</color>
-    <color name="surface_container">#161A22</color>
+    <color name="on_bg_muted">#9E9E9E</color>
 
-    <!-- Red theme (AniLab) — PROMPT §5 approximations, token values, not copied assets -->
-    <color name="red_bg">#101218</color>
-    <color name="red_accent">#D8202C</color>
-    <color name="red_accent_container">#3A1316</color>
+    <!-- Obsidian Glass Surfaces -->
+    <color name="surface">#0F0F14</color>
+    <color name="surface_variant">#181820</color>
+    <color name="surface_container">#121217</color>
 
-    <!-- Green theme (Th3-Anime) — PROMPT §5 measured values -->
-    <color name="green_bg">#0D1017</color>
-    <color name="green_accent">#05C149</color>
-    <color name="green_accent_container">#0D221D</color>
+    <!-- Primary Accent (Crisp White / Vortex Emerald Accent) -->
+    <color name="accent">#FFFFFF</color>
+    <color name="accent_container">#1F1F26</color>
+    <color name="accent_light">#E0E0E0</color>
 
-    <!-- Cyan theme (Zangetsu) -->
-    <color name="cyan_bg">#0D1219</color>
-    <color name="cyan_accent">#00D4B2</color>
-    <color name="cyan_accent_container">#0A2A26</color>
+    <!-- Legacy palette tokens mapped to OLED Black so no screen turns navy/grey -->
+    <color name="red_bg">#000000</color>
+    <color name="red_accent">#FFFFFF</color>
+    <color name="red_accent_container">#181820</color>
 
-    <!-- Info chip (ANNOUNCEMENT) — PROMPT §5 -->
+    <color name="green_bg">#000000</color>
+    <color name="green_accent">#FFFFFF</color>
+    <color name="green_accent_container">#181820</color>
+
+    <color name="cyan_bg">#000000</color>
+    <color name="cyan_accent">#FFFFFF</color>
+    <color name="cyan_accent_container">#181820</color>
+
     <color name="info">#2196F3</color>
     <color name="info_container">#101D2E</color>
-
-    <!-- Defaults used before a theme is applied -->
-    <color name="bg">@color/cyan_bg</color>
-    <color name="accent">@color/cyan_accent</color>
-    <color name="accent_container">@color/cyan_accent_container</color>
-    <color name="accent_light">#BAC7FF</color>
-    <color name="divider">#2E3244</color>
+    <color name="divider">#1FFFFFFF</color>
     <color name="danger">#FF4D4F</color>
-
-    <!-- App icon background: solid black so the edges of the mark read as black -->
     <color name="icon_background">#000000</color>
 </resources>

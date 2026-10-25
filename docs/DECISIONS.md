@@ -1853,3 +1853,475 @@ Following the feature and layout implementations across the app, an audit of int
          - In `onDrawOver()`, computes vertical scroll ratio via `computeVerticalScrollExtent()`, `computeVerticalScrollRange()`, and `computeVerticalScrollOffset()`.
          - Draws a persistent, non-fading `#B3FFFFFF` rounded thumb (`width = 3.5dp`, `cornerRadius = 2dp`, `marginEnd = 4dp`) on lists exceeding 5 items (such as the 7-item Playback Speed list), guaranteeing 1:1 visual fidelity with AniVortex with zero framework dormancy bugs.
 
+23. **AniVortex Material 3 Expressive Morphing Loading & App-Wide Reload Indicator (Adopted):**
+    - **Problem:**
+      1. *Thin Circular Ring Around Play/Pause*: Player previously rendered a thin circular green/accent ProgressBar (bufferSpinner) around the central Play/Pause button while btnPlayPause remained visible inside it.
+      2. *AniVortex 1:1 Parity*: Reference screenshots from AniVortex showed a solid white morphing rounded polygon (Material 3 Expressive Loading Indicator) smoothly rotating and shifting between rounded geometric shapes, completely replacing and hiding the central Play/Pause icon during buffering or seeking.
+      3. *Excessive Indicator Scale*: The initial implementation dynamically scaled to 0.38f of view bounds, which inside 56dp/62dp player slots ballooned to ~50dp, visually overpowering the Previous/Next buttons.
+      4. *Stock Android SwipeRefreshLayout Spinner Across App*: Pull-to-refresh on Home and Schedule previously surfaced the stock Android Material 1 circular card with colored rotating ring, whereas in AniVortex (Image 5), the white morphing polygon sits at the top center of the screen as the unified reload indicator.
+      5. *Transport Slot Geometry Collapse*: Simply hiding btnPlayPause without an isolated container would collapse horizontal spacing or cause Previous/Next buttons to drift inwards.
+      6. *Episode 1 Previous Button Dimming*: Previous button was dimmed to 35% alpha instead of the authentic 40% alpha from AniVortex reference images.
+    - **Resolution:**
+      1. *Zero-Dependency Custom Vector View (VortexMorphLoadingView.kt)*:
+         - Created VortexMorphLoadingView in package com.animarvle.app.ui.player.
+         - Smoothly rotates at continuous 1.5x speed and morphs across 5 stages: Circle -> Rounded Pentagon (5 lobes) -> 8-point Soft Star Burst -> Rounded Diamond -> Soft Pill -> Circle.
+         - Uses zero-derivative cosine-squared easing transitions (C1 continuity) and 96 curve steps with solid white fill (Color.WHITE).
+         - **Exact 30dp Size Calibration**: Calibrated default indicator size to 30dp (indicatorSizeDp = 30f, baseRadius = (effectiveSize / 2f) / 1.16f). The polygon now stays at an exact 30dp tip-to-tip diameter, matching AniVortex reference screenshots (Images 3, 4, 5).
+         - Added pp:indicatorSize and pp:indicatorColor attributes in ttrs.xml and custom onMeasure logic.
+      2. *App-Wide Pull-to-Refresh & Reload Integration*:
+         - Added top-center `reloadIndicator` inside headerBar in fragment_home.xml (matching Image 5) and fragment_schedule.xml.
+         - Suppressed the default circular SwipeRefreshLayout card and spinner via Color.TRANSPARENT.
+         - Replaced legacy circular progress bars in dialog_choose_quality.xml, fragment_extension_manager.xml, bottom_sheet_server_selection.xml, dialog_cast_sheet.xml, and auth overlays (fragment_auth_let_you_in.xml, fragment_login.xml, fragment_sign_up.xml).
+      3. *Isolated Center Slot (fragment_player.xml)*:
+         - Wrapped playPause and playerLoadingIndicator in a dedicated FrameLayout (playPauseContainer, 56dp portrait, 62dp landscape) inside centerControls.
+         - Removed the old bufferSpinner ProgressBar.
+      4. *Buffering State Machine (PlayerFragment.kt)*:
+         - Added updateBufferingUi(isBufferingOrSeeking: Boolean): toggles playPause.visibility = View.INVISIBLE and playerLoadingIndicator.visibility = View.VISIBLE.
+         - Hooked into onPlaybackStateChanged (STATE_BUFFERING), onIsPlayingChanged, onStopTrackingTouch, and PlayerPhase transitions.
+         - Holds controls visible while isBufferingState == true (suppresses scheduleHideControls() until playback resumes).
+      5. *Episode 1 Calibration*:
+         - Set btnPrevious.alpha = 0.40f on Episode 1 and disabled clicks.
+      6. *View Null-Safety*:
+         - Guarded _binding in hideGestureHud() to prevent post-destruction NPEs.
+
+24. **Cloudflare Serverless Worker Phased Resolver Orchestration, Multi-Audio Ingestion & EBML/MKV Sniffing (Adopted):**
+    - **Problem:**
+      1. *Cloudflare Free Tier 50-Subrequest Limit Crash*: The serverless worker fired 9 source resolvers concurrently in parallel. Multi-hop redirect chains (such as MoviesMod running up to 12 sequential fetches) exceeded Cloudflare's strict 50-subrequest ceiling, crashing the worker with HTTP 500.
+      2. *Broken Multi-Hop Hindi / Regional Stream Extraction*: MoviesMod streams rely on multi-stage redirect domains (driveseed.org, fastdl.icu) with form submission and token decryption. Unhandled responses caused HTML error pages or direct Google Drive download walls to be returned to the player.
+      3. *ExoPlayer Container Type Mismatch on Direct Regional Streams*: Player code forced VIDEO_MP4 (MIME video/mp4) or HLS format on all direct stream URLs. When regional resolvers returned direct .mkv or Matroska/EBML streams from Google Drive proxies, ExoPlayer failed with UnrecognizedInputFormatException.
+      4. *Cloudflare Turnstile 403 on PelisPlus*: Spanish stream links from embed69.org failed with HTTP 403 due to Cloudflare Turnstile bot challenges.
+    - **Resolution:**
+      1. *Phased Resolver Pipeline & Subrequest Budgeting (worker.js)*:
+         - Separated resolvers into fast primary tier (VidLink, Videasy, MovieBox) and targeted secondary regional multi-audio tier (MoviesMod, PelisPlus, AnimeHLS).
+         - Added timeout bounds and subrequest budgeting to prevent worker invocation termination.
+      2. *MoviesMod / DriveSeed Token Bypass & Google Drive Byte-Range Proxying (worker.js)*:
+         - Extracted Google Drive file IDs and routed them through worker /proxy/stream with HTTP 206 byte-range slicing (Range headers) and .mkv extension hint, bypassing Google Drive download quotas and rate-limits.
+         - Filtered out non-media HTML landing pages (gdtot, login walls).
+      3. *Automatic Matroska / EBML Container Sniffing (PlayerFragment.kt)*:
+         - Removed hardcoded MP4 MIME type enforcement from direct stream initialization. ExoPlayer now automatically sniffs EBML / Matroska containers, allowing multi-audio .mkv files to play seamlessly.
+      4. *PelisPlus Domain Sanitization*:
+         - Filtered embed69.org from returned stream lists to eliminate 403 dead ends.
+
+25. **TV Show In-Screen Season Switching vs TMDB Internal Season ID Navigation & Infinite Fallback Resolution (Adopted):**
+    - **Problem:**
+      1. *Season Click Diverted to Unrelated Media ("MobLand Season 2" -> "La Nuit")*:
+         - In TMDB, TV series (e.g. MobLand, `tv_id = 247718`) have internal unique IDs for each season record (`Season 1 id = 381456`, `Season 2 id = 528409`).
+         - Previously, `TmdbMapper.kt` populated `SeasonUi.id = s.id` (TMDB's internal season ID).
+         - In `DetailFragment.kt`, tapping a season card triggered `open(season.id, "tv")`. For MobLand Season 2, this called `open(528409, "tv")`. TMDB `/movie/528409` is the 2018 French movie "La Nuit", replacing MobLand with a completely unrelated French film.
+      2. *Infinite Fallback Loop on HTTP 429 (VidLink Rate-Limit)*:
+         - When VidLink CDN returned HTTP 429 Too Many Requests, ExoPlayer reported playback failure to `PlayerViewModel.onPlaybackFailed(positionMs)`.
+         - In `StreamResolver.kt:orderServers()`, `manualPick?.let { byKey[it] }?.let { result[it.key] = it }` ran unconditionally at the top of the function before `startAfterServer != null` was evaluated.
+         - Because `requested.serverKey` was passed as `manualPick`, the dead server was immediately placed back at index 0, causing the resolver to retry the 429 endpoint infinitely instead of switching to Turbo, FastX, or fallback scrapers.
+      3. *Hardcoded Season 1 Across Player and Relay Source*:
+         - `DetailFragment.kt` and `PlayerFragment.kt` never passed the selected season number to `PlayerViewModel`.
+         - `PlayerViewModel.kt` hardcoded Season 1 when querying `MetadataRepository.episodeMetadata()` and displayed `"Season 1 • Episode $epNum"` in player subtitles and the in-player episode drawer.
+         - `AnimarvleStreamSource.kt` hardcoded `&season=1&episode=$epNum`, preventing season-specific streams from reaching Cloudflare worker resolvers.
+    - **Resolution:**
+      1. *Correct TMDB Season ID & Metadata Mapping (`TmdbMapper.kt` & `Models.kt`)*:
+         - Added `val episodeCount: Int? = null` and preserved `val seasonNumber: Int? = null` in `SeasonUi`.
+         - In `TmdbMapper.kt`, assigned `SeasonUi.id = item.id` (the parent TV show ID) and `episodeCount = s.episodeCount`.
+      2. *In-Screen TV Show Season Switching (`DetailFragment.kt`)*:
+         - Maintained `private var selectedSeasonNumber: Int = 1`.
+         - Updated `seasonAdapter` callback: if `season.seasonNumber != null`, calls `onSeasonSelected(season)` instead of navigating away.
+         - `onSeasonSelected()` highlights the active season, calculates `totalEps` from `season.episodeCount`, re-submits episodes to `episodeAdapter`, and fetches TMDB season metadata for `selectedSeasonNumber`.
+         - `playCurrent()` forwards `args.putInt("seasonNumber", selectedSeasonNumber)` and uses the season's episode count.
+      3. *Dead Server Deprioritization & Infinite Loop Elimination (`StreamResolver.kt`)*:
+         - In `orderServers()`, guarded `manualPick` so it is only placed at index 0 when `startAfterServer == null`.
+         - When `startAfterServer != null`, drops `startAfterServer` completely and cycles remaining servers, guaranteeing the failing server is never retried during mid-playback fallback.
+         - In `PlayerViewModel.onPlaybackFailed()`, reset `selectedHosterKey = null` before triggering `resolveChain()`.
+      4. *End-to-End Season Number Propagation (`PlayerViewModel.kt`, `PlayerFragment.kt`, `AnimarvleStreamSource.kt`, `HistoryRepository.kt`)*:
+         - `PlayerUiState` and `PlayerViewModel.Factory` now accept and maintain `seasonNumber`.
+         - `PlayerFragment.kt` reads `seasonNumber` from arguments, dynamically rendering `"Season $seasonNumber • Episode $epNum"` in portrait subtitles, landscape subtitles, and the in-player episode drawer.
+         - Added `seasonNumber: Int = 1` to `HistoryItem` and `HistoryRepository.saveProgress()`, ensuring resuming from history preserves both season and episode numbers.
+         - `AnimarvleStreamSource.kt:episodes()` reads `media.extra["season"] ?: "1"` and formats URLs and metadata accordingly for `/api/stream`.
+         - Removed erroneous trailing `&ext=.mkv` from `worker.js` proxy URLs that broke upstream query parsing.
+
+26. **Anime English Dub Routing, TMDB Anime Classification, Audio Switcher De-Duplication & Millisecond-Accurate Quality Persistence (Adopted):**
+    - **Problem:**
+      1. *VidLink Streams Hardcoding Spoken Audio as "English" for Anime*: In `serverless-worker/worker.js`, VidLink streams (`bcdn.hakunaymatata.com`) had `audioLanguage: "English"` hardcoded for all titles. Because VidLink anime streams are actually Japanese audio with English subtitles, labeling them as "English" caused the client to believe the active stream was already English, preventing real English dub resolution.
+      2. *Anime Detection Failure on TMDB Metadata (`!metaQuery.metaId.startsWith("tmdb")`)*: In `PlayerViewModel.kt:236, 366, 416`, anime detection checked `!metaQuery.metaId.startsWith("tmdb")`. When users opened anime with TMDB IDs (e.g. *The Apothecary Diaries*, `tmdb:215112`), `isAnime` evaluated to `false`, treating the anime as a standard Western TV show and bypassing anime dub resolution.
+      3. *Built-in Worker Relay Claiming Dub Capabilities*: `AnimarvleStreamSource.kt` set `capabilities.dub = true` and was first in `sources`. When `Audio.DUB` was selected, the player picked `AnimarvleStreamSource` (which only hosts Japanese sub for anime), failing to route to real dub scrapers (Zoro/HiAnime, Gogoanime).
+      4. *Suppression of "English (Dub)" in Audio Switcher*: In `PlayerViewModel.kt:rebuildAudioOptions()`, `hasEnglish` checked if any option had `languageCode == "en"`. Since the fake VidLink stream registered under `"en"`, `hasEnglish` was true, preventing the real `"English (Dub)"` (`audioCategory = Audio.DUB`) option from ever being created. Clicking "English" simply reloaded the same Japanese stream.
+      5. *Quality Reverting to Auto 1080p on Mid-Stream Switches*: In `onResolved()` and `streamsForQuality()`, chosen quality was matched strictly against full URL-based stream IDs (`"720p#https://..."`). When stream URLs changed on server switches or re-resolves, the match failed and defaulted back to `AUTO_ID` (1080p).
+      6. *Mid-Stream Playback Position Loss*: Switching audio or quality previously risked resetting playback to 00:00 instead of resuming at the exact current position.
+    - **Resolution:**
+      1. *Conditional Audio Tagging in Worker (`serverless-worker/worker.js`)*:
+         - Set `audioLanguage: isAnime ? "Japanese" : "English"` for VidLink streams.
+      2. *Proper Anime Type Recognition (`PlayerViewModel.kt`)*:
+         - Replaced `!metaQuery.metaId.startsWith("tmdb")` with `metaQuery.type == MediaType.ANIME || (!_state.value.isMovie && metaQuery.type != MediaType.MOVIE)`. Anime from TMDB is now correctly recognized as anime.
+      3. *Worker Relay Capabilities & Dub Exclusion (`AnimarvleStreamSource.kt` & `PlayerViewModel.kt`)*:
+         - Set `capabilities.dub = false` on `AnimarvleStreamSource`.
+         - In `activeSource` and `handleSourceFailure`, explicitly excluded source ID `40004L` when `Audio.DUB` is active for anime, routing directly to anime dub providers (**Zoro / HiAnime**, **Gogoanime**).
+         - Fixed `mediaType` fallback in `AnimarvleStreamSource.episodes()` and `options()` to preserve `MediaType.ANIME`.
+      4. *Reliable "English (Dub)" Injection & Host Tag Isolation (`PlayerViewModel.kt`)*:
+         - Updated `rebuildAudioOptions()` to check `hasEnglishDub` strictly for embedded tracks or server options with `audioCategory == Audio.DUB`. If absent, injects `"English (Dub)"` with `audioCategory = Audio.DUB`.
+         - In `serverStreamItems`, enforced `detected = if (isDonghua) CHINESE else JAPANESE` for all anime `Audio.SUB` streams, preventing English subtitles from poisoning the spoken audio language tag.
+      5. *Sanitized Resolution Tier Persistence (`PlayerViewModel.kt`)*:
+         - In `onResolved()` and `streamsForQuality()`, matched resolution tiers using `DerivedUi.sanitizeQualityLabel(id.substringBefore('#'))` (e.g. `"720p"`, `"480p"`). The chosen quality persists across stream re-resolutions without falling back to Auto 1080p.
+      6. *Millisecond-Accurate Playback Resumption (`PlayerFragment.kt` & `PlayerViewModel.kt`)*:
+         - Both quality selection and server stream language switches pass `exactPos = player?.currentPosition ?: 0L`, ensuring mid-stream switching resumes at the exact millisecond.
+
+27. **Streaming Provider Catalog Screen, Edge-to-Edge Status Bar Geometry, Authentic Provider Feeds & Unified Glass Choice Dialog (Adopted):**
+    - **Problem:**
+      1. *Provider Toolbar Pushed Against Status Bar*: In `ProviderCatalogFragment`, the top toolbar (`← Crunchyroll 🎛️`) was pushed flush against the top display edge, colliding with the system status bar (`center_y = 44px` vs `75.5px` reference) because `fragment_provider_catalog.xml` used a fixed `56dp` `FrameLayout` without status bar insets handling.
+      2. *Window Inset Child Propagation Failure*: Attempting to listen for insets on child views inside `LinearLayout` failed because standard Android `LinearLayout` does not propagate window insets to its children.
+      3. *Inauthentic Provider Content (Western Movies on Crunchyroll)*: The provider catalog initially queried generic movie lists for all providers. Crunchyroll (an anime-only streaming service) was displaying standard Western Hollywood movies instead of authentic Japanese animation films and series.
+      4. *Inconsistent Custom Bottom Sheet*: The sort/filter menu was originally implemented as an ad-hoc bottom sheet (`SortBottomSheetDialogFragment`) with opaque backgrounds and custom layouts, deviating from the established AniVortex obsidian glass design language.
+      5. *Deformed Dialog Corners from Asymmetrical Path Clipping*: Experimental asymmetrical radii clipping (`topCornersOnly` path) on bottom sheets broke the uniform 26dp rounded corner geometry, resulting in irregular corner boundaries.
+      6. *Empty Backdrop Blur on Non-Video Screens*: `VortexBlurHelper.applyCardBackdropBlur` previously only sampled from `TextureView`. Outside the video player, `textureView` was null, causing dialog backdrops to render empty black textures instead of blurring the underlying UI.
+    - **Resolution:**
+      1. *Dual-Layer Status Bar Inset Architecture (`fragment_provider_catalog.xml` & `ProviderCatalogFragment.kt`)*:
+         - Restructured the top toolbar into a vertical `LinearLayout` containing a dedicated `statusBarSpacer` (`View`, initial `height="0dp"`) followed by a standard `56dp` horizontal toolbar.
+         - In `ProviderCatalogFragment.kt`, immediately queried system `status_bar_height` dimension resource as an instant fallback to prevent visual layout jumps before insets dispatch.
+         - Attached `ViewCompat.setOnApplyWindowInsetsListener(binding.root)` to the root container and triggered `ViewCompat.requestApplyInsets(binding.root)`, updating `statusBarSpacer.layoutParams.height` dynamically to the exact system status bar height. Verified on device at `y = 173.5px` (physical 2340h) → `75.9px` in 1024h scale, matching the AniVortex reference (`75.5px`) within 0.4px.
+      2. *Authentic Multi-Provider TMDB Discovery Pipeline (`ProviderCatalogViewModel.kt` & `MetadataRepository.kt`)*:
+         - Added `ProviderConfig` with `isAnimeOnly: Boolean`, `tmdbProviderId: String?`, and `region: String = "US"`.
+         - Configured Crunchyroll with `isAnimeOnly = true`, delegating to TMDB discover queries with `withGenres = "16"` (Animation) and `withOriginalLanguage = "ja"` (Japanese), returning authentic anime movies (*Doraemon*, *Demon Slayer*, *Your Name*, *Perfect Blue*) and TV series.
+         - Configured mainstream streaming providers with authentic TMDB watch provider IDs (Netflix `8`, Prime Video `9|119`, Disney+ `337`, Apple TV+ `350`, Sony LIV `237`, Hotstar `122|337`, Max `1899|384`).
+      3. *Unified `ChoiceDialog` & `VortexBlurHelper` Integration (`ChoiceDialog.kt` & `ProviderCatalogFragment.kt`)*:
+         - Replaced `SortBottomSheetDialogFragment` with the unified `ChoiceDialog.show(...)` component used in player settings and CC subtitles.
+         - Configured `ChoiceRow` items for `Popular`, `Newest`, and `Top Rated` with checked/unchecked radio indicators (`ic_vortex_radio_checked` / `ic_vortex_radio_unchecked`).
+         - Added blank title support (`if (page.title.isBlank()) { binding.dialogTitle.visibility = View.GONE; binding.dialogList.setPadding(...) }`).
+         - Configured portrait `BottomSheetDialog` to apply `FLAG_BLUR_BEHIND`, `setBackgroundBlurRadius(55 * density)`, `setDimAmount(0.12f)`, and invoke `VortexBlurHelper.applyCardBackdropBlur(context, binding.cardRoot)`.
+         - Deleted legacy `SortBottomSheetDialogFragment.kt` and `dialog_sort_bottom_sheet.xml`.
+      4. *Stage Draw Fallback & Clean 26dp Symmetrical Rounded Corners (`VortexBlurHelper.kt`)*:
+         - Extended `applyCardBackdropBlur` with an `else { stageView.draw(canvas) }` fallback when `textureView == null`, enabling frosted glass backdrop blur across any screen in the application.
+         - Reverted custom path clipping back to the standard 26dp rounded rectangle structure (`finalCanvas.drawRoundRect(rect, cornerRadius, cornerRadius, paint)`) with `#B8161618` warm obsidian tint, matching `bg_vortex_glass_card.xml` perfectly without deformed corners.
+
+28. **Details Screen Pinned Backdrop Architecture, Progressive Poster Dimming, Clean Linear Header Scrim & Gradual Solid Black Transition (Adopted):**
+    - **Problem:**
+      1. *Poster Scrolling Off Screen*: The backdrop poster in `fragment_details.xml` was previously inside the scroll container, causing it to scroll away instead of staying pinned in the background while the details sheet glides up over it.
+      2. *Oversized Curved Header Shadow & Deformed Shape*: Reusing `VortexBlurHelper.applyHeaderScrollBlur` from `HomeFragment` drew two large radial gradient circles (`radius = smallW * 0.56f`, >600px) behind the top-left and top-right corners, creating a massive, unnatural dark arch dropping down halfway across characters' foreheads and eyes on the Details screen.
+      3. *Abrupt Snap to Solid Black*: Initial scroll threshold for the header (`60dp`) snapped the toolbar to solid black too quickly while the poster below was still largely visible.
+      4. *FrameLayout Height Measurement Bug*: Wrapping `headerContainer` in a `FrameLayout` with `match_parent` height child views caused Android's second-pass layout measurement to expand `headerContainer` to the full window height (`0,0 - 1080,2340`), covering the entire screen in black.
+      5. *Lack of Dynamic Poster Dimming*: As the user scrolled down, the poster remained at 100% full brightness, competing visually with the sliding content and text.
+    - **Resolution:**
+      1. *Three-Layer FrameLayout Architecture (`fragment_details.xml`)*:
+         - **Layer 0 (`heroContainer`, 480dp FrameLayout)**: Holds stationary `heroBackdrop` (`ImageView`, `centerCrop`), `heroDimOverlay` (`View`, `#000000`, `alpha="0"`), and `heroScrim` (`bg_details_bottom_scrim`).
+         - **Layer 1 (`detailsScrollView`, NestedScrollView)**: Contains `heroSpacer` (`320dp`), gradient transition, and `contentContainer` (solid `#000000` background) that slides up over the stationary poster.
+         - **Layer 2 (`headerContainer`, LinearLayout, wrap_content)**: Contains `statusBarSpacer` (dynamic height via window insets) and `headerContent` (`56dp` toolbar with 34dp circular glass icon plates: `<` back, `download`, `bookmark`, `share`).
+      2. *Progressive Hardware-Accelerated Poster Dimming (`DetailsFragment.kt`)*:
+         - In `setOnScrollChangeListener`, dynamically calculates `dimFraction = (scrollY.toFloat() / (280 * density)).coerceIn(0f, 1f)` and drives `binding.heroDimOverlay.alpha = dimFraction * 0.75f`.
+         - The pinned poster stays pristine at `scrollY == 0` and progressively dims into cinematic shadows as details glide up.
+      3. *Clean Linear Gradient & Slower Solid Black Transition (`DetailsFragment.kt`)*:
+         - Removed Home screen's curved arch vignette from Details screen.
+         - Implemented `updateHeaderBackground(fraction)` using a vertical `GradientDrawable(TOP_BOTTOM, intArrayOf(topAlpha, bottomAlpha))`.
+         - At `scroll == 0`: `topAlpha = 110` (~43% black at top), `bottomAlpha = 0` (100% clear), ensuring status bar icons are legible over bright artwork without shadows over faces.
+         - Extended `headerThreshold` from `60dp` to `220dp`, delivering a smooth, gradual transition into solid OLED black (`#000000`) synchronized with content arrival.
+      4. *Elimination of Full-Screen Measurement Bug*:
+         - Restored `headerContainer` to a clean `LinearLayout` (`wrap_content`), setting its background dynamically on the view itself and ensuring its bottom boundary strictly matches `statusBarSpacer + 56dp`.
+
+
+29. **Details Screen Cinematic Parallax Backdrop Movement (Adopted):**
+    - **Problem:**
+      - A completely static/pinned poster (Layer 0 `heroContainer` frozen at `translationY = 0`) felt visually stiff and detached as foreground content scrolled over it. Conversely, standard 1:1 scrolling (moving the poster at the exact same rate as the scroll) causes hero artwork to vanish almost immediately off the top of the viewport.
+    - **Resolution:**
+      - *Cinematic Parallax Ratio (`DetailsFragment.kt`)*:
+        - Wired `detailsScrollView.setOnScrollChangeListener` to calculate `val parallaxFactor = 0.35f` and set `binding.heroContainer.translationY = -(scrollY.coerceAtLeast(0) * parallaxFactor)`.
+        - Clamped with `scrollY.coerceAtLeast(0)` so that pull-down overscroll never detaches the top boundary of the poster from the screen edge.
+        - At `35%` velocity, the poster glides upward noticeably slower than the foreground content, achieving rich visual depth (similar to Netflix and AniLab reference layouts) while smoothly fading into the `heroDimOverlay` (`0.75f` alpha).
+      - *Unified Secondary Route Parallax (`DetailFragment.kt`)*:
+        - In `DetailFragment.kt`, where `bannerImage` is situated inside `contentScrollView`, attached `setOnScrollChangeListener` applying `bannerImage.translationY = scrollY.coerceAtLeast(0) * 0.65f`. Because the parent scrollview moves upward by `-scrollY`, the downward `+0.65f * scrollY` offset yields the identical net visual movement of `-0.35f * scrollY` (~35% scroll speed).
+
+
+30. **Streamlined My List Dialog with Available Options & Reactive Hero Banner Bookmark Fill (Adopted):**
+    - **Problem:**
+      1. *Unused Dialog Options*: The existing `AddToMyListBottomSheet` displayed legacy options like `On-Hold` and `Dropped` which had no dedicated filtering or support on the redesigned dual-tier My List screen, while referring to `Plan to Watch` instead of the UI's standard `Pending` tab.
+      2. *Hero Banner State Disconnect*: On the Home screen hero carousel, the "My List" button remained static (`ic_bookmark_outline` with "My List") even if the displayed title was already saved in the user's list.
+      3. *White-on-White Theme Glitches*: Changing primary theme accents to pure white caused unselected or selected states with `#FFFFFF` text to become unreadable against white surfaces.
+    - **Resolution:**
+      1. *Streamlined Available Options (`dialog_add_to_my_list.xml` & `AddToMyListBottomSheet.kt`)*:
+         - Refactored dialog to feature only currently supported, really available options:
+           - **Pending** (`PLAN_TO_WATCH`): "Save to watch later"
+           - **Watching** (`WATCHING`): "Currently in progress"
+           - **Completed** (`COMPLETED`): "Finished watching"
+           - **Remove from My List** (`btnRemove`): Translucent destructive red button (`#1AFF4D4F`) displayed dynamically only when the media is already in the list.
+         - Dropped defunct `On-Hold` and `Dropped` actions.
+         - Active status highlighting: Selected card switches to a solid white pill (`bg_mylist_option_selected.xml`) with pitch black text (`#000000`), dark subtitle (`#444444`), and a black checkmark (`ic_check`). Unselected cards render dark surface (`#141419`) with white text and border.
+      2. *Reactive Hero Banner Bookmark State (`HeroBannerAdapter.kt`, `HomeFeedAdapter.kt`, `HomeFragment.kt`)*:
+         - Added `@+id/ivMyListIcon` and `@+id/tvMyListLabel` to `item_hero_banner_page.xml`.
+         - In `HomeFragment`, reactively collects `appContainer.myList.itemsFlow` and streams `savedMediaIds` into `HomeFeedAdapter.setSavedIds(...)` -> `HeroBannerAdapter.setSavedIds(...)`.
+         - When an item is present in My List:
+           - Bookmark icon switches to `R.drawable.ic_bookmark_filled` tinted with active theme accent (`AppTheme.accent(context)`).
+           - Label dynamically updates to `"In List"` with accent color.
+         - When unsaved:
+           - Bookmark icon switches to `R.drawable.ic_bookmark_outline` tinted `#FFFFFF`.
+           - Label displays `"My List"` in semi-transparent white (`#CCFFFFFF`).
+      3. *Tier-2 Pill Navigation Integration (`MyListFragment.kt` & `MyListViewModel.kt`)*:
+         - Added `tabWatching` alongside `tabPending` and `tabCompleted` in `fragment_my_list.xml`.
+         - Updated `MyListViewModel`'s `matchesStatus` filter to properly distinguish `Pending` (`PLAN_TO_WATCH` and non-watching/non-completed entries), `Watching`, and `Completed`.
+         - Added contextual empty-state messages for the `"Watching"` tab ("No [category] in progress - Titles you are currently watching will appear here.").
+
+
+31. **App-Wide Portrait Lock with Smart Player Fullscreen Auto-Rotate (Adopted):**
+    - **Problem:**
+      1. *Unwanted App-Wide Rotation*: When Android system auto-rotate was active, rotating the phone tilted every screen in the app (Home, Details, Profile, My List, Search) into landscape, creating awkward horizontal stretching.
+      2. *Player Screen Squeezed Layout in Landscape*: In the video player (`PlayerFragment`), tilting the device into landscape did not expand the video into fullscreen. Instead, the 230dp video stage remained constrained at the top, leaving the title ("You are watching..."), server hint, server chips ("Servers: Spiral Turbo FastX"), and episode list crammed into the bottom half of the screen with excessive black space.
+    - **Resolution:**
+      1. *Enforced Portrait Mode Across App*:
+         - Set `android:screenOrientation="portrait"` on `MainActivity` in `AndroidManifest.xml`.
+         - In `MainActivity.kt`, wired `navController.addOnDestinationChangedListener` to enforce `requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT` for all destinations except `R.id.playerFragment`.
+      2. *Smart Player Auto-Rotate & Immersive Fullscreen (`PlayerFragment.kt`)*:
+         - Allowed sensor-based orientation exclusively on `PlayerFragment` when device auto-rotate is enabled (`Settings.System.ACCELEROMETER_ROTATION == 1`) via `ActivityInfo.SCREEN_ORIENTATION_USER`.
+         - Combined `onConfigurationChanged` with an active `OrientationEventListener` monitoring device accelerometer angles (~90°/270° landscape vs ~0°/360° portrait).
+         - When rotated to landscape:
+           - Automatically invokes `applyFullscreenUi(true)`: expands video stage and video band to `MATCH_PARENT`, hides `playerScrollView` (completely removing the title, server hint, server chips, and episode grid), hides system status and navigation bars immersively via `WindowInsetsControllerCompat`, and updates the fullscreen toggle icon to `ic_vortex_fullscreen_exit`.
+         - When rotated back to portrait:
+           - Automatically invokes `applyFullscreenUi(false)`: restores video stage to 230dp, resets video band to `wrap_content`, reveals `playerScrollView` with the title and server chips below the player, restores system bars, and resets the fullscreen toggle icon to `ic_vortex_fullscreen`.
+         - Clean manual toggles: Tapping the fullscreen icon or the "Rotate" action from the more menu forces `SCREEN_ORIENTATION_SENSOR_LANDSCAPE` or `SCREEN_ORIENTATION_PORTRAIT`, while the accelerometer listener automatically unlocks the manual override when the user physically reorients their device.
+         - On fragment exit (`onDestroyView`), `orientationListener` is disabled and `requestedOrientation` is immediately returned to `ActivityInfo.SCREEN_ORIENTATION_PORTRAIT`.
+
+32. **High-Contrast Auth & Profile Typography, Official Logo Standardization & Google Sign-In Hardening (Adopted):**
+    - **Problem:**
+      1. *White-on-White Button Text Across Auth & Profile*: Multiple primary action buttons (`btnSignInPassword` on `AuthLetYouInFragment`, `continueButton` on `ProfileFragment`, `btnSignIn` on `LoginFragment`, `btnSignUp` on `SignUpFragment`, `btnWatchNow` on `WelcomeFragment`) featured pure white capsule backgrounds (`#FFFFFF` or `@drawable/bg_button_welcome_sign_in`), but their text color was explicitly set to `@android:color/white` or lacked high-contrast overrides, causing text to be completely invisible (white text on a white pill).
+      2. *Legacy Placeholder Logo on "Let you in" Screen*: The authentication entrance screen displayed `@drawable/ic_brand_logo_mask` with dynamic tinting, displaying a legacy placeholder silhouette rather than the official high-resolution Animarvle brand logo.
+      3. *Google Sign-In Crash on Tap (IllegalArgumentException in Preconditions.checkNotEmpty)*: When users tapped "Continue with Google", the app crashed with `java.lang.IllegalArgumentException: Given String is empty or null`. In `GoogleAuthHelper.kt`, `GoogleSignInOptions.Builder.requestIdToken(serverClientId)` was called with an empty string when the web client ID was unconfigured or blank in specific builds, triggering an unhandled precondition check failure inside Google Play Services.
+    - **Resolution:**
+      1. *Universal High-Contrast Text Enforcement on White Pill Buttons*:
+         - Scanned all layouts across the application.
+         - Enforced `android:textColor="#000000"` (pitch black) and appropriate contrast on:
+           - `fragment_auth_let_you_in.xml` (`btnSignInPassword` - "Sign in with password")
+           - `fragment_profile.xml` (`continueButton` - "Sign in")
+           - `fragment_login.xml` (`btnSignIn` - "Sign In")
+           - `fragment_sign_up.xml` (`btnSignUp` - "Sign Up")
+           - `fragment_welcome.xml` (`btnWatchNow` - "Watch now")
+         - Guaranteed 100% legibility and adherence to WCAG AAA contrast guidelines against light capsule backgrounds.
+      2. *Official Animarvle Brand Logo Standardization (`fragment_auth_let_you_in.xml`)*:
+         - Replaced `@drawable/ic_brand_logo_mask` with `@drawable/animarvle_logo_white`.
+         - Removed obsolete color tinting (`android:tint="?attr/colorPrimary"`), rendering the clean, authentic transparent white Animarvle emblem identically to the Splash, Welcome, and About screens.
+      3. *Google Sign-In Empty Client ID Guard & Lifecycle Safety (`GoogleAuthHelper.kt`, `AuthLetYouInFragment.kt`, `LoginFragment.kt`)*:
+         - In `GoogleAuthHelper.kt`, wrapped `.requestIdToken(serverClientId)` in a strict guard: only invoke `requestIdToken` if `serverClientId.isNotEmpty()`.
+         - Added robust `try / catch` blocks in `AuthLetYouInFragment.kt` and `LoginFragment.kt` around `googleSignInLauncher.launch(signInIntent)` and task resolution, displaying an informative user-facing toast rather than crashing when Google Play Services is missing or unconfigured.
+
+33. **Profile Account Section Redesign (Before/After Login), Bottom Log Out Placement & Full Edit Profile Architecture (Adopted):**
+    - **Problem:**
+      1. *Outdated Profile Header & Layout*:
+         - Before login: Displayed a generic banner without clear value proposition for synchronizing watch lists.
+         - After login: Lacked a centered avatar presentation; had an awkwardly placed small "Sign Out" text link directly below the "Edit profile" button in the upper header.
+      2. *Preserving Settings Scope*: The user explicitly instructed: *"we only need the account part lets talk about the other parts later"*, requiring the account section to be completely revamped while keeping all settings rows (`Interface`, `Player & Downloads`, `Subtitle settings`, `Sources`, `About`) functional and untouched.
+      3. *Unintended Log Out Placement*: In reference designs, Log Out is positioned as a distinct, full-width red card button at the bottom of the screen before the version footer, rather than an easily mis-clicked text link beneath user details.
+      4. *Missing Edit Profile Flow & Avatar Selection*: Clicking "Edit profile" had no destination. Users could not edit their display name, preview changes in real time, or pick avatars.
+    - **Resolution:**
+      1. *Modernized Before-Login Header (`fragment_profile.xml`)*:
+         - Redesigned `loggedOutLayout` with bold 22sp heading `"Make Animarvle yours"` and subtitle `"Sync your list and watching history"`.
+         - High-contrast white capsule button `"Sign in"` (`continueButton`) with black text (`#000000`).
+         - Added subtle device watermark illustration (`ic_settings_login_watermark.png`) aligned to the right edge of the card.
+      2. *Centered After-Login Account Surface (`fragment_profile.xml`)*:
+         - Centered 88dp circular profile avatar (`profile_avatar`) with Coil circular cropping and fallback initials monogram.
+         - Bold 20sp username (`profile_name`), muted 13sp email (`profile_email`).
+         - Centered pill button `✎ Edit profile` (`btn_edit_profile`) with vector pencil icon (`ic_edit_pencil.xml`).
+         - Completely removed the top "Sign Out" button from the header area.
+      3. *Bottom Vibrant Red Log Out Button (`fragment_profile.xml`, `ProfileFragment.kt`)*:
+         - Implemented full-width 54dp height red button (`card_logout` / `btn_logout_bottom`) with `#FF2E55` background, 14dp rounded corners, exit door icon (`ic_logout.xml`), and bold white text (`Log Out`).
+         - Positioned at the very bottom of the scrollable profile container, right above the version/copyright footer.
+         - Dynamically visible only when the user is logged in (`account != null`); cleanly signs out via `AccountRepository.signOut(requireContext())` on tap.
+      4. *End-to-End Edit Profile Screen & Avatar Architecture (`EditProfileFragment.kt`, `fragment_edit_profile.xml`, `AvatarPresets.kt`, `EditProfileAdapter.kt`)*:
+         - Added `editProfileFragment` destination in `nav_main.xml`.
+         - Standard edge-to-edge header with dynamic status bar insets spacer, back button (`buttonBack`), and title `"Edit profile"`.
+         - 96dp preview avatar with pencil edit badge (`ic_edit_pencil_badge.xml`).
+         - Display name card (`bg_edit_text_card.xml`) with real-time `TextWatcher` updating the preview title immediately as the user types.
+         - "Choose avatar" section featuring a 5-column grid (`avatarRecyclerView`) powered by `AvatarPresets.kt` (39 structured avatar preset slots) and `EditProfileAdapter.kt` with selected stroke indicator (`bg_avatar_selected_stroke.xml`). Architected to support both local drawables and remote/file URLs seamlessly.
+         - Pinned bottom `"Save changes"` capsule button (`btnSave`) updating `AccountRepository.updateProfile(newUsername, newAvatarUrl)` and smoothly navigating back.
+
+34. **Preferences & Profile Settings Architecture, Adult Mode Filter, Double-Tap Skip, and Default Audio (SUB/DUB) Wiring (Adopted):**
+    - **Problem:**
+      1. *Outdated Profile Rows After Architecture Realignment*: Profile settings previously featured legacy rows ("Interface" and "Sources") after the deprecation of the extension/source manager in favor of our dedicated Cloudflare Worker stream source (`AnimarvleStreamSource`).
+      2. *Missing Quick Preferences*: Users needed an explicit Adult Mode toggle, a Notifications toggle, expanded Double-tap seek duration options (5s to 90s), and a dedicated Anime skip button toggle (Skip 90s).
+      3. *Visual & Functional Broken Audio Preference (SUB/DUB)*: In `PlayerSettingsFragment`, tapping the SUB and DUB buttons did not update button visuals because `updateAudioButtons()` only toggled `strokeWidth` on buttons whose stroke was invisible/unconfigured. Furthermore, `DetailsFragment` and `DetailFragment` had hardcoded `"SUB"` when packaging arguments for `PlayerFragment`, completely disregarding the user's default audio selection.
+    - **Resolution:**
+      1. *OLED Obsidian Preferences Restructure (`fragment_profile.xml` & `ProfileFragment.kt`)*:
+         - Redesigned Profile Preferences into pure OLED `#000000` with 16dp rounded `#181818` obsidian cards:
+           - **Player & Downloads** (`cardPlayerSettings`): Navigates to `R.id.playerSettingsFragment`.
+           - **Subtitle Settings** (`cardSubtitleSettings`): Navigates to `R.id.subtitleSettingsFragment`.
+           - **Adult Mode** (`cardAdultMode`): Switch connected to `KEY_ADULT_MODE = "adult_mode_enabled"`.
+           - **Notifications** (`cardNotifications`): Switch connected to `KEY_NOTIFICATIONS = "notifications_enabled"`, requesting `POST_NOTIFICATIONS` runtime permission on Android 13+.
+           - **Double tap to skip** (`cardDoubleTapSkip`): Opens a Material choice dialog with `[5s, 10s, 15s, 20s, 30s, 45s, 60s, 90s]` and persists to `KEY_SEEK_DURATION`.
+           - **Anime skip button** (`cardAnimeSkipButton`): Switch connected to `KEY_SHOW_SKIP = "show_skip_buttons"`.
+         - Retained App section with **Share App** (`cardShareApp`) and **About & Legal** (`cardAbout`), and preserved the bottom vibrant red **Log Out** button (`card_logout`).
+      2. *AniList Adult Mode Filter Integration (`AniListApi.kt` & `AnimarvleApp.kt`)*:
+         - Injected `isAdultProvider: () -> Boolean` into `MetadataRepository` reading `KEY_ADULT_MODE`.
+         - Updated GraphQL query builders in `AniListApi.kt` with dynamic `adultFilter(includeAdult: Boolean)`: when Adult Mode is enabled, adult content is included in search and home rails; when disabled, `, isAdult: false` strictly filters 18+ content out.
+      3. *Default Audio SUB/DUB Button Toggle Fix (`PlayerSettingsFragment.kt`)*:
+         - Updated `updateAudioButtons()` to dynamically toggle `MaterialButton.backgroundTintList` (solid `#FFFFFF` active vs dark graphite `#2C2C2E` inactive) and `setTextColor` (`#000000` active vs `#FFFFFF` inactive).
+         - Persists selection immediately to `KEY_DEFAULT_DUB`.
+      4. *Dynamic Preferred Audio Propagation (`DetailsFragment.kt`, `DetailFragment.kt`, `PlayerFragment.kt`)*:
+         - Replaced hardcoded `"SUB"` strings in `DetailsFragment.kt` and `DetailFragment.kt` with a dynamic check against `KEY_DEFAULT_DUB`.
+         - Added fallback in `PlayerFragment.kt` to read `KEY_DEFAULT_DUB` when audio arguments are omitted.
+
+35. **About & Legal OLED Screen Redesign, In-App Legal Modal Suite & Removal of Obsolete Documentation (Adopted):**
+    - **Problem:**
+      1. *Theme Mismatch*: The previous About screen used an outdated slate-navy background (`bg_testing_card`) with a pill-capsule back button (`< About`) that clashed with the app's unified OLED Black (`#000000`) and obsidian `#181818` card surfaces.
+      2. *Obsolete References*: It contained an "Extensions guide: How to install sources" linking to an external wiki, conflicting with our single-source Cloudflare Edge Worker architecture.
+      3. *Missing Legal Coverage*: It lacked legal compliance documents (Privacy Policy, Terms of Service, Copyright & Takedown, Disclaimer).
+      4. *External Dependency Avoidance*: Until official documentation is hosted on our own domain, opening external links was undesirable; concise, complete in-app modal dialogs were required. "App Credits & Technology" was requested to be removed.
+    - **Resolution:**
+      1. *Unified OLED Black Layout (`fragment_about.xml`)*:
+         - Edge-to-edge top bar with clean back arrow (`ic_arrow_back`) and "About & Legal" title.
+         - Pure OLED `#000000` background with `#181818` obsidian rounded cards and 1dp `#262626` dividers.
+         - Modernized Hero branding card with white vector logo `animarvle_logo_white`, `animarvle.` with theme-accented dot, and dynamic app version text.
+      2. *Refined Community Section*:
+         - Rows for Telegram (`t.me/animarvle`), Discord (`discord.gg/hXgebEStFA`), and GitHub (`github.com/nd7hdyt/AniMarvle`). Completely eliminated the obsolete Extensions guide.
+      3. *In-App Legal Documents Suite (`AboutFragment.kt`)*:
+         - **Privacy Policy**: Condensed in-app modal covering on-device data storage (watch history, My List, search history), optional account sync, anonymous crash diagnostics, and strict prohibition on selling personal data.
+         - **Terms of Service**: Condensed in-app modal covering the app's role as a media discovery/aggregation tool, non-hosting disclaimer, independent third-party provider status, user age/compliance responsibilities, and "as is" warranty.
+         - **Copyright & Takedown**: Condensed in-app modal explaining that the app does not store media files, details how infringing access paths are disabled within the app, and outlines the DMCA notice procedure.
+         - All three legal documents open directly in clean, immediate in-app Material dialogs with an "OK" button without redirecting to external websites.
+      4. *Prominent Disclaimer Card*:
+         - Added high-contrast card: *"Animarvle does not store media files on its servers. Media is linked from third-party services."*
+      5. *Diagnostics & Scope Cleanup*:
+         - Retained "Copy Diagnostics" tool copying OS, device model, and build metadata to clipboard.
+         - Completely removed "App Credits & Technology" per user direction.
+
+36. **Player Screen Architecture Harmonization: Option 1 Season Dropdown Pill, Dual-Mode Episode Grid (16:9 Thumbnails & Number Tiles), Range Filtering, and 0-Height Collapse Fix (Adopted):**
+    - **Problem:**
+      1. *Missing Modern Player Controls & Season Selection*: In series playback, the player screen lacked a dedicated Season Selector for multi-season titles, an action buttons row (`[ + Add to List ]`, `[ 📺 Cast ]`, `[ 📥 Download ]`), and only supported 6-column number tiles without a rich 16:9 thumbnail view mode.
+      2. *Multi-Season Catalog Collapse Bug*: In `DetailFragment.playCurrent()`, media resolved as `TV` or series from the Movies & TV catalog (e.g., *Lupin*) had its `isMovie` flag incorrectly overridden or defaulted, causing multi-season series to be treated as single movies with season and episode selectors completely hidden.
+      3. *Redundant Title Suffixes*: When titles contained redundant season text (e.g. `"Lupin Season 3"`), concatenating `"Season 3"` produced redundant, cluttered headers (`"Lupin Season 3 Season 3"`).
+      4. *The 16:9 Thumbnail Grid 0-Height Measurement Bug*: In `item_player_episode_thumbnail.xml`, `ConstraintLayout` was placed inside `MaterialCardView` with `layout_height="0dp"` and `app:layout_constraintDimensionRatio="16:9"`. Because `MaterialCardView` extends `FrameLayout`, it ignored the ratio attribute, measuring `ConstraintLayout` to 0px height. As a result, thumbnail grid mode was completely invisible/collapsed while number tiles mode (`item_episode.xml` with fixed height) worked.
+      5. *String "null" Bug*: When metadata or episode overviews were missing or returned the literal string `"null"`, cards risked displaying `"null"` as the episode subtitle.
+    - **Resolution:**
+      1. *Option 1 Season Dropdown Capsule Pill (`bg_season_dropdown_pill.xml`, `fragment_player.xml`, `SeasonSelectionBottomSheet.kt`)*:
+         - Modernized the season selector into a sleek obsidian tonal capsule (`#14141B`, `1dp` border `#252530`, 18dp corners) displaying `[ 🗂 Season X ▾ ]`.
+         - Opens `SeasonSelectionBottomSheet` showing all available seasons with episode counts and smooth selection callbacks.
+      2. *Dual-Mode Episode Grid Architecture (`EpisodeGridAdapter.kt`, `PlayerFragment.kt`)*:
+         - **Mode A (Thumbnail Grid, Default)**: 2-column 16:9 aspect ratio cards with full-bleed screenshots, bottom gradient scrim (`bg_player_scrim_bottom.xml`), bold "Episode : N" label, overview/title text, and 2dp solid white active border highlight.
+         - **Mode B (Number Tiles)**: 6-column anime-style number tiles `[ 1 ] [ 2 ] [ 3 ]...` with active white fill.
+         - **View Mode Toggle Button (`btnToggleViewMode`)**: Positioned next to the search container, switches seamlessly between 2-column thumbnail grid and 6-column number tiles with persistent user preference in `SharedPreferences` (`player_episode_view_mode`).
+      3. *Robust 16:9 Thumbnail Item Layout Fix (`item_player_episode_thumbnail.xml`)*:
+         - Re-architected `item_player_episode_thumbnail.xml` with `androidx.constraintlayout.widget.ConstraintLayout` as the root item (`layout_width="match_parent"`, `layout_height="wrap_content"`, `minHeight="90dp"`).
+         - Placed `MaterialCardView` (`cardRoot`) as a direct child with `0dp` width, `0dp` height, constrained to parent on all 4 sides with `app:layout_constraintDimensionRatio="H,16:9"`.
+         - Inside `MaterialCardView`, placed a `FrameLayout` containing the full-bleed `ImageView` (`epThumbnail`), gradient scrim (`scrimOverlay`), and bottom text container (`epTextContainer`), completely resolving the 0-height measurement collapse.
+         - Added `fallbackPoster` support in `EpisodeGridAdapter` so episodes lacking individual screenshot stills automatically display the media's high-resolution poster art.
+      4. *Range Filtering & Quick Episode Search (`PlayerFragment.kt`)*:
+         - Added `epsRangeBtn` capsule `[ EPS: 1–100 ▾ ]` opening `SelectEpisodesBottomSheet` when a season has more than 1 episode.
+         - Added 32dp obsidian search capsule (`searchEpContainer`) with `searchEpInput` enabling instant episode number lookup and smooth scrolling to the target tile/card.
+      5. *Multi-Season TV Series Preservation & String Sanitization (`DetailFragment.kt`, `PlayerViewModel.kt`, `MetadataRepository.kt`)*:
+         - Captured `val (type, isMovie) = resolveMediaType(media)` in `DetailFragment.playCurrent()`, passing explicit `isMovie` boolean to `PlayerFragment`.
+         - In `PlayerViewModel`, series with multiple seasons or multi-episode seasons unset `isMovie = false`, loading complete season and episode metadata.
+         - Added regex `cleanShowTitle` in `PlayerFragment.kt` to strip redundant `" Season X"` or `" S1"` suffixes from title headers.
+         - Sanitized string `"null"` occurrences in `MetadataRepository.kt`, `PlayerViewModel.kt`, and `EpisodeGridAdapter.kt`.
+
+37. **Franchise Chronological Relation Traversal, One-Shot Spin-Off Filter, Long-Running Continuous Series Saga Enrichment (23 Canonical Seasons for One Piece), and Absolute-to-Season Episode Playback Mapping (Adopted):**
+    - **Problem:**
+      1. *Season Dropdown Scrambling on Selection*: On franchise anime (e.g. *The Apothecary Diaries*, *Lupin the 3rd*), selecting a season from the dropdown previously called `viewModel.load(chosen.id)`, causing the entire page to reload, mutate the root media, and scramble the dropdown into random chibi specials and spin-offs (e.g. *Maomao no Hitorigoto*).
+      2. *One-Shots Hijacking Series as "Season 1" (The One Piece / MONSTERS Bug)*: AniList records continuous 1,122+ episode anime like *One Piece* as a single monolithic entry (ID 21), and has a `PREQUEL` relation edge pointing to *MONSTERS: 103 Mercies Dragon Damnation* (a 1-episode early one-shot ONA). When relation chains were resolved, *MONSTERS* was treated as Season 1 and *One Piece* as Season 2, while the other 22 canonical story sagas (*Alabasta*, *Skypiea*, *Water Seven*, *Enies Lobby*, *Marineford*, *Dressrosa*, *Wano*, *Egghead*, *Elbaph*, etc.) were completely absent.
+      3. *Arbitrary ID Sorting*: In multi-season franchises, sorting related AniList nodes by raw database ID scrambled season order because prequels, remakes, or late-produced seasons have higher or arbitrary IDs than subsequent sequels.
+      4. *Season 2 Playing Season 1 Episodes on Continuous Anime Sources*: On long-running continuous anime, anime stream providers (HiAnime, Zoro, GogoAnime, Anichi) number episodes continuously from 1 to 1,122+. When a user selected Season 2 (e.g. *Whiskey Peak* starting at Ep 62), the player looked for Episode 1 on the source, causing Season 2 to replay Episode 1 of Season 1 (*Romance Dawn*).
+      5. *Dual Detail Fragment Fragmentation*: The codebase contained both `DetailFragment` and `DetailsFragment`, with `ScheduleFragment` and `MainActivity` navigating to `DetailFragment` while `HomeFragment`, `SearchFragment`, and `MyListFragment` navigated to `DetailsFragment`.
+    - **Resolution:**
+      1. *One-Shot & Non-Main Format Filter (`AniListMapper.kt`)*:
+         - Added `isOneShot = (sub.episodes ?: 0) <= 1 && (format == "ONA" || format == "OVA" || format == "SPECIAL")`.
+         - Standalone one-shots, recap specials, and promotional OVAs are strictly excluded from franchise relation chains, preventing single-episode specials like *MONSTERS* from hijacking main franchises.
+      2. *Chronological Prequel/Sequel Chain Traversal (`AniListMapper.kt`)*:
+         - Traverses `PREQUEL` relations backward to discover the true root/first season of the franchise.
+         - Follows `SEQUEL` relations forward to construct a strictly chronological season chain (Season 1, Season 2, Season 3...), completely replacing buggy database ID sorting.
+      3. *Long-Running Continuous Anime TMDB Saga Enrichment (`MetadataRepository.kt`)*:
+         - For continuous anime entries where AniList has a single monolithic entry (`seasons.size <= 1 && episodes > 24`), cross-references AniZip's mapped `themoviedb_id` (e.g. TV ID `37854` for *One Piece*) or TMDB Japanese TV matching.
+         - Enriches the title with all canonical TMDB sagas/seasons (e.g., all 23 seasons for *One Piece*, 16 for *Bleach*, 5 for *Naruto*, 32 for *Detective Conan*).
+         - Computes running `startEpisodeNumber` offsets (e.g. Season 1 = Ep 1..61, Season 2 = Ep 62..77, Season 3 = Ep 78..91) and attaches arc titles and poster artwork.
+      4. *In-Place Season Switching in Details Screen (`DetailsFragment.kt`)*:
+         - Managed season switching in-place via `selectedSeasonIndex`, updating the episode list and player arguments dynamically without calling `viewModel.load()`.
+         - Formatted season titles with clean "Season N: [Arc Name]" headers (e.g. "Season 1: East Blue", "Season 2: Whiskey Peak & Little Garden").
+         - Completely eliminated dropdown mutation and page reloading on season selection.
+      5. *Continuous-to-Season Episode Playback Mapping (`PlayerViewModel.kt`)*:
+         - Detected continuous sources where `startEpisodeNumber > 1 && maxSourceEp >= startEpisodeNumber`.
+         - Mapped season-relative episode numbers (1 .. N) to the source's absolute episode numbers: targetAbsoluteEp = (startEpisodeNumber - 1) + epInSeason.
+         - Displays episodes 1 .. N for that season in the player HUD while correctly resolving the video stream for the corresponding absolute episode (e.g. Season 2 Ep 1 streams absolute Ep 62).
+      6. *Navigation Graph Alignment*:
+         - Re-routed `ScheduleFragment` and `MainActivity` deep link intent handlers to navigate to `R.id.detailsFragment`, establishing a unified, consistent details screen experience across the entire application.
+
+38. **Search OLED Theme Redesign, Category "All" Multi-Source Concurrency, Western Stream Default DUB Audio Fallback, and Continue Watching Domain Partitioning & Auto-Sanitization (Adopted):**
+    - **Problem:**
+      1. *Search UI Theme Mismatch*: The Search screen previously used an outdated slate-navy palette (`#151822`, stroke `#282D3D`) and cyan focus accents that clashed with the pure OLED `#000000` and warm obsidian `#181818` card surfaces of the Settings, Profile, and About screens.
+      2. *Category "All" Search Isolation*: Category `ALL` in `SearchViewModel.kt` previously executed either `repo.tmdbSearch(q)` or `repo.search(q)` depending solely on the active home tab. When opened while in Anime mode, searching for Western movies/series (e.g. *Mob Land*) under "All" only queried AniList, returning zero results ("No results found for mobland") despite appearing under "Movie" and "TV Show".
+      3. *Western Media Playback Failure on Default DUB ("DUB is not available from this source")*: When a user had "Default Audio" set to `Audio.DUB` in Player Settings, playing Western movies or TV series (e.g. *Mob Land*) threw an exception and failed playback. Because Western media is in original English, upstream streams are not labeled "dub"; `StreamResolver.kt` found `byAudio[Audio.DUB]` empty and aborted instead of falling back to available audio streams, cascading into anime scrapers (Anikoto, AnimeKai) that do not host Western content.
+      4. *Live-Action Western Media Poisoning the Anime Continue Watching Rail*: Titles like *Peaky Blinders*, *Swapped*, *Masterplan*, and *The Simpsons* appeared in the Continue Watching rail on the Anime home tab instead of being restricted to the Movie & TV tab.
+      5. *Root Cause of Continue Watching Poisoning*:
+         - In `DetailsFragment.kt:resolveMediaType()`, any series opened while the active mode was Anime defaulted `MediaType` to `MediaType.ANIME`.
+         - In `PlayerFragment.kt:saveCurrentProgress()`, when `state.isMovie` was false (multi-episode series), `mediaType` fell back to `arguments.getString("mediaType") ?: "ANIME"`.
+         - As a result, `HistoryRepository` literally persisted *Peaky Blinders*, *Swapped*, and *Masterplan* with `"mediaType": "ANIME"` in `shared_prefs/animarvel_history.xml`.
+         - `HomeViewModel.kt` filtered Continue Watching solely using `it.mediaType.equals("ANIME", ignoreCase = true)`, placing mislabeled live-action series into the Anime rail.
+    - **Resolution:**
+      1. *Unified OLED Black & Obsidian Search Design System (`fragment_search.xml` & Drawables)*:
+         - Updated root background to `@color/bg` (`#000000`).
+         - Converted search card surfaces to obsidian `#181818` with `0dp` borderless stroke and `16dp` rounded corners (`bg_search_glass_card.xml`).
+         - Updated search pill buttons (`bg_search_pill_btn.xml`), circle close action (`bg_search_circle_btn.xml`), search input bar (`bg_search_input_pill.xml`), format badges (`bg_badge_search_format.xml`), and poster placeholders (`bg_search_poster_placeholder.xml`, `ic_search_poster_placeholder.xml`) to `#181818` / `#222222` with `#2A2A2A` subtle borders, neutral `#8E8E93` secondary labels/hints, and `#FFFFFF` focus accents and text cursor (`bg_cursor_cyan.xml`).
+         - Updated popup category dropdown menu (`bg_search_dropdown_menu.xml`, `bg_search_dropdown_item_selected.xml`) to dark translucent `#F81C1C1E` with `#2A2A2A` selected row background and `#FFFFFF` text.
+      2. *Concurrent Multi-Catalog Search Aggregation (`SearchViewModel.kt`)*:
+         - Updated `SearchType.ALL` to execute `repo.tmdbSearch(q)` and `repo.search(q)` concurrently using `async`.
+         - Merged and deduplicated results by title, ensuring queries like "mobland" return TMDB movies/series alongside anime regardless of which home tab was active.
+         - Attached `isTmdb = true` on `MediaUi` models produced by TMDB and Simkl mappers (`TmdbMapper.kt`, `SimklApi.kt`).
+      3. *Graceful Audio Fallback & Animarvle Turbo Stream Mapping (`StreamResolver.kt` & `AnimarvleStreamSource.kt`)*:
+         - In `StreamResolver.kt:resolve()`, if requested audio (e.g. `Audio.DUB`) has no explicit server entries, the resolver now gracefully falls back to `options.byAudio[Audio.SUB] ?: options.byAudio[Audio.RAW] ?: options.byAudio.values.firstOrNull()`, preventing fatal aborts.
+         - In `AnimarvleStreamSource.kt:options()`, populated `byAudio[Audio.DUB] = explicitDub.ifEmpty { serverList }` so default DUB preferences immediately map to available playable streams.
+         - In `DetailsFragment.kt:resolveMediaType()` and `playCurrent()`, checked `media.isTmdb` and passed `preferTmdb = true` so Western series correctly query TMDB metadata and Animarvle Turbo/FastX streams without triggering anime scraper failovers.
+      4. *Strict Continue Watching Domain Isolation & Dynamic History Auto-Sanitization (`HistoryRepository.kt`, `HomeViewModel.kt`, `PlayerFragment.kt`, `DetailsFragment.kt`)*:
+         - Added `HistoryRepository.sanitizeMediaType()` to dynamically classify titles based on title name, duration, and URL format (detecting numeric TMDB IDs like `61595`, `212488`, `220360`, and explicit movie/tv tags).
+         - In `HistoryRepository.load()`, automatically sanitizes legacy entries loaded from SharedPreferences and persists corrected `"TV"` / `"MOVIE"` classifications back to `animarvel_history.xml`.
+         - In `HomeViewModel.kt`, implemented `isAnimeHistory(item: HistoryItem)` helper: the Anime tab's Continue Watching rail strictly displays genuine anime and donghua, while live-action movies and TV series appear exclusively on the Movie tab.
+         - In `PlayerFragment.kt:saveCurrentProgress()`, correctly resolved `mediaType`: if `preferTmdb` or numeric ID or `tmdb=` is detected on a series, it is saved as `"TV"` or `"MOVIE"`, never `"ANIME"`.
+         - In `DetailsFragment.kt:playCurrent()`, passed explicit `"TV"` or `"MOVIE"` strings to `PlayerFragment` arguments instead of binary `MediaType` enum names.
+         - In `HomeFragment.kt:resumePlayback()`, set `preferTmdb = true` whenever resuming `"MOVIE"` or `"TV"` history items.
+
+
+## Decision 40: Multi-Screen Real-UI Skeleton Loading Architecture (2026-10-25)
+- **Context:**
+  - Media load states across the application previously displayed generic progress spinners or legacy AniLab skeleton layouts that differed fundamentally from the loaded screen hierarchy.
+  - Users experienced jarring layout shifts when content populated.
+- **Resolution:**
+  1. *Details Screen Skeleton (`fragment_details.xml`, `DetailsFragment.kt`)*:
+     - Replaced the mismatched AniLab skeleton with a 1:1 structural replica of the active Details screen: 360dp hero showcase spacer with bottom gradient scrim, title placeholder, metadata chip row, genre tags, 3-line synopsis, centered 230dp × 48dp Play CTA pill, season selector capsule, episode horizontal rail, and recommendation poster rail.
+     - Wired `pulseAnimator` running alpha oscillation between 1.0f and 0.42f (850ms duration, reverse repeat mode) on the skeleton container, smoothly transitioning to loaded media upon fetch completion.
+  2. *Home Screen Skeleton (`fragment_home.xml`, `HomeFragment.kt`)*:
+     - Added `skeletonContainer` mimicking the 520dp hero carousel banner, Continue Watching wide cards rail, and category poster rails.
+     - Wired `startSkeletonAnimation()` and `stopSkeletonAnimation()` tied to view lifecycle and data emission.
+  3. *Provider Catalog Screen Skeleton (`fragment_provider_catalog.xml`, `ProviderCatalogFragment.kt`)*:
+     - Built a 3-column poster card grid skeleton (9 placeholder cards) inside a FrameLayout overlay with active `pulseAnimator`.
+
+## Decision 41: Complete Android Launcher & Embedded APK Icon Overhaul (2026-10-25)
+- **Context:**
+  - The application icon appeared blurry or clipped in Android Settings App Info, and when transferring the app via Xender, third-party transfer apps and APK installers displayed the default Android green robot on a blue grid (`sym_def_app_icon`).
+  - Investigation revealed three root causes:
+    1. Zero legacy raster mipmap folders existed (`mipmap-mdpi`, `hdpi`, `xhdpi`, `xxhdpi`, `xxxhdpi`); only `mipmap-anydpi-v26/ic_launcher.xml` was present.
+    2. The adaptive icon foreground wrapped a legacy 64×64 pixel image inset by 18dp, referencing a raw `@color/icon_background` in the `<background>` tag rather than a drawable resource, which causes third-party resource parsers to throw exceptions.
+    3. External APK sharing apps (Xender, SHAREit) and uninstalled APK parsers inspect APK resources directly without full system framework context. If raster icons are missing or background drawables fail, they fall back to the default system robot and cache that failure in disk caches (`/sdcard/Android/data/cn.xender/cache/igl_cache`).
+- **Resolution:**
+  1. *High-Resolution Multi-Density Icon Generation (`generate_icons.py`)*:
+     - Processed the user's new 512×512 OLED black icon using PIL Lanczos resampling.
+     - Extracted smooth anti-aliased alpha transparency for the white logo mark.
+     - Generated `ic_launcher.png` (legacy square), `ic_launcher_round.png` (supersampled circle on OLED black), and `ic_launcher_foreground.png` (safe-zone centered mark on transparent 108dp canvas) across all densities: `mdpi` (48/108), `hdpi` (72/162), `xhdpi` (96/216), `xxhdpi` (144/324), and `xxxhdpi` (192/432).
+  2. *Adaptive Icon & Shape Drawable Alignment*:
+     - Created `res/drawable/ic_launcher_background.xml` containing a valid `<shape>` rectangle with `#000000` fill.
+     - Updated `mipmap-anydpi-v26/ic_launcher.xml` and `ic_launcher_round.xml` to reference `@drawable/ic_launcher_background` and `@mipmap/ic_launcher_foreground`.
+     - Mirrored raster icons into `res/drawable-*` folders for backwards compatibility with legacy APK extractors.
+  3. *Manifest & Activity Icon Wiring*:
+     - Explicitly specified `android:icon="@mipmap/ic_launcher"` and `android:roundIcon="@mipmap/ic_launcher_round"` on both `<application>` and `<activity android:name=".MainActivity">`.
+     - Bumped `versionCode` to 2 (`versionName = "0.1.1"`) in `build.gradle.kts` to invalidate package manager and sharing app thumbnail caches.
+     - Verified live on connected device: `PackageManager.getApplicationIcon()` and `getPackageArchiveInfo()` successfully resolve and render the OLED black squircle icon.
+
+## Decision 42: In-App Update System, Update on Launch Toggle & Reminder Modal (2026-10-25)
+- **Context:**
+  - Users needed a reliable way to check for app updates both on demand from Settings/Profile and automatically upon launching the app.
+  - The feature required a "Check for updates on launch" toggle switch, a "Check for updates" row under the Anime skip button, and a modern OLED obsidian update modal (styled after Zangetsu and AnimeZe) displaying version differences, release notes bullets, skip version option, and in-app streaming download progress bar.
+- **Resolution:**
+  1. *Update Discovery Architecture (`version.json`, `AppUpdateRepository.kt`)*:
+     - Primary source: Checks `version.json` via HTTPS from raw repository endpoints (`https://raw.githubusercontent.com/nd7hdyt/AniMarvle/main/version.json`, `https://gitlab.com/nd7hdyt/Animarvle/-/raw/main/version.json`, and `https://raw.githubusercontent.com/nd7hdyt/Animarvle/main/version.json`). This pattern operates with zero API tokens, no GitHub API rate limits, and instant publishing.
+     - Fallback source: GitHub Releases API (`https://api.github.com/repos/nd7hdyt/AniMarvle/releases/latest`) extracting the latest tag name, release notes body, and `.apk` asset URL.
+     - Evaluates `remoteVersionCode > BuildConfig.VERSION_CODE` or semantic version comparison.
+  2. *Settings / Profile Integration (`fragment_profile.xml`, `ProfileFragment.kt`)*:
+     - Added two `#181818` obsidian cards directly beneath `cardAnimeSkipButton`:
+       - `cardCheckUpdatesOnLaunch`: Contains `switchCheckUpdatesOnLaunch` with subtitle *"Prompt when a new version is available"*, persisted in SharedPreferences (`check_updates_on_launch`, default `true`).
+       - `cardCheckUpdates`: Clickable card featuring `ic_system_update`, subtitle (`tvCheckUpdatesSubtitle`), indeterminate cyan progress wheel (`pbCheckingUpdates`), and version badge `v0.1.1 >` (`tvCurrentVersionBadge`).
+     - Tapping "Check for updates" triggers `AppUpdateRepository.checkForUpdate()`:
+       - If up to date: updates subtitle to *"You're on the latest version"* and displays toast `Animarvle is up to date (v0.1.1)`.
+       - If update available: updates subtitle to *"Version X.Y.Z available · tap to update"* and displays `UpdateBottomSheet`.
+  3. *Update Reminder Bottom Sheet & Streaming Downloader (`bottom_sheet_update.xml`, `UpdateBottomSheet.kt`)*:
+     - Styled after reference designs with `#181818` obsidian surface, 24dp rounded corners, cyan phone badge (`ic_update_available_badge`), "Update available" title, version header, current installed version tag, and scrollable release notes.
+     - Action buttons: "Skip" (stores `skipped_update_version` in preferences so the user is never nagged about this version on launch), "Later" (dismisses), and vibrant cyan capsule button "Update" / "Update Now" (`bg_btn_update_cyan.xml`).
+     - Clicking "Update" transitions the sheet to "Downloading Update...", streaming the APK with OkHttp, updating a smooth horizontal progress bar and percentage text (`Downloading the latest version: X%`). Upon completion, it automatically triggers package installation via `FileProvider` (`com.animarvle.app.provider`) and `Intent.ACTION_VIEW` (`application/vnd.android.package-archive`).
+     - Includes web browser fallback to GitHub release page if direct APK URL is unreachable.
+  4. *Automatic On-Launch Check (`MainActivity.kt`)*:
+     - In `MainActivity.onCreate()`, if `savedInstanceState == null && AppUpdateRepository.isCheckOnLaunchEnabled(this)`, runs a background check after the splash animation finishes.
+     - If an update is detected and the version has not been explicitly skipped, automatically presents `UpdateBottomSheet` to remind the user to update.
+  5. *FileProvider Permissions (`file_paths.xml`, `AndroidManifest.xml`)*:
+     - Added `<cache-path name="updates" path="updates/" />` and `<external-cache-path name="external_updates" path="updates/" />` to `file_paths.xml` for secure APK installation handling across Android 8.0+.

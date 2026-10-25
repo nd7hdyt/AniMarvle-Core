@@ -105,15 +105,15 @@ class ServerSelectionBottomSheet : BottomSheetDialogFragment() {
             activeCategory = tab
             binding.tabAll.apply {
                 background = if (tab == CategoryFilter.ALL) selectedBg else null
-                setTextColor(if (tab == CategoryFilter.ALL) Color.WHITE else muted)
+                setTextColor(if (tab == CategoryFilter.ALL) Color.BLACK else muted)
             }
             binding.tabSub.apply {
                 background = if (tab == CategoryFilter.SUB) selectedBg else null
-                setTextColor(if (tab == CategoryFilter.SUB) Color.WHITE else muted)
+                setTextColor(if (tab == CategoryFilter.SUB) Color.BLACK else muted)
             }
             binding.tabDub.apply {
                 background = if (tab == CategoryFilter.DUB) selectedBg else null
-                setTextColor(if (tab == CategoryFilter.DUB) Color.WHITE else muted)
+                setTextColor(if (tab == CategoryFilter.DUB) Color.BLACK else muted)
             }
             applyFilters()
         }

@@ -17,6 +17,7 @@ import java.util.concurrent.TimeUnit
  */
 class AniListApi(
     private val client: OkHttpClient = defaultClient(),
+    private val isAdultProvider: () -> Boolean = { false },
 ) {
 
     private val json = Json {
@@ -25,17 +26,17 @@ class AniListApi(
     }
 
     suspend fun trending(page: Int = 1, perPage: Int = 20): List<Media> =
-        pageQuery(TRENDING, page, perPage).media
+        pageQuery(trendingQuery(isAdultProvider()), page, perPage).media
 
     suspend fun topAiring(page: Int = 1, perPage: Int = 20): List<Media> =
-        pageQuery(TOP_AIRING, page, perPage).media
+        pageQuery(topAiringQuery(isAdultProvider()), page, perPage).media
 
     suspend fun airingNow(page: Int = 1, perPage: Int = 20): List<Media> =
-        pageQuery(TOP_AIRING, page, perPage).media
+        pageQuery(topAiringQuery(isAdultProvider()), page, perPage).media
 
     suspend fun popularSeason(season: String, seasonYear: Int, page: Int = 1, perPage: Int = 20): List<Media> =
         post(
-            POPULAR_SEASON,
+            popularSeasonQuery(isAdultProvider()),
             mapOf(
                 "page" to page.toString(),
                 "perPage" to perPage.toString(),
@@ -46,23 +47,23 @@ class AniListApi(
         ).Page?.media.orEmpty()
 
     suspend fun allTimePopular(page: Int = 1, perPage: Int = 20): List<Media> =
-        pageQuery(ALL_TIME_POPULAR, page, perPage).media
+        pageQuery(allTimePopularQuery(isAdultProvider()), page, perPage).media
 
     suspend fun topRated(page: Int = 1, perPage: Int = 20): List<Media> =
-        pageQuery(TOP_RATED, page, perPage).media
+        pageQuery(topRatedQuery(isAdultProvider()), page, perPage).media
 
     suspend fun mostFavorited(page: Int = 1, perPage: Int = 20): List<Media> =
-        pageQuery(MOST_FAVORITED, page, perPage).media
+        pageQuery(mostFavoritedQuery(isAdultProvider()), page, perPage).media
 
     suspend fun popularMovies(page: Int = 1, perPage: Int = 20): List<Media> =
-        pageQuery(POPULAR_MOVIES, page, perPage).media
+        pageQuery(popularMoviesQuery(isAdultProvider()), page, perPage).media
 
     suspend fun donghua(page: Int = 1, perPage: Int = 20): List<Media> =
-        pageQuery(DONGHUA, page, perPage).media
+        pageQuery(donghuaQuery(isAdultProvider()), page, perPage).media
 
     suspend fun search(query: String, page: Int = 1, perPage: Int = 20): List<Media> =
         post(
-            SEARCH,
+            searchQuery(isAdultProvider()),
             buildMap {
                 put("page", page.toString())
                 put("perPage", perPage.toString())
@@ -147,85 +148,94 @@ class AniListApi(
             nextAiringEpisode { episode airingAt timeUntilAiring }
         """
 
-        private const val TRENDING = """
+        private fun adultFilter(includeAdult: Boolean): String = if (includeAdult) "" else ", isAdult: false"
+
+        private fun trendingQuery(includeAdult: Boolean) = """
             query (${'$'}page: Int, ${'$'}perPage: Int) {
               Page(page: ${'$'}page, perPage: ${'$'}perPage) {
                 pageInfo { currentPage hasNextPage total }
-                media(type: ANIME, sort: TRENDING_DESC, isAdult: false) { $MEDIA_FIELDS }
+                media(type: ANIME, sort: TRENDING_DESC${adultFilter(includeAdult)}) { $MEDIA_FIELDS }
               }
             }
         """
 
-        private const val TOP_AIRING = """
+        private fun topAiringQuery(includeAdult: Boolean) = """
             query (${'$'}page: Int, ${'$'}perPage: Int) {
               Page(page: ${'$'}page, perPage: ${'$'}perPage) {
                 pageInfo { currentPage hasNextPage total }
-                media(type: ANIME, sort: POPULARITY_DESC, status: RELEASING, isAdult: false) { $MEDIA_FIELDS }
+                media(type: ANIME, sort: POPULARITY_DESC, status: RELEASING${adultFilter(includeAdult)}) { $MEDIA_FIELDS }
               }
             }
         """
 
-        private const val POPULAR_SEASON = """
+        private fun popularSeasonQuery(includeAdult: Boolean) = """
             query (${'$'}page: Int, ${'$'}perPage: Int, ${'$'}season: MediaSeason, ${'$'}seasonYear: Int) {
               Page(page: ${'$'}page, perPage: ${'$'}perPage) {
                 pageInfo { currentPage hasNextPage total }
-                media(type: ANIME, season: ${'$'}season, seasonYear: ${'$'}seasonYear, sort: POPULARITY_DESC, isAdult: false) { $MEDIA_FIELDS }
+                media(type: ANIME, season: ${'$'}season, seasonYear: ${'$'}seasonYear, sort: POPULARITY_DESC${adultFilter(includeAdult)}) { $MEDIA_FIELDS }
               }
             }
         """
 
-        private const val ALL_TIME_POPULAR = """
+        private fun allTimePopularQuery(includeAdult: Boolean) = """
             query (${'$'}page: Int, ${'$'}perPage: Int) {
               Page(page: ${'$'}page, perPage: ${'$'}perPage) {
                 pageInfo { currentPage hasNextPage total }
-                media(type: ANIME, sort: POPULARITY_DESC, isAdult: false) { $MEDIA_FIELDS }
+                media(type: ANIME, sort: POPULARITY_DESC${adultFilter(includeAdult)}) { $MEDIA_FIELDS }
               }
             }
         """
 
-        private const val TOP_RATED = """
+        private fun topRatedQuery(includeAdult: Boolean) = """
             query (${'$'}page: Int, ${'$'}perPage: Int) {
               Page(page: ${'$'}page, perPage: ${'$'}perPage) {
                 pageInfo { currentPage hasNextPage total }
-                media(type: ANIME, sort: SCORE_DESC, isAdult: false) { $MEDIA_FIELDS }
+                media(type: ANIME, sort: SCORE_DESC${adultFilter(includeAdult)}) { $MEDIA_FIELDS }
               }
             }
         """
 
-        private const val MOST_FAVORITED = """
+        private fun mostFavoritedQuery(includeAdult: Boolean) = """
             query (${'$'}page: Int, ${'$'}perPage: Int) {
               Page(page: ${'$'}page, perPage: ${'$'}perPage) {
                 pageInfo { currentPage hasNextPage total }
-                media(type: ANIME, sort: FAVOURITES_DESC, isAdult: false) { $MEDIA_FIELDS }
+                media(type: ANIME, sort: FAVOURITES_DESC${adultFilter(includeAdult)}) { $MEDIA_FIELDS }
               }
             }
         """
 
-        private const val POPULAR_MOVIES = """
+        private fun popularMoviesQuery(includeAdult: Boolean) = """
             query (${'$'}page: Int, ${'$'}perPage: Int) {
               Page(page: ${'$'}page, perPage: ${'$'}perPage) {
                 pageInfo { currentPage hasNextPage total }
-                media(type: ANIME, format: MOVIE, sort: POPULARITY_DESC, isAdult: false) { $MEDIA_FIELDS }
+                media(type: ANIME, format: MOVIE, sort: POPULARITY_DESC${adultFilter(includeAdult)}) { $MEDIA_FIELDS }
               }
             }
         """
 
-        private const val DONGHUA = """
+        private fun donghuaQuery(includeAdult: Boolean) = """
             query (${'$'}page: Int, ${'$'}perPage: Int) {
               Page(page: ${'$'}page, perPage: ${'$'}perPage) {
                 pageInfo { currentPage hasNextPage total }
-                media(type: ANIME, countryOfOrigin: "CN", sort: [TRENDING_DESC, POPULARITY_DESC], isAdult: false) { $MEDIA_FIELDS }
+                media(type: ANIME, countryOfOrigin: "CN", sort: [TRENDING_DESC, POPULARITY_DESC]${adultFilter(includeAdult)}) { $MEDIA_FIELDS }
               }
             }
         """
 
-        private const val SEARCH = """
+        private fun searchQuery(includeAdult: Boolean) = """
             query (${'$'}page: Int, ${'$'}perPage: Int, ${'$'}query: String) {
               Page(page: ${'$'}page, perPage: ${'$'}perPage) {
                 pageInfo { currentPage hasNextPage total }
-                media(type: ANIME, search: ${'$'}query, isAdult: false) { $MEDIA_FIELDS }
+                media(type: ANIME, search: ${'$'}query${adultFilter(includeAdult)}) { $MEDIA_FIELDS }
               }
             }
+        """
+
+        private const val RELATION_NODE_FIELDS = """
+            id format episodes
+            title { romaji english native }
+            startDate { year month day }
+            coverImage { extraLarge large color }
         """
 
         private const val DETAILS = """
@@ -236,7 +246,34 @@ class AniListApi(
                   nodes { rating mediaRecommendation { $MEDIA_FIELDS } }
                 }
                 relations {
-                  edges { relationType node { $MEDIA_FIELDS } }
+                  edges {
+                    relationType
+                    node {
+                      $RELATION_NODE_FIELDS
+                      relations {
+                        edges {
+                          relationType
+                          node {
+                            $RELATION_NODE_FIELDS
+                            relations {
+                              edges {
+                                relationType
+                                node {
+                                  $RELATION_NODE_FIELDS
+                                  relations {
+                                    edges {
+                                      relationType
+                                      node { $RELATION_NODE_FIELDS }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
                 }
               }
             }

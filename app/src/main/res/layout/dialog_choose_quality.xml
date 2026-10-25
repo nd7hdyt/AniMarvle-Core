@@ -75,14 +75,10 @@
                 android:paddingTop="36dp"
                 android:paddingBottom="48dp">
 
-                <com.google.android.material.progressindicator.CircularProgressIndicator
+                <com.animarvle.app.ui.player.VortexMorphLoadingView
                     android:id="@+id/loadingProgress"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:indeterminate="true"
-                    app:indicatorColor="#FFFFFF"
-                    app:trackColor="#262E3D"
-                    app:trackThickness="3dp" />
+                    android:layout_width="32dp"
+                    android:layout_height="32dp" />
 
                 <TextView
                     android:id="@+id/loadingTitle"

@@ -22,6 +22,6 @@ class MyListDisplayPreferences(context: Context) {
         set(value) = prefs.edit().putString("display_mode", value.name).apply()
 
     var itemsPerRow: Int
-        get() = prefs.getInt("items_per_row", 2).coerceIn(1, 5)
+        get() = prefs.getInt("items_per_row", 3).coerceIn(1, 5)
         set(value) = prefs.edit().putInt("items_per_row", value.coerceIn(1, 5)).apply()
 }

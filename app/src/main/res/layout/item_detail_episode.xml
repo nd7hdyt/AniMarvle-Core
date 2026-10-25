@@ -56,12 +56,30 @@
             android:layout_height="wrap_content"
             android:layout_gravity="bottom|start"
             android:layout_marginStart="8dp"
+            android:layout_marginEnd="50dp"
             android:layout_marginBottom="8dp"
             android:ellipsize="end"
             android:maxLines="1"
             android:textColor="@android:color/white"
             android:textSize="12sp"
             android:textStyle="bold" />
+
+        <!-- Green Duration Badge (e.g. 43m) -->
+        <TextView
+            android:id="@+id/epDuration"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|end"
+            android:layout_marginEnd="8dp"
+            android:layout_marginBottom="8dp"
+            android:background="@drawable/bg_capsule_active"
+            android:backgroundTint="#00E5B8"
+            android:paddingHorizontal="6dp"
+            android:paddingVertical="2dp"
+            android:textColor="#000000"
+            android:textSize="10sp"
+            android:textStyle="bold"
+            android:visibility="gone" />
 
         <!-- Horizontal Watch Progress Bar -->
         <ProgressBar

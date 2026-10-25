@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="32dp"
+    android:height="32dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Netflix Left Vertical Leg -->
+    <path
+        android:fillColor="#B81D24"
+        android:pathData="M5.4,0 L9.8,0 L9.8,23.6 C8,23.7 6.8,23.8 5.4,24 Z" />
+    <!-- Netflix Right Vertical Leg -->
+    <path
+        android:fillColor="#B81D24"
+        android:pathData="M14.2,0 L18.6,0 L18.6,24 C17.2,23.8 16,23.7 14.2,23.6 Z" />
+    <!-- Netflix Front Diagonal Ribbon (Vibrant Red) -->
+    <path
+        android:fillColor="#E50914"
+        android:pathData="M5.4,0 L9.8,0 L18.6,23.6 L14.2,23.6 L5.4,0 Z" />
+</vector>

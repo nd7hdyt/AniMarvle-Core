@@ -52,6 +52,28 @@ class TmdbApi(
     suspend fun popularCDramas(page: Int = 1): List<TmdbItem> =
         get("/discover/tv?api_key=$apiKey&with_original_language=zh&with_genres=18&sort_by=popularity.desc&page=$page")
 
+    suspend fun discover(
+        type: String, // "movie" or "tv"
+        page: Int = 1,
+        watchProviders: String? = null,
+        watchRegion: String = "US",
+        withGenres: String? = null,
+        withOriginalLanguage: String? = null,
+        sortBy: String = "popularity.desc"
+    ): List<TmdbItem> {
+        val params = StringBuilder("/discover/$type?api_key=$apiKey&page=$page&sort_by=$sortBy")
+        if (!watchProviders.isNullOrBlank()) {
+            params.append("&with_watch_providers=$watchProviders&watch_region=$watchRegion&with_watch_monetization_types=flatrate")
+        }
+        if (!withGenres.isNullOrBlank()) {
+            params.append("&with_genres=$withGenres")
+        }
+        if (!withOriginalLanguage.isNullOrBlank()) {
+            params.append("&with_original_language=$withOriginalLanguage")
+        }
+        return get(params.toString())
+    }
+
     suspend fun searchMulti(query: String, page: Int = 1): List<TmdbItem> {
         val encoded = withContext(Dispatchers.IO) { URLEncoder.encode(query, "UTF-8") }
         return get("/search/multi?api_key=$apiKey&query=$encoded&page=$page")
@@ -86,6 +108,22 @@ class TmdbApi(
                 (parsed.totalResults) to parsed.results
             }
         }
+
+    suspend fun seasonEpisodes(tvId: Long, seasonNumber: Int = 1): List<TmdbEpisode> = withContext(Dispatchers.IO) {
+        runCatching {
+            val url = "$BASE_URL/tv/$tvId/season/$seasonNumber?api_key=$apiKey"
+            val request = Request.Builder()
+                .url(url)
+                .header("Accept", "application/json")
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return@runCatching emptyList()
+                val text = response.body.string()
+                json.decodeFromString(TmdbSeasonDetail.serializer(), text).episodes
+            }
+        }.getOrDefault(emptyList())
+    }
 
     private suspend fun getItem(path: String): TmdbItem? = withContext(Dispatchers.IO) {
         val url = if (path.startsWith("http")) path else "$BASE_URL$path"

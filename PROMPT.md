@@ -252,9 +252,11 @@ Portrait screen: player on top, details below.
   - "You are watching **Episode N**" (label accent, number white).
   - **Sub | Dub** tabs (accent underline on selected). A tab with no availability is disabled (§ARCH 6).
   - **Server chips** (selected = accent fill). One chip per available server for the chosen audio.
-  - **List of episodes** header + "No. of Ep" search pill + "EPS: N" counter (accent icon) + a **numbered grid**
-    of rounded squares (current episode = accent fill, others = dark tile with number; wraps, ≈ 6 per row) `[V]`.
-  - **Movies** `[D]`: the whole "List of episodes" block is omitted; the line reads "You are watching **<Title>**
+  - **Season Selector (TV Series)**: Option 1 obsidian tonal capsule pill `[ 🗂 Season X ▾ ]` opening `SeasonSelectionBottomSheet`. Omitted for Movies.
+  - **Action buttons row**: `[ + Add to List ]` · `[ 📺 Cast ]` · `[ 📥 Download ]`.
+  - **List of episodes header**: "Episodes" title + "EPS: 1–100 ▾" range filter pill (when season > 1 episode) + episode search capsule + view mode toggle button (`[ ▦ ]` / `[ ▤ ]`).
+  - **Dual-mode episode grid**: Mode A (default) 2-column 16:9 thumbnail cards with full-bleed stills, gradient scrim, episode title, and active white highlight border; Mode B 6-column anime-style number tiles with active white fill. Toggleable and persistent.
+  - **Movies** `[D]`: the whole "List of episodes" and season selector block is omitted; the line reads "You are watching **<Title>**
     (<year>)"; if the source gives only original audio (no Sub/Dub), the Sub|Dub tabs are **hidden** (not disabled) and
     only subtitles apply.
   - **Comments card** at the bottom with arrow `[V]` → same placeholder as Details `[D]`.

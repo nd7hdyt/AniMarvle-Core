@@ -23,6 +23,7 @@ import com.animarvle.app.AnimarvleApp
 import com.animarvle.app.R
 import com.animarvle.app.databinding.FragmentDetailBinding
 import com.animarvle.app.domain.MediaUi
+import com.animarvle.app.domain.SeasonUi
 import com.animarvle.app.ui.home.PosterAdapter
 import com.animarvle.app.extensions.TachiyomiAnimeSource
 import com.animarvle.app.extensions.TachiyomiAnimeSource.Companion.KEY_ANIME_URL
@@ -51,7 +52,14 @@ class DetailFragment : Fragment() {
     private val binding get() = _binding!!
     private lateinit var viewModel: DetailViewModel
     private val recommendationsAdapter = PosterAdapter { media -> open(media) }
-    private val seasonAdapter = DetailSeasonAdapter { season -> open(season.id, "tv") }
+    private var selectedSeasonNumber: Int = 1
+    private val seasonAdapter = DetailSeasonAdapter { season ->
+        if (season.seasonNumber != null) {
+            onSeasonSelected(season)
+        } else {
+            open(season.id, "tv")
+        }
+    }
     private val episodeAdapter = DetailEpisodeAdapter { epNum -> playCurrent(epNum) }
     private var synopsisExpanded = false
     private var current: MediaUi? = null
@@ -71,8 +79,12 @@ class DetailFragment : Fragment() {
         val mediaId = arguments?.getLong("mediaId") ?: -1L
         val mediaType = arguments?.getString("mediaType")
         val repo = (requireActivity().application as AnimarvleApp).container.metadata
-        val preferTmdb = com.animarvle.app.data.MediaTypeManager.getInstance(requireContext())
-            .currentMode.value == com.animarvle.app.data.AppMediaMode.MOVIES_TV
+        val preferTmdb = if (arguments?.containsKey("preferTmdb") == true) {
+            arguments?.getBoolean("preferTmdb", false) ?: false
+        } else {
+            com.animarvle.app.data.MediaTypeManager.getInstance(requireContext())
+                .currentMode.value == com.animarvle.app.data.AppMediaMode.MOVIES_TV
+        }
         viewModel = ViewModelProvider(this, DetailViewModel.Factory(repo, mediaId, preferTmdb, mediaType))[DetailViewModel::class.java]
 
         binding.recommendations.layoutManager = LinearLayoutManager(requireContext(), LinearLayoutManager.HORIZONTAL, false)
@@ -111,6 +123,7 @@ class DetailFragment : Fragment() {
                     format = media.format,
                     score = media.score,
                     totalEpisodes = media.episodes,
+                    year = media.year,
                 )
                 sheet.show(childFragmentManager, com.animarvle.app.ui.mylist.AddToMyListBottomSheet.TAG)
             } else {
@@ -134,6 +147,9 @@ class DetailFragment : Fragment() {
                 .filter { it.title.equals(media?.title, ignoreCase = true) }
             val latest = matchingHistory.maxByOrNull { it.updatedAtMs }
             val resumeEp = latest?.episodeNumber ?: 1
+            if (latest?.seasonNumber != null && latest.seasonNumber > 0) {
+                selectedSeasonNumber = latest.seasonNumber
+            }
             playCurrent(resumeEp)
         }
         binding.downloadButton.setOnClickListener { downloadCurrent() }
@@ -141,6 +157,11 @@ class DetailFragment : Fragment() {
             findNavController().navigate(R.id.extensionReposFragment)
         }
         binding.searchEpPill.setOnClickListener { showEpisodeSearchDialog() }
+
+        binding.contentScrollView.setOnScrollChangeListener { _, _, scrollY, _, _ ->
+            // Banner Parallax: bannerImage moves way slower than scroll movement (~35% speed)
+            binding.bannerImage.translationY = scrollY.coerceAtLeast(0) * 0.65f
+        }
 
         val appContainer = (requireActivity().application as AnimarvleApp).container
         viewLifecycleOwner.lifecycleScope.launch {
@@ -255,8 +276,15 @@ class DetailFragment : Fragment() {
         val (_, isMovie) = resolveMediaType(media)
         val seasons = media.seasons
         if (!isMovie && seasons.isNotEmpty()) {
+            val initialSeason = seasons.firstOrNull { it.isCurrent }?.seasonNumber
+                ?: seasons.firstOrNull { it.seasonNumber != null }?.seasonNumber
+                ?: 1
+            selectedSeasonNumber = initialSeason
+            val updatedSeasons = seasons.map { s ->
+                s.copy(isCurrent = (s.seasonNumber == selectedSeasonNumber || (s.seasonNumber == null && s.isCurrent)))
+            }
             binding.seasonsSection.isVisible = true
-            seasonAdapter.submit(seasons)
+            seasonAdapter.submit(updatedSeasons)
         } else {
             binding.seasonsSection.isVisible = false
         }
@@ -264,6 +292,18 @@ class DetailFragment : Fragment() {
         updateEpisodesAndPlayButton(appContainer.history.historyFlow.value)
         updateBookmarkState(appContainer.myList.itemsFlow.value)
         selectTab(moreLikeThis = true)
+    }
+
+    private fun onSeasonSelected(season: SeasonUi) {
+        val seasonNum = season.seasonNumber ?: return
+        selectedSeasonNumber = seasonNum
+        val currentMedia = current ?: return
+        val updatedSeasons = currentMedia.seasons.map { s ->
+            s.copy(isCurrent = s.seasonNumber == seasonNum)
+        }
+        seasonAdapter.submit(updatedSeasons)
+        val appContainer = (requireActivity().application as AnimarvleApp).container
+        updateEpisodesAndPlayButton(appContainer.history.historyFlow.value)
     }
 
     private fun updateBookmarkState(items: List<com.animarvle.app.ui.mylist.MyListItem>) {
@@ -313,21 +353,58 @@ class DetailFragment : Fragment() {
 
         binding.episodesSection.isVisible = true
         // Populate Episodes List
-        val totalEps = media.episodes
+        val seasonObj = media.seasons.firstOrNull { it.seasonNumber == selectedSeasonNumber }
+        val seasonEpCount = seasonObj?.episodeCount
+        val totalEps = seasonEpCount
+            ?: media.episodes
             ?: media.nextAiringEpisode?.let { (it - 1).coerceAtLeast(1) }
             ?: 12
         val episodeItems = (1..totalEps).map { epNum ->
-            val hist = matchingHistory.firstOrNull { it.episodeNumber == epNum }
+            val hist = matchingHistory.firstOrNull { it.seasonNumber == selectedSeasonNumber && it.episodeNumber == epNum }
+                ?: matchingHistory.firstOrNull { it.episodeNumber == epNum }
             DetailEpisodeUi(
                 episodeNumber = epNum,
                 title = getString(R.string.details_next_episode, epNum),
-                thumbnailUrl = media.bannerUrl ?: media.coverUrl,
+                thumbnailUrl = seasonObj?.posterUrl ?: media.bannerUrl ?: media.coverUrl,
                 history = hist,
             )
         }
         episodeAdapter.submitList(episodeItems)
         binding.episodesList.isVisible = episodeItems.isNotEmpty()
         binding.episodeState.isVisible = episodeItems.isEmpty()
+
+        val appContainer = (requireActivity().application as AnimarvleApp).container
+        viewLifecycleOwner.lifecycleScope.launch {
+            val preferTmdb = if (arguments?.containsKey("preferTmdb") == true) {
+                arguments?.getBoolean("preferTmdb", false) ?: false
+            } else {
+                com.animarvle.app.data.MediaTypeManager.getInstance(requireContext())
+                    .currentMode.value == com.animarvle.app.data.AppMediaMode.MOVIES_TV
+            }
+            val metaMap = appContainer.metadata.episodeMetadata(
+                mediaId = media.id,
+                title = media.title,
+                seasonNumber = selectedSeasonNumber,
+                isTmdb = preferTmdb,
+            )
+            if (metaMap.isNotEmpty() && current?.id == media.id) {
+                val maxEp = maxOf(totalEps, metaMap.keys.maxOrNull() ?: totalEps)
+                val updatedItems = (1..maxEp).map { epNum ->
+                    val hist = matchingHistory.firstOrNull { it.seasonNumber == selectedSeasonNumber && it.episodeNumber == epNum }
+                        ?: matchingHistory.firstOrNull { it.episodeNumber == epNum }
+                    val meta = metaMap[epNum]
+                    DetailEpisodeUi(
+                        episodeNumber = epNum,
+                        title = meta?.title?.takeIf { it.isNotBlank() } ?: getString(R.string.details_next_episode, epNum),
+                        thumbnailUrl = meta?.thumbnailUrl?.takeIf { it.isNotBlank() } ?: (seasonObj?.posterUrl ?: media.bannerUrl ?: media.coverUrl),
+                        history = hist,
+                    )
+                }
+                episodeAdapter.submitList(updatedItems)
+                binding.episodesList.isVisible = updatedItems.isNotEmpty()
+                binding.episodeState.isVisible = updatedItems.isEmpty()
+            }
+        }
     }
 
     private fun renderCountdown(media: MediaUi) {
@@ -396,7 +473,7 @@ class DetailFragment : Fragment() {
      */
     private fun playCurrent(targetEpisodeNumber: Int = 1) {
         val media = current ?: return
-        val (type, _) = resolveMediaType(media)
+        val (type, isMovie) = resolveMediaType(media)
         val args = Bundle().apply {
             val appContainer = (requireActivity().application as AnimarvleApp).container
             val isDonghua = AnimarvleApp.isDonghua(media.title)
@@ -416,12 +493,32 @@ class DetailFragment : Fragment() {
             putStringArrayList("synonyms", ArrayList(media.synonyms))
             putString("mediaType", type.name)
             putInt("year", media.year ?: 0)
-            val eps = media.episodes ?: media.nextAiringEpisode?.let { (it - 1).coerceAtLeast(1) } ?: 0
+            val seasonObj = media.seasons.firstOrNull { it.seasonNumber == selectedSeasonNumber }
+            val eps = seasonObj?.episodeCount ?: media.episodes ?: media.nextAiringEpisode?.let { (it - 1).coerceAtLeast(1) } ?: 0
+            putInt("seasonNumber", selectedSeasonNumber)
             putInt("episodeCount", eps)
             putInt("episodeNumber", targetEpisodeNumber)
-            putString("audio", "SUB")
-            putString("poster", media.bannerUrl ?: media.coverUrl)
+            if (media.seasons.isNotEmpty()) {
+                putSerializable("seasons", ArrayList(media.seasons))
+            }
+            if (media.score != null) {
+                putFloat("rating", media.score.toFloat())
+            }
+            val defaultDub = requireContext().getSharedPreferences(
+                com.animarvle.app.ui.profile.PlayerSettingsFragment.PREFS_NAME,
+                android.content.Context.MODE_PRIVATE,
+            ).getBoolean(com.animarvle.app.ui.profile.PlayerSettingsFragment.KEY_DEFAULT_DUB, false)
+            putString("audio", if (defaultDub) "DUB" else "SUB")
+            putString("poster", seasonObj?.posterUrl ?: media.bannerUrl ?: media.coverUrl)
             putString("animeTitle", media.title)
+            val preferTmdb = if (arguments?.containsKey("preferTmdb") == true) {
+                arguments?.getBoolean("preferTmdb", false) ?: false
+            } else {
+                com.animarvle.app.data.MediaTypeManager.getInstance(requireContext())
+                    .currentMode.value == com.animarvle.app.data.AppMediaMode.MOVIES_TV
+            }
+            putBoolean("preferTmdb", preferTmdb)
+            putBoolean("isMovie", isMovie)
         }
         findNavController().navigate(R.id.playerFragment, args)
     }

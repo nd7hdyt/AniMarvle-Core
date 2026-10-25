@@ -50,43 +50,103 @@ object AniListMapper {
     }
 
     private fun mapRelationsToSeasons(m: Media): List<com.animarvle.app.domain.SeasonUi> {
-        val edges = m.relations?.edges.orEmpty().filter { edge ->
-            val node = edge.node
-            val type = edge.relationType
-            node != null && (type == "PREQUEL" || type == "SEQUEL" || type == "PARENT" || type == "SIDE_STORY" || type == "ALTERNATIVE" || type == "SPIN_OFF")
+        val nodesMap = mutableMapOf<Long, Media>()
+        nodesMap[m.id] = m
+
+        val prequelOf = mutableMapOf<Long, Long>() // childId -> parentId
+        val sequelOf = mutableMapOf<Long, Long>()  // parentId -> childId
+
+        fun traverse(node: Media) {
+            val nid = node.id
+            node.relations?.edges.orEmpty().forEach { edge ->
+                val sub = edge.node ?: return@forEach
+                val rel = edge.relationType
+                val format = sub.format
+                if (format == "MANGA" || format == "NOVEL" || format == "ONE_SHOT" || format == "MUSIC") return@forEach
+                val isOneShot = (sub.episodes ?: 0) <= 1 && (format == "ONA" || format == "OVA" || format == "SPECIAL")
+                if (isOneShot) return@forEach
+
+                val sid = sub.id
+                if (!nodesMap.containsKey(sid)) {
+                    nodesMap[sid] = sub
+                    traverse(sub)
+                }
+
+                if (rel == "PREQUEL") {
+                    prequelOf[nid] = sid
+                    if (!sequelOf.containsKey(sid)) sequelOf[sid] = nid
+                } else if (rel == "SEQUEL") {
+                    sequelOf[nid] = sid
+                    if (!prequelOf.containsKey(sid)) prequelOf[sid] = nid
+                }
+            }
         }
-        if (edges.isEmpty()) return emptyList()
 
-        val currentTitle = m.title?.let { t ->
-            t.english?.takeIf { it.isNotBlank() } ?: t.romaji?.takeIf { it.isNotBlank() } ?: t.native
-        } ?: "Current"
-        val currentCover = m.coverImage?.extraLarge ?: m.coverImage?.large
+        traverse(m)
 
-        val list = mutableListOf<com.animarvle.app.domain.SeasonUi>()
-        edges.forEach { edge ->
-            val node = edge.node ?: return@forEach
-            val nodeTitle = node.title?.let { t ->
+        // Trace backward to root of series
+        var currId = m.id
+        val visitedBack = mutableSetOf<Long>()
+        while (prequelOf.containsKey(currId) && visitedBack.add(currId)) {
+            currId = prequelOf[currId] ?: break
+        }
+        val firstId = currId
+
+        // Trace forward to build chronological season chain
+        val chain = mutableListOf<Media>()
+        var forwardId: Long? = firstId
+        val visitedForward = mutableSetOf<Long>()
+        while (forwardId != null && visitedForward.add(forwardId)) {
+            val node = nodesMap[forwardId]
+            if (node != null) {
+                chain.add(node)
+            }
+            forwardId = sequelOf[forwardId]
+        }
+
+        if (chain.none { it.id == m.id }) {
+            chain.add(0, m)
+        }
+
+        // If any item has TV/ONA format, filter out non-main formats unless it's current media
+        val hasTv = chain.any { it.format == "TV" || it.format == "ONA" || it.format == "TV_SHORT" }
+        val finalChain = if (hasTv) {
+            chain.filter { it.format == "TV" || it.format == "ONA" || it.format == "TV_SHORT" || it.format == "MOVIE" || it.id == m.id }
+        } else {
+            chain
+        }.distinctBy { it.id }
+
+        if (finalChain.size <= 1) {
+            val currentTitle = m.title?.let { t ->
                 t.english?.takeIf { it.isNotBlank() } ?: t.romaji?.takeIf { it.isNotBlank() } ?: t.native
-            } ?: ""
-            val nodeCover = node.coverImage?.extraLarge ?: node.coverImage?.large
-            list.add(
+            } ?: "Season 1"
+            val currentCover = m.coverImage?.extraLarge ?: m.coverImage?.large
+            return listOf(
                 com.animarvle.app.domain.SeasonUi(
-                    id = node.id,
-                    title = nodeTitle,
-                    posterUrl = nodeCover,
-                    isCurrent = false,
+                    id = m.id,
+                    title = currentTitle,
+                    posterUrl = currentCover,
+                    isCurrent = true,
+                    seasonNumber = 1,
+                    episodeCount = m.episodes,
                 )
             )
         }
-        list.add(
+
+        return finalChain.mapIndexed { index, node ->
+            val nodeTitle = node.title?.let { t ->
+                t.english?.takeIf { it.isNotBlank() } ?: t.romaji?.takeIf { it.isNotBlank() } ?: t.native
+            } ?: "Season ${index + 1}"
+            val nodeCover = node.coverImage?.extraLarge ?: node.coverImage?.large
             com.animarvle.app.domain.SeasonUi(
-                id = m.id,
-                title = currentTitle,
-                posterUrl = currentCover,
-                isCurrent = true,
+                id = node.id,
+                title = nodeTitle,
+                posterUrl = nodeCover,
+                isCurrent = (node.id == m.id),
+                seasonNumber = index + 1,
+                episodeCount = node.episodes,
             )
-        )
-        return list.sortedBy { it.id }
+        }
     }
 
     fun toScheduleItem(n: AiringNode): ScheduleItem? {

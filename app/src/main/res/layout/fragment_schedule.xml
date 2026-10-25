@@ -55,6 +55,13 @@
             android:src="@drawable/ic_search"
             app:tint="#FFFFFF" />
 
+        <!-- Top-Center Morphing Reload Indicator -->
+        <com.animarvle.app.ui.player.VortexMorphLoadingView
+            android:id="@+id/reloadIndicator"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:layout_gravity="center"
+            android:visibility="gone" />
     </FrameLayout>
 
     <!-- Mode Tabs: Anime | Movies & TV -->
@@ -75,7 +82,7 @@
             android:background="@drawable/bg_display_mode_btn_selected"
             android:gravity="center"
             android:text="@string/tab_anime"
-            android:textColor="#FFFFFF"
+            android:textColor="#000000"
             android:textSize="14sp"
             android:textStyle="bold" />
 

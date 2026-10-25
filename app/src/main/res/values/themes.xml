@@ -3,7 +3,7 @@
     <!-- Base theme: colours come from attrs so a palette overlay can swap them. -->
     <style name="Theme.Animarvle" parent="Theme.Material3.Dark.NoActionBar">
         <item name="colorPrimary">@color/accent</item>
-        <item name="colorOnPrimary">@color/on_bg</item>
+        <item name="colorOnPrimary">#000000</item>
         <item name="colorSurface">@color/surface</item>
         <item name="colorSurfaceVariant">@color/surface_variant</item>
         <item name="colorOnSurface">@color/on_bg</item>
@@ -17,6 +17,7 @@
     <!-- Palette overlays, applied at runtime by AppTheme. -->
     <style name="Palette.Red" parent="">
         <item name="colorPrimary">@color/red_accent</item>
+        <item name="colorOnPrimary">#000000</item>
         <item name="android:windowBackground">@color/red_bg</item>
         <item name="android:statusBarColor">@color/red_bg</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
@@ -24,6 +25,7 @@
 
     <style name="Palette.Green" parent="">
         <item name="colorPrimary">@color/green_accent</item>
+        <item name="colorOnPrimary">#000000</item>
         <item name="android:windowBackground">@color/green_bg</item>
         <item name="android:statusBarColor">@color/green_bg</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
@@ -31,6 +33,7 @@
 
     <style name="Palette.Cyan" parent="">
         <item name="colorPrimary">@color/cyan_accent</item>
+        <item name="colorOnPrimary">#000000</item>
         <item name="android:windowBackground">@color/cyan_bg</item>
         <item name="android:statusBarColor">@color/cyan_bg</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
@@ -56,5 +59,27 @@
     <style name="Animation.Animarvle.FloatingCard" parent="@android:style/Animation">
         <item name="android:windowEnterAnimation">@anim/slide_in_bottom</item>
         <item name="android:windowExitAnimation">@anim/slide_out_bottom</item>
+    </style>
+
+    <!-- AniVortex Dual-Tier Filter Pill Style for My List -->
+    <style name="VortexFilterPill">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">36dp</item>
+        <item name="android:background">@android:color/transparent</item>
+        <item name="android:gravity">center</item>
+        <item name="android:paddingHorizontal">16dp</item>
+        <item name="android:textColor">#8E8E93</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="ShapeAppearance.Animarvle.AvatarCorner" parent="ShapeAppearance.Material3.Corner.Medium">
+        <item name="cornerSize">12dp</item>
+    </style>
+
+    <!-- Poster 12dp Corner Radius ShapeAppearance -->
+    <style name="ShapeAppearance.PosterCorner12" parent="ShapeAppearance.Material3.Corner.Medium">
+        <item name="cornerSize">12dp</item>
+        <item name="cornerFamily">rounded</item>
     </style>
 </resources>

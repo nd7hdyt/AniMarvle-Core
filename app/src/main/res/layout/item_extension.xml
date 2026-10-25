@@ -100,7 +100,7 @@
                 android:paddingHorizontal="6dp"
                 android:paddingVertical="2dp"
                 android:text="@string/ext_badge_nsfw_18"
-                android:textColor="@color/on_bg"
+                android:textColor="#000000"
                 android:textSize="10sp"
                 android:textStyle="bold"
                 android:visibility="gone" />

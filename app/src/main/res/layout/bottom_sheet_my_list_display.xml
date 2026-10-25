@@ -75,7 +75,7 @@
             android:background="@drawable/bg_display_mode_btn_selected"
             android:gravity="center"
             android:text="@string/my_list_display_comfortable_grid"
-            android:textColor="@color/on_bg"
+            android:textColor="#000000"
             android:textSize="13sp"
             android:textStyle="bold" />
 

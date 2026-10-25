@@ -23,6 +23,7 @@ import org.json.JSONObject
 import java.net.URLEncoder
 import java.util.Base64
 import java.util.concurrent.ConcurrentHashMap
+import com.animarvle.app.ui.player.SpokenLanguage
 
 /**
  * In-built native Kotlin scraper for 4K HDHub (Th3-Anime style).
@@ -214,10 +215,12 @@ class FourKHDHubSource(
                         append(tags)
                     }
                 }
+                val detected = SpokenLanguage.fromRawTag(tags) ?: SpokenLanguage.fromRawTag(rawText)
                 val opt = ServerOption(
                     key = "4khd:$idx|$resLabel|$hubCloudLink",
                     label = displayLabel,
                     hint = hint,
+                    audioLanguage = detected?.displayName,
                 )
                 val score = calculateReleaseScore(resLabel, sizeMB, rawText)
                 if (shouldSkipRelease(sizeMB, rawText)) {
@@ -249,6 +252,7 @@ class FourKHDHubSource(
                         key = "4khd:$idx|HD|$l",
                         label = "1080p · Server ${idx + 1}",
                         hint = "Direct HubCloud",
+                        audioLanguage = "English",
                     ),
                 )
             }

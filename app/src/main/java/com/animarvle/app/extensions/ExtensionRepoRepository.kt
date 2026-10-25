@@ -59,6 +59,18 @@ class ExtensionRepoRepository(context: Context) {
             )
             save(list)
         }
+
+        val redowanUrl = "https://raw.githubusercontent.com/redowan99/Redowan-CloudStream/master"
+        if (list.none { it.baseUrl.startsWith(redowanUrl) }) {
+            list.add(
+                ExtensionRepo(
+                    baseUrl = redowanUrl,
+                    name = "Redowan's BDIX repository",
+                    website = "https://github.com/redowan99/Redowan-CloudStream",
+                ),
+            )
+            save(list)
+        }
         list
     }
 

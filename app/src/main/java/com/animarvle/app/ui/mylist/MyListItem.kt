@@ -2,13 +2,13 @@ package com.animarvle.app.ui.mylist
 
 enum class MyListStatus(val key: String, val label: String) {
     WATCHING("watching", "Watching"),
-    PLAN_TO_WATCH("plan_to_watch", "Plan to Watch"),
+    PLAN_TO_WATCH("plan_to_watch", "Pending"),
     COMPLETED("completed", "Completed"),
     ON_HOLD("on_hold", "On Hold"),
     DROPPED("dropped", "Dropped");
 
     companion object {
-        fun fromKey(key: String): MyListStatus? = entries.firstOrNull { it.key == key }
+        fun fromKey(key: String): MyListStatus? = entries.firstOrNull { it.key == key || (key.equals("pending", ignoreCase = true) && it == PLAN_TO_WATCH) }
     }
 }
 
@@ -22,4 +22,5 @@ data class MyListItem(
     val progress: Int = 0,
     val totalEpisodes: Int? = null,
     val updatedAtMs: Long = System.currentTimeMillis(),
+    val year: Int? = null,
 )

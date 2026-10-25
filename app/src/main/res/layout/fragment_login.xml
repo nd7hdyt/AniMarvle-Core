@@ -202,7 +202,7 @@
                 android:layout_marginTop="28dp"
                 android:text="@string/auth_sign_in"
                 android:textAllCaps="false"
-                android:textColor="@android:color/white"
+                android:textColor="#000000"
                 android:textSize="16sp"
                 android:textStyle="bold"
                 app:backgroundTint="?attr/colorPrimary"
@@ -316,12 +316,10 @@
         android:visibility="gone"
         tools:visibility="gone">
 
-        <ProgressBar
+        <com.animarvle.app.ui.player.VortexMorphLoadingView
             android:id="@+id/signingInSpinner"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:indeterminate="true"
-            android:indeterminateTint="?attr/colorPrimary" />
+            android:layout_width="32dp"
+            android:layout_height="32dp" />
 
         <TextView
             android:layout_width="wrap_content"

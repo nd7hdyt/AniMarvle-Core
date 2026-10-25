@@ -15,10 +15,10 @@
         android:id="@+id/thumb"
         android:layout_width="56dp"
         android:layout_height="80dp"
-        app:cardBackgroundColor="#1F2330"
+        app:cardBackgroundColor="#181818"
         app:cardCornerRadius="10dp"
         app:cardElevation="0dp"
-        app:strokeColor="#2E3446"
+        app:strokeColor="#262626"
         app:strokeWidth="0.5dp">
 
         <ImageView
@@ -74,7 +74,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="8dp"
-                android:textColor="#8E92A2"
+                android:textColor="#8E8E93"
                 android:textSize="12sp"
                 tools:text="2010" />
 
@@ -114,6 +114,6 @@
         android:layout_height="20dp"
         android:contentDescription="@null"
         android:src="@drawable/ic_chevron_down"
-        app:tint="#6C7282" />
+        app:tint="#8E8E93" />
 
 </LinearLayout>

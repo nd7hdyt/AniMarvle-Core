@@ -71,6 +71,9 @@ class StreamResolver(
     ): Flow<ResolveEvent> = flow {
         val options = withTimeout(timeoutMs) { source.options(episode) }
         val servers = options.byAudio[requested.audio]
+            ?: options.byAudio[if (requested.audio == Audio.DUB) Audio.SUB else Audio.DUB]
+            ?: options.byAudio[Audio.RAW]
+            ?: options.byAudio.values.firstOrNull()
         if (servers.isNullOrEmpty()) {
             emit(
                 ResolveEvent.AudioUnavailable(
@@ -124,7 +127,6 @@ class StreamResolver(
         val byKey = servers.associateBy { it.key }
         val result = LinkedHashMap<String, ServerOption>()
 
-        manualPick?.let { byKey[it] }?.let { result[it.key] = it }
         if (startAfterServer != null) {
             // Mid-playback fallback: continue after the server that just failed.
             val index = servers.indexOfFirst { it.key == startAfterServer }
@@ -132,10 +134,12 @@ class StreamResolver(
                 servers.drop(index + 1).forEach { result.putIfAbsent(it.key, it) }
                 servers.take(index).forEach { result.putIfAbsent(it.key, it) }
             }
+        } else {
+            manualPick?.let { byKey[it] }?.let { result[it.key] = it }
         }
-        lastUsedServer?.let { byKey[it] }?.let { result.putIfAbsent(it.key, it) }
-        userPriority.forEach { key -> byKey[key]?.let { result.putIfAbsent(it.key, it) } }
-        servers.forEach { result.putIfAbsent(it.key, it) }
+        lastUsedServer?.let { byKey[it] }?.let { if (it.key != startAfterServer) result.putIfAbsent(it.key, it) }
+        userPriority.forEach { key -> byKey[key]?.let { if (it.key != startAfterServer) result.putIfAbsent(it.key, it) } }
+        servers.forEach { if (it.key != startAfterServer) result.putIfAbsent(it.key, it) }
 
         return result.values.toList()
     }

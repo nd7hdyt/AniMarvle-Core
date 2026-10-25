@@ -207,14 +207,35 @@ resolve(episode, requested):
 
 ## 8. Player (`:app`, Media3) `[D]`/`[A]`
 
-- Media3 ExoPlayer + HLS (+DASH) modules `[A: separate artifacts; verify]`. Custom control layout in XML to match §7.7 of
-  PROMPT.md (lock, speed, ±10 s, fullscreen, download, overflow).
-- Run the player in a `MediaSessionService` for background audio/PiP/notifications when enabled `[A verify]`.
+- Media3 ExoPlayer + HLS (+DASH) modules. Custom control layout in XML matching AniVortex design geometry (lock, speed, ±10 s, fullscreen, PiP, skip 90s, subtitle selector, settings).
+- **Unified Dual-Layer Multi-Audio Architecture (`AudioModels.kt`, `PlayerViewModel.kt`, `PlayerFragment.kt`):**
+  - **Dynamic Language Aggregator:** Unifies in-stream ExoPlayer audio tracks (`C.TRACK_TYPE_AUDIO`) and server-level language options into a single reactive hierarchy (`ResolvedAudioOption.EmbeddedTrack` vs. `ResolvedAudioOption.ServerStream`), replacing the hardcoded `listOf(defaultOriginalLang, "English")` fallback.
+  - **Instant In-Stream Audio Switching:** Automatically detects embedded HLS `#EXT-X-MEDIA:TYPE=AUDIO`, MKV, and MP4 audio tracks via `onTracksChanged`. Instantaneously applies `TrackSelectionOverride` on `C.TRACK_TYPE_AUDIO` without stream reloading or buffering interruption.
+  - **Position-Preserving Server-Stream Switching:** For audio languages hosted on separate URLs/servers (e.g., Hindi, Tamil, Telugu, English dub servers), switches server streams dynamically while saving and restoring exact playback timestamp (`savedPositionMs`), resuming playback at the exact second.
+  - **ISO 639-1 / 639-2 Normalization (`SpokenLanguage`):** Maps language tags (`hi`/`hin` $\rightarrow$ Hindi, `ta`/`tam` $\rightarrow$ Tamil, `te`/`tel` $\rightarrow$ Telugu, `ur`/`urd` $\rightarrow$ Urdu, `bn`/`ben` $\rightarrow$ Bengali, `ja`/`jpn` $\rightarrow$ Japanese, `en`/`eng` $\rightarrow$ English, `es`/`spa` $\rightarrow$ Spanish, `ko`/`kor` $\rightarrow$ Korean, `zh`/`zho` $\rightarrow$ Chinese, etc.) to user-friendly display labels and clean UI selection states.
+- **AniVortex Glass Dialog Architecture & Real-Time Live Blur (`VortexBlurHelper`):**
+  - Samples live video frames from hardware `TextureView` via downscaled bitmap (8x), composites visible player HUD elements (SeekBar, timestamps, skip pill), applies multi-pass Gaussian stack blur, warm-obsidian translucent tint (`#B8161618`), and clips to 26dp rounded corners (`BitmapDrawable`).
+  - Bypasses OEM system-level restrictions (Samsung OneUI, Xiaomi HyperOS, battery saver modes) where `window.setBackgroundBlurRadius` and `FLAG_BLUR_BEHIND` are globally disabled.
+  - Universal across all player dialogs: `ChoiceDialog` (Quality, Speed, Audio, Settings) and `SubtitlesBottomSheet` (`[CC]` subtitles and timing offset popup).
+- **Cross-Side Gestures & Control Isolation:** Swiping vertically on the Right half triggers Volume on the Left; swiping on the Left half triggers Brightness on the Right. Triggering either gesture immediately hides `controlsOverlay` to avoid collision with transport controls and the Lock button.
+- **Orientation-Aware UI (Portrait vs. Landscape):**
+  - Portrait (`!isFullscreen`): 230dp stage height, clean vertical rounded pill SeekBar thumb (`5dp × 18dp`, 3dp radius), hides `btnEpisodes`, `btnLock`, `btnDisplayMode`.
+  - Landscape (`isFullscreen`): restores `btnEpisodes`, `btnLock`, `btnDisplayMode`, expands transport button spacing, and dynamically switches SeekBar thumb to a cross-pill (`LayerDrawable`).
+- **Progress Fill Math & Feedback:** Active white track terminates cleanly at the 12dp circle thumb center (`thumbOffset + thumbSize / 2f`). Aspect ratio highlights in light-blue (`#38BDF8`), and timestamps format as `%d:%02d`.
+- **Material 3 Expressive Morphing Loading Indicator (VortexMorphLoadingView):** Replaces traditional circular spinners with an authentic pure-white morphing rounded polygon that smoothly transitions across 5 geometric phases (Circle <-> Rounded Pentagon <-> 8-Point Soft Star Burst <-> Rounded Diamond <-> Soft Pill) while rotating at 1.5x speed. Sits in an isolated 56dp/62dp center slot (playPauseContainer), completely hiding btnPlayPause (View.INVISIBLE) during buffering/seeking to preserve exact layout geometry between Previous and Next controls.
+- **Automatic Matroska / EBML Container Sniffing:** Direct media streams sniff container format automatically, enabling seamless playback of high-definition .mkv multi-audio streams from worker relays.
+- **Dual-Mode Episode Layout Architecture (`EpisodeGridAdapter.kt`, `PlayerFragment.kt`):**
+  - **Mode A (Thumbnail Grid, Default):** 2-column 16:9 aspect ratio cards with full-bleed screenshots, bottom gradient scrim (`bg_player_scrim_bottom.xml`), bold "Episode : N" label, overview/title subtitle, and 2dp active white highlight border. Backed by non-collapsing `ConstraintLayout` root with `H,16:9` ratio and automatic poster fallback for titles lacking per-episode screenshot assets.
+  - **Mode B (Number Tiles):** 6-column anime-style number tiles `[ 1 ] [ 2 ] [ 3 ]...` with active white fill.
+  - **Persistent Mode Switching (`btnToggleViewMode`):** Seamlessly toggles grid span count (2 vs 6) and updates icon state (`ic_grid_view` vs. `ic_tile_numbers`), saving selection in `player_episode_view_mode`.
+- **Season Dropdown Capsule & Multi-Season Series Preservation:**
+  - Option 1 Season Dropdown Capsule (`bg_season_dropdown_pill.xml`) displaying `[ 🗂 Season X ▾ ]` opening `SeasonSelectionBottomSheet`.
+  - Distinguishes multi-season series from single movies in catalog resolution, ensuring multi-season TV titles load complete seasons and episode lists instead of collapsing into movie mode.
+- Run the player in a `MediaSessionService` for background audio/PiP/notifications when enabled.
 - `DataSource.Factory` attaches `ResolvedMedia.headers`/`Stream.headers` per request.
-- Progress saved every ~10 s and on pause/stop to `HistoryEntry`; "watched" at ≥90 % `[D]`.
+- Progress saved every ~10 s and on pause/stop to `HistoryEntry`; "watched" at ≥90 %.
 - Autoplay next: on end, resolve next episode with the **same audio/server/quality selection**, falling back per §7.3.
-- Cast, external-player intent, sleep timer: phase 2 (Cast requires your own receiver app id — never reuse another
-  app's) `[D]`.
+- Cast, external-player intent, sleep timer: phase 2 (Cast requires your own receiver app id — never reuse another app's) `[D]`.
 
 ## 9. Downloads (AndroidX Media3 DownloadManager Architecture) `[V]`
 
@@ -334,7 +355,9 @@ Settings/PlayerDownloads, Settings/Subtitles, Sources. Player is entered from Ho
 | D12 | No code reuse from GPL-3.0 references (Zangetsu) | Licence contamination |
 | D13 | Announcements feed optional, default off | Needs owner-hosted JSON; no backend in v1 |
 | D14 | Cloudflare Serverless Edge Relay (`worker.js`) | Instant 800ms byte-range streaming; eliminates 4-6MB/s data waste from monolithic 40GB/3.5GB files |
-| D15 | AniVortex Minimal Glassy Player UI | Sub/Dub tab row removed (moved to settings), authentic `[CC]` icon, 2dp timeline bar, anime-exclusive `▶▶ Skip 90s` |
+| D15 | AniVortex Minimal Glassy Player UI | Sub/Dub tab row removed (moved to settings), authentic `[CC]` icon, 2dp timeline bar, anime-exclusive `▶▶ Skip 90s`. **Implemented (2026-10-20):** `fragment_player.xml` `controlsOverlay` rebuilt to reference geometry; new vector assets (`ic_vortex_cc`, `ic_vortex_aspect_ratio`, `ic_vortex_playback_speed`, `ic_tune`); soft 18dp rounded HUD capsule (`bg_vortex_hud_capsule.xml`); cross-side swipe gestures with immediate control isolation; centered 12dp thumb progress math; dynamic vertical-to-cross SeekBar thumb switching; `%d:%02d` time formatting; `VortexBlurHelper` live TextureView frame blur + OEM bypass wired into `ChoiceDialog` and `SubtitlesBottomSheet`. |
 | D16 | 3-Server Chip Normalization (`Spiral`, `Turbo`, `FastX`) | Matches AniVortex 3-server model; eliminates messy scraper labels from HUD |
 | D17 | Dual-Layer Edge + Extension Architecture | Tier 0 zero-extension streaming for friends/new users + Tier 1 extension fallback for unindexed anime (e.g. One Piece) |
 | D18 | Clean Multi-Quality & Multi-Audio Engine | Titlecase language names, Japanese Sub vs English Dub anime switcher, sanitized 1080p-360p quality ladder, coroutine cancellation guard |
+| D19 | Resilient Multi-Tier Metadata Fallback (AniList, MAL, Simkl, TMDB) | Stored credentials in .env and BuildConfig; resilient fallback chain ensures anime and movie rails/search remain 100% operational during upstream outages or rate-limits. |
+

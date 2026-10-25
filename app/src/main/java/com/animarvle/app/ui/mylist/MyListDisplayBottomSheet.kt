@@ -85,7 +85,8 @@ class MyListDisplayBottomSheet(
                 if (isSelected) R.drawable.bg_display_mode_btn_selected
                 else R.drawable.bg_display_mode_btn_unselected
             )
-            btn.setTextColor(if (isSelected) Color.WHITE else Color.parseColor("#D0D3DE"))
+            btn.setTextColor(if (isSelected) Color.BLACK else Color.parseColor("#D0D3DE"))
+            btn.setTypeface(null, if (isSelected) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
         }
 
         binding.itemsPerRowSection.isVisible = (currentMode != DisplayMode.LIST)

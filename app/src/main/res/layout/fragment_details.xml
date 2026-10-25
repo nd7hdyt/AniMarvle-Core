@@ -1,0 +1,523 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#000000">
+
+    <!-- Layer 0: Pinned High-Res Hero Backdrop & Bottom Scrim (Stays fixed as content scrolls) -->
+    <FrameLayout
+        android:id="@+id/heroContainer"
+        android:layout_width="match_parent"
+        android:layout_height="480dp"
+        android:layout_gravity="top">
+
+        <ImageView
+            android:id="@+id/heroBackdrop"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="centerCrop"
+            tools:src="@tools:sample/backgrounds/scenic" />
+
+        <!-- Dynamic Dark Dimming Scrim (dims as user scrolls down) -->
+        <View
+            android:id="@+id/heroDimOverlay"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="#000000"
+            android:alpha="0" />
+
+        <!-- Seamless Bottom Fade Scrim into pure OLED black -->
+        <View
+            android:id="@+id/heroScrim"
+            android:layout_width="match_parent"
+            android:layout_height="260dp"
+            android:layout_gravity="bottom"
+            android:background="@drawable/bg_details_bottom_scrim" />
+    </FrameLayout>
+
+    <!-- Layer 1: Edge-to-Edge Scrolling Content (Slides UP OVER the pinned poster) -->
+    <androidx.core.widget.NestedScrollView
+        android:id="@+id/detailsScrollView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clipToPadding="false"
+        android:overScrollMode="never"
+        android:visibility="gone"
+        android:paddingBottom="48dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <!-- Transparent Spacer allowing the pinned poster to be showcased -->
+            <View
+                android:id="@+id/heroSpacer"
+                android:layout_width="match_parent"
+                android:layout_height="320dp" />
+
+            <!-- Soft gradient transition so content glides over the pinned poster -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="80dp"
+                android:background="@drawable/bg_details_bottom_scrim" />
+
+            <!-- Content Container with solid black fill that glides up over the poster -->
+            <LinearLayout
+                android:id="@+id/contentContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="-40dp"
+                android:background="#000000"
+                android:orientation="vertical"
+                android:paddingHorizontal="16dp"
+                android:paddingBottom="24dp">
+
+                <!-- Title (Large bold cinematic) -->
+                <TextView
+                    android:id="@+id/tvTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textColor="#FFFFFF"
+                    android:textSize="26sp"
+                    android:textStyle="bold"
+                    tools:text="Shaft" />
+
+                <!-- Metadata Row (Year • Duration / Seasons • Country • Score) -->
+                <TextView
+                    android:id="@+id/tvMetadata"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:textColor="#B3B3B3"
+                    android:textSize="13.5sp"
+                    tools:text="1971 • 100 min • United States of America" />
+
+                <!-- Genre Chips Row -->
+                <HorizontalScrollView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:overScrollMode="never"
+                    android:scrollbars="none">
+
+                    <com.google.android.material.chip.ChipGroup
+                        android:id="@+id/chipGroupGenres"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        app:singleLine="true" />
+                </HorizontalScrollView>
+
+                <!-- Synopsis -->
+                <TextView
+                    android:id="@+id/tvSynopsis"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:ellipsize="end"
+                    android:lineSpacingExtra="3dp"
+                    android:maxLines="3"
+                    android:textColor="#CCCCCC"
+                    android:textSize="14sp"
+                    tools:text="Cool Black private eye John Shaft is hired by a crime lord to find and retrieve his kidnapped daughter." />
+
+                <!-- HOPE-Style Centered Compact Solid White CTA Button -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnPlay"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:minWidth="230dp"
+                    android:layout_gravity="center_horizontal"
+                    android:layout_marginTop="16dp"
+                    android:layout_marginBottom="6dp"
+                    android:text="Play"
+                    android:textColor="#000000"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
+                    android:paddingHorizontal="24dp"
+                    android:paddingVertical="0dp"
+                    app:backgroundTint="#FFFFFF"
+                    app:cornerRadius="24dp"
+                    app:icon="@drawable/ic_play_arrow"
+                    app:iconGravity="textStart"
+                    app:iconSize="20dp"
+                    app:iconTint="#000000" />
+
+                <!-- Dynamic Series Block (Hidden for Movies) -->
+                <LinearLayout
+                    android:id="@+id/seriesBlock"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="28dp"
+                    android:orientation="vertical"
+                    android:visibility="visible">
+
+                    <!-- Sleek Season Selector Dropdown Button -->
+                    <LinearLayout
+                        android:id="@+id/btnSeasonSelector"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="?attr/selectableItemBackground"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:paddingVertical="6dp">
+
+                        <TextView
+                            android:id="@+id/tvCurrentSeason"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:textColor="#FFFFFF"
+                            android:textSize="18sp"
+                            android:textStyle="bold"
+                            tools:text="Season 1" />
+
+                        <ImageView
+                            android:layout_width="20dp"
+                            android:layout_height="20dp"
+                            android:layout_marginStart="6dp"
+                            android:src="@drawable/ic_chevron_down"
+                            app:tint="#FFFFFF" />
+                    </LinearLayout>
+
+                    <!-- Horizontal Episode List -->
+                    <androidx.recyclerview.widget.RecyclerView
+                        android:id="@+id/rvEpisodes"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:clipToPadding="false"
+                        android:orientation="horizontal"
+                        android:overScrollMode="never" />
+                </LinearLayout>
+
+                <!-- More Like This / Recommendations Rail -->
+                <TextView
+                    android:id="@+id/tvRailTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="28dp"
+                    android:text="More Like This"
+                    android:textColor="#FFFFFF"
+                    android:textSize="18sp"
+                    android:textStyle="bold" />
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/rvTrailers"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:clipToPadding="false"
+                    android:orientation="horizontal"
+                    android:overScrollMode="never" />
+            </LinearLayout>
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+
+    <!-- Layer 1.5: Skeleton loading screen precisely mirroring what the media loads directly on -->
+    <androidx.core.widget.NestedScrollView
+        android:id="@+id/skeletonContainer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clipToPadding="false"
+        android:overScrollMode="never"
+        android:scrollbars="none"
+        android:paddingBottom="48dp"
+        android:visibility="visible">
+
+        <LinearLayout
+            android:id="@+id/skeletonContentLayout"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <!-- Transparent spacer matching hero backdrop showcase -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="320dp" />
+
+            <!-- Soft gradient transition identical to content transition -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="80dp"
+                android:background="@drawable/bg_details_bottom_scrim" />
+
+            <!-- Content Container matching contentContainer exactly -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="-40dp"
+                android:background="#000000"
+                android:orientation="vertical"
+                android:paddingHorizontal="16dp"
+                android:paddingBottom="24dp">
+
+                <!-- 1. Title Placeholder (matches tvTitle: 26sp bold) -->
+                <View
+                    android:layout_width="240dp"
+                    android:layout_height="32dp"
+                    android:background="@drawable/bg_skeleton_rect" />
+
+                <!-- 2. Metadata Row Placeholder (matches tvMetadata: 13.5sp, marginTop=6dp) -->
+                <View
+                    android:layout_width="190dp"
+                    android:layout_height="16dp"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/bg_skeleton_pill" />
+
+                <!-- 3. Genre Chips Row Placeholder (matches chipGroupGenres: marginTop=10dp) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:orientation="horizontal">
+
+                    <View
+                        android:layout_width="66dp"
+                        android:layout_height="26dp"
+                        android:background="@drawable/bg_skeleton_pill" />
+
+                    <View
+                        android:layout_width="78dp"
+                        android:layout_height="26dp"
+                        android:layout_marginStart="8dp"
+                        android:background="@drawable/bg_skeleton_pill" />
+
+                    <View
+                        android:layout_width="60dp"
+                        android:layout_height="26dp"
+                        android:layout_marginStart="8dp"
+                        android:background="@drawable/bg_skeleton_pill" />
+
+                    <View
+                        android:layout_width="72dp"
+                        android:layout_height="26dp"
+                        android:layout_marginStart="8dp"
+                        android:background="@drawable/bg_skeleton_pill" />
+                </LinearLayout>
+
+                <!-- 4. Synopsis Placeholder (matches tvSynopsis: marginTop=12dp, 3 lines) -->
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="14dp"
+                    android:layout_marginTop="14dp"
+                    android:background="@drawable/bg_skeleton_pill" />
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="14dp"
+                    android:layout_marginTop="7dp"
+                    android:background="@drawable/bg_skeleton_pill" />
+
+                <View
+                    android:layout_width="220dp"
+                    android:layout_height="14dp"
+                    android:layout_marginTop="7dp"
+                    android:background="@drawable/bg_skeleton_pill" />
+
+                <!-- 5. Centered Play CTA Button Placeholder (matches btnPlay: width=230dp, height=48dp, cornerRadius=24dp) -->
+                <View
+                    android:layout_width="230dp"
+                    android:layout_height="48dp"
+                    android:layout_gravity="center_horizontal"
+                    android:layout_marginTop="18dp"
+                    android:layout_marginBottom="6dp"
+                    android:background="@drawable/bg_skeleton_pill" />
+
+                <!-- 6. Season Selector Placeholder (matches btnSeasonSelector: marginTop=28dp) -->
+                <View
+                    android:layout_width="105dp"
+                    android:layout_height="24dp"
+                    android:layout_marginTop="28dp"
+                    android:background="@drawable/bg_skeleton_pill" />
+
+                <!-- 7. Episode Cards Rail Placeholder (matches rvEpisodes: 160dp x 96dp cards with 12dp radius) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:orientation="horizontal">
+
+                    <View
+                        android:layout_width="160dp"
+                        android:layout_height="96dp"
+                        android:background="@drawable/bg_skeleton_card" />
+
+                    <View
+                        android:layout_width="160dp"
+                        android:layout_height="96dp"
+                        android:layout_marginStart="10dp"
+                        android:background="@drawable/bg_skeleton_card" />
+
+                    <View
+                        android:layout_width="60dp"
+                        android:layout_height="96dp"
+                        android:layout_marginStart="10dp"
+                        android:background="@drawable/bg_skeleton_card" />
+                </LinearLayout>
+
+                <!-- 8. 'More Like This' Rail Title Placeholder (matches tvRailTitle: marginTop=28dp) -->
+                <View
+                    android:layout_width="130dp"
+                    android:layout_height="22dp"
+                    android:layout_marginTop="28dp"
+                    android:background="@drawable/bg_skeleton_pill" />
+
+                <!-- 9. Recommendations Cards Rail Placeholder (matches rvTrailers: 124dp x 176dp posters with 12dp radius) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:orientation="horizontal">
+
+                    <!-- Poster Card 1 -->
+                    <LinearLayout
+                        android:layout_width="124dp"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical">
+
+                        <View
+                            android:layout_width="124dp"
+                            android:layout_height="176dp"
+                            android:background="@drawable/bg_skeleton_card" />
+
+                        <View
+                            android:layout_width="92dp"
+                            android:layout_height="12dp"
+                            android:layout_marginTop="6dp"
+                            android:background="@drawable/bg_skeleton_pill" />
+
+                        <View
+                            android:layout_width="60dp"
+                            android:layout_height="10dp"
+                            android:layout_marginTop="4dp"
+                            android:background="@drawable/bg_skeleton_pill" />
+                    </LinearLayout>
+
+                    <!-- Poster Card 2 -->
+                    <LinearLayout
+                        android:layout_width="124dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="12dp"
+                        android:orientation="vertical">
+
+                        <View
+                            android:layout_width="124dp"
+                            android:layout_height="176dp"
+                            android:background="@drawable/bg_skeleton_card" />
+
+                        <View
+                            android:layout_width="84dp"
+                            android:layout_height="12dp"
+                            android:layout_marginTop="6dp"
+                            android:background="@drawable/bg_skeleton_pill" />
+
+                        <View
+                            android:layout_width="54dp"
+                            android:layout_height="10dp"
+                            android:layout_marginTop="4dp"
+                            android:background="@drawable/bg_skeleton_pill" />
+                    </LinearLayout>
+
+                    <!-- Poster Card 3 (Peek) -->
+                    <LinearLayout
+                        android:layout_width="60dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="12dp"
+                        android:orientation="vertical">
+
+                        <View
+                            android:layout_width="60dp"
+                            android:layout_height="176dp"
+                            android:background="@drawable/bg_skeleton_card" />
+                    </LinearLayout>
+
+                </LinearLayout>
+
+            </LinearLayout>
+
+        </LinearLayout>
+
+    </androidx.core.widget.NestedScrollView>
+
+    <!-- Layer 2: The Floating Header (Overlays the content with clean linear scrim) -->
+    <LinearLayout
+        android:id="@+id/headerContainer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <!-- Status Bar Spacer (Dynamic height) -->
+        <View
+            android:id="@+id/statusBarSpacer"
+            android:layout_width="match_parent"
+            android:layout_height="0dp" />
+
+        <LinearLayout
+            android:id="@+id/headerContent"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="16dp">
+
+            <!-- Back Button with Smaller Circular Grey Glass Plate -->
+            <ImageButton
+                android:id="@+id/btnBack"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:background="@drawable/bg_glass_circle_icon"
+                android:padding="8dp"
+                android:src="@drawable/ic_arrow_back"
+                app:tint="#FFFFFF" />
+
+            <!-- Dynamic Header Title (Fades in on scroll) -->
+            <TextView
+                android:id="@+id/tvHeaderTitle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="10dp"
+                android:layout_marginEnd="8dp"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="#FFFFFF"
+                android:textSize="17sp"
+                android:textStyle="bold"
+                android:alpha="0"
+                tools:text="Shaft" />
+
+            <!-- Utility Cluster (Smaller 34dp Glass Circles with smaller icons) -->
+            <ImageButton
+                android:id="@+id/btnDownload"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/bg_glass_circle_icon"
+                android:padding="7.5dp"
+                android:src="@drawable/ic_download"
+                app:tint="#FFFFFF" />
+
+            <ImageButton
+                android:id="@+id/btnMyList"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/bg_glass_circle_icon"
+                android:padding="7.5dp"
+                android:src="@drawable/ic_bookmark_outline"
+                app:tint="#FFFFFF" />
+
+            <ImageButton
+                android:id="@+id/btnShare"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:background="@drawable/bg_glass_circle_icon"
+                android:padding="7.5dp"
+                android:src="@drawable/ic_share"
+                app:tint="#FFFFFF" />
+        </LinearLayout>
+    </LinearLayout>
+
+</FrameLayout>

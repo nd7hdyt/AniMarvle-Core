@@ -35,6 +35,7 @@ data class TmdbItem(
     val name: String? = null,
     @SerialName("original_title") val originalTitle: String? = null,
     @SerialName("original_name") val originalName: String? = null,
+    @SerialName("original_language") val originalLanguage: String? = null,
     val overview: String? = null,
     @SerialName("poster_path") val posterPath: String? = null,
     @SerialName("backdrop_path") val backdropPath: String? = null,
@@ -50,4 +51,26 @@ data class TmdbItem(
     @SerialName("number_of_episodes") val numberOfEpisodes: Int? = null,
     @SerialName("number_of_seasons") val numberOfSeasons: Int? = null,
     val seasons: List<TmdbSeason> = emptyList(),
+)
+
+@Serializable
+data class TmdbEpisode(
+    val id: Long? = null,
+    val name: String? = null,
+    val overview: String? = null,
+    @SerialName("episode_number") val episodeNumber: Int? = null,
+    @SerialName("season_number") val seasonNumber: Int? = null,
+    @SerialName("still_path") val stillPath: String? = null,
+    @SerialName("air_date") val airDate: String? = null,
+    @SerialName("vote_average") val voteAverage: Double? = null,
+)
+
+@Serializable
+data class TmdbSeasonDetail(
+    val id: Long? = null,
+    val name: String? = null,
+    val overview: String? = null,
+    @SerialName("season_number") val seasonNumber: Int? = null,
+    @SerialName("poster_path") val posterPath: String? = null,
+    val episodes: List<TmdbEpisode> = emptyList(),
 )

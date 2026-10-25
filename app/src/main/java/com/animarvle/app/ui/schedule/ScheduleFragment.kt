@@ -43,7 +43,7 @@ class ScheduleFragment : Fragment() {
         onOpen = { item ->
             val isMovie = item.format.equals("Movie", ignoreCase = true)
             findNavController().navigate(
-                R.id.detailFragment,
+                R.id.detailsFragment,
                 bundleOf(
                     "mediaId" to item.mediaId,
                     "mediaType" to if (isMovie) "movie" else "tv",
@@ -89,8 +89,12 @@ class ScheduleFragment : Fragment() {
         binding.list.layoutManager = LinearLayoutManager(requireContext())
         binding.list.adapter = adapter
         binding.searchButton.setOnClickListener { findNavController().navigate(R.id.searchFragment) }
-        binding.swipe.setColorSchemeColors(com.animarvle.app.ui.theme.AppTheme.accent(requireContext()))
-        binding.swipe.setOnRefreshListener { viewModel.load(viewModel.state.value.dayOffset) }
+        binding.swipe.setColorSchemeColors(android.graphics.Color.TRANSPARENT)
+        binding.swipe.setProgressBackgroundColorSchemeColor(android.graphics.Color.TRANSPARENT)
+        binding.swipe.setOnRefreshListener {
+            binding.reloadIndicator.isVisible = true
+            viewModel.load(viewModel.state.value.dayOffset)
+        }
         binding.retryButton.setOnClickListener { viewModel.load(viewModel.state.value.dayOffset) }
 
         binding.tabAnime.setOnClickListener {
@@ -116,7 +120,9 @@ class ScheduleFragment : Fragment() {
     }
 
     private fun render(state: ScheduleState) {
-        binding.swipe.isRefreshing = state.loading && state.items.isNotEmpty()
+        val isReloading = state.loading && state.items.isNotEmpty()
+        binding.swipe.isRefreshing = isReloading
+        binding.reloadIndicator.isVisible = isReloading
         renderDayStrip(state.dayOffset)
         adapter.submit(state.items, isToday = state.dayOffset == 0)
 
@@ -124,12 +130,12 @@ class ScheduleFragment : Fragment() {
         binding.tabAnime.setBackgroundResource(
             if (isAnime) R.drawable.bg_display_mode_btn_selected else R.drawable.bg_display_mode_btn_unselected
         )
-        binding.tabAnime.setTextColor(if (isAnime) Color.WHITE else Color.parseColor("#8E92A0"))
+        binding.tabAnime.setTextColor(if (isAnime) Color.BLACK else Color.parseColor("#8E92A0"))
 
         binding.tabMoviesTv.setBackgroundResource(
             if (!isAnime) R.drawable.bg_display_mode_btn_selected else R.drawable.bg_display_mode_btn_unselected
         )
-        binding.tabMoviesTv.setTextColor(if (!isAnime) Color.WHITE else Color.parseColor("#8E92A0"))
+        binding.tabMoviesTv.setTextColor(if (!isAnime) Color.BLACK else Color.parseColor("#8E92A0"))
 
         if (state.totalCount != null) {
             val cal = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, state.dayOffset) }
@@ -216,8 +222,8 @@ class ScheduleFragment : Fragment() {
                 if (isSelected) R.drawable.bg_day_pill_selected else R.drawable.bg_day_pill,
             )
             if (isSelected) {
-                pill.dayName.setTextColor(Color.WHITE)
-                pill.dayNumber.setTextColor(Color.WHITE)
+                pill.dayName.setTextColor(Color.BLACK)
+                pill.dayNumber.setTextColor(Color.BLACK)
             } else {
                 pill.dayName.setTextColor(Color.parseColor("#8E92A0"))
                 pill.dayNumber.setTextColor(Color.WHITE)

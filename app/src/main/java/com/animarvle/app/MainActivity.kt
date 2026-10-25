@@ -16,6 +16,11 @@ import android.widget.TextView
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import com.animarvle.app.databinding.ActivityMainBinding
 import com.animarvle.app.ui.theme.AppTheme
+import androidx.lifecycle.lifecycleScope
+import com.animarvle.app.data.updater.AppUpdateRepository
+import com.animarvle.app.ui.updater.UpdateBottomSheet
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
 
@@ -44,6 +49,17 @@ class MainActivity : AppCompatActivity() {
                 height = bottom
             }
             insets
+        }
+
+        // Borderless frosted-glass blur on Bottom Navigation Container matching AniVortex
+        binding.root.viewTreeObserver.addOnPreDrawListener {
+            if (binding.bottomNavContainer.isVisible) {
+                com.animarvle.app.ui.player.VortexBlurHelper.applyBottomNavBlur(
+                    sourceView = binding.navHost,
+                    bottomNavContainer = binding.bottomNavContainer
+                )
+            }
+            true
         }
 
         val navHost = supportFragmentManager
@@ -84,13 +100,24 @@ class MainActivity : AppCompatActivity() {
             val isTopLevel = destination.id in topLevelDestinations
             binding.bottomNavContainer.isVisible = isTopLevel
 
-            val activeColor = Color.WHITE
-            val inactiveColor = Color.parseColor("#8E8E93")
+            // Enforce portrait mode across entire app; PlayerFragment is the sole exception
+            if (destination.id != R.id.playerFragment) {
+                requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            }
+
+            val activeIconColor = Color.WHITE
+            val inactiveIconColor = Color.parseColor("#D9FFFFFF")
+            val activeTextColor = Color.WHITE
+            val inactiveTextColor = Color.parseColor("#E6FFFFFF")
+
             navTabs.forEach { tab ->
                 val isSelected = destination.id == tab.destId
-                tab.icon.imageTintList = ColorStateList.valueOf(if (isSelected) activeColor else inactiveColor)
-                tab.label.setTextColor(if (isSelected) activeColor else inactiveColor)
-                tab.label.setTypeface(null, if (isSelected) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
+                tab.icon.imageTintList = ColorStateList.valueOf(if (isSelected) activeIconColor else inactiveIconColor)
+                tab.label.setTextColor(if (isSelected) activeTextColor else inactiveTextColor)
+                tab.label.setTypeface(
+                    null,
+                    if (isSelected) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL
+                )
                 tab.indicator.visibility = if (isSelected) View.VISIBLE else View.INVISIBLE
             }
         }
@@ -104,7 +131,7 @@ class MainActivity : AppCompatActivity() {
                     putString("mediaType", targetMediaType)
                 }
             }
-            navHost.navController.navigate(R.id.detailFragment, args)
+            navHost.navController.navigate(R.id.detailsFragment, args)
         }
 
         if (intent?.getStringExtra("navigateTo") == "downloadFragment") {
@@ -127,6 +154,9 @@ class MainActivity : AppCompatActivity() {
 
         if (savedInstanceState == null) {
             runSplashAnimation()
+            if (AppUpdateRepository.isCheckOnLaunchEnabled(this)) {
+                checkUpdatesOnLaunch()
+            }
         }
     }
 
@@ -184,5 +214,29 @@ class MainActivity : AppCompatActivity() {
                 }, 1100L)
             }
             .start()
+    }
+
+    private fun checkUpdatesOnLaunch() {
+        lifecycleScope.launch {
+            // Delay until splash animation completes so user sees the reminder cleanly on top of loaded UI
+            delay(1800L)
+            if (isFinishing || isDestroyed) return@launch
+
+            val result = AppUpdateRepository.checkForUpdate(this@MainActivity)
+            if (isFinishing || isDestroyed) return@launch
+
+            if (result.isSuccess) {
+                val info = result.getOrNull()
+                if (info != null && info.hasUpdate) {
+                    val isSkipped = AppUpdateRepository.isVersionSkipped(this@MainActivity, info.versionCode)
+                    if (!isSkipped && !supportFragmentManager.isStateSaved) {
+                        UpdateBottomSheet.newInstance(info).show(
+                            supportFragmentManager,
+                            UpdateBottomSheet.TAG
+                        )
+                    }
+                }
+            }
+        }
     }
 }

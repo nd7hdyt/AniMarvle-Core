@@ -1,99 +1,131 @@
 <?xml version="1.0" encoding="utf-8"?>
-<com.google.android.material.card.MaterialCardView
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_margin="6dp"
-    app:cardBackgroundColor="@color/surface"
-    app:cardCornerRadius="14dp"
-    app:cardElevation="0dp"
-    app:strokeWidth="0dp">
+    android:layout_marginHorizontal="5dp"
+    android:layout_marginBottom="16dp"
+    android:orientation="vertical">
 
+    <!-- Poster Container (2:3 Aspect Ratio with 12dp Rounded Corners) -->
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <com.google.android.material.imageview.ShapeableImageView
+            android:id="@+id/posterImage"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:scaleType="centerCrop"
+            app:layout_constraintDimensionRatio="H,2:2.95"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:shapeAppearanceOverlay="@style/ShapeAppearance.PosterCorner12"
+            tools:src="@tools:sample/backgrounds/scenic" />
+
+        <!-- Top-Left Circular Check Button (Mark Completed) -->
+        <FrameLayout
+            android:id="@+id/btnMarkComplete"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:layout_marginStart="6dp"
+            android:layout_marginTop="6dp"
+            android:background="@drawable/bg_player_lock_circle"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent">
+
+            <ImageView
+                android:id="@+id/iconMarkComplete"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:layout_gravity="center"
+                android:src="@drawable/ic_check"
+                app:tint="#C5E1A5" />
+        </FrameLayout>
+
+        <!-- Top-Right Circular Remove 'X' Button -->
+        <FrameLayout
+            android:id="@+id/btnRemoveItem"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:layout_marginTop="6dp"
+            android:layout_marginEnd="6dp"
+            android:background="@drawable/bg_player_lock_circle"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent">
+
+            <ImageView
+                android:layout_width="15dp"
+                android:layout_height="15dp"
+                android:layout_gravity="center"
+                android:src="@drawable/ic_close"
+                app:tint="#FFFFFF" />
+        </FrameLayout>
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <!-- Title Below Poster (13.5sp Bold White) -->
+    <TextView
+        android:id="@+id/itemTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="7dp"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="#FFFFFF"
+        android:textSize="13.5sp"
+        android:textStyle="bold"
+        tools:text="Pleasure" />
+
+    <!-- Metadata Row: "Movie • 2021" on Left + Gold Star "★ 6.3" on Right -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical">
+        android:layout_marginTop="2dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
 
-        <FrameLayout
-            android:layout_width="match_parent"
-            android:layout_height="210dp">
-
-            <ImageView
-                android:id="@+id/poster"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:contentDescription="@null"
-                android:scaleType="centerCrop" />
-
-            <!-- Status Pill badge top-start -->
-            <TextView
-                android:id="@+id/statusBadge"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="top|start"
-                android:layout_margin="8dp"
-                android:background="@drawable/bg_badge_accent"
-                android:paddingHorizontal="8dp"
-                android:paddingVertical="3dp"
-                android:textColor="#FFFFFF"
-                android:textSize="11sp"
-                android:textStyle="bold" />
-
-            <!-- Score badge top-end -->
-            <TextView
-                android:id="@+id/scoreBadge"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="top|end"
-                android:layout_margin="8dp"
-                android:background="@drawable/bg_badge_dark"
-                android:paddingHorizontal="7dp"
-                android:paddingVertical="3dp"
-                android:textColor="#FFFFFF"
-                android:textSize="11sp"
-                android:textStyle="bold"
-                android:visibility="gone" />
-
-            <!-- Progress bar overlay at bottom of poster -->
-            <ProgressBar
-                android:id="@+id/progressBar"
-                style="@style/Widget.AppCompat.ProgressBar.Horizontal"
-                android:layout_width="match_parent"
-                android:layout_height="3dp"
-                android:layout_gravity="bottom"
-                android:progressDrawable="@drawable/bg_progress_horizontal"
-                android:visibility="gone" />
-
-        </FrameLayout>
-
+        <!-- Type • Year -->
         <TextView
-            android:id="@+id/title"
-            android:layout_width="match_parent"
+            android:id="@+id/itemSubtitle"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:ellipsize="end"
-            android:lineSpacingExtra="1dp"
-            android:maxLines="2"
-            android:paddingHorizontal="10dp"
-            android:paddingTop="10dp"
-            android:paddingBottom="2dp"
-            android:textColor="#FFFFFF"
-            android:textSize="13sp"
-            android:textStyle="bold" />
-
-        <!-- Watched / total progress text, e.g. "Episodes 0 / 12" -->
-        <TextView
-            android:id="@+id/progressText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_weight="1"
             android:ellipsize="end"
             android:maxLines="1"
-            android:paddingHorizontal="10dp"
-            android:paddingBottom="10dp"
-            android:textColor="#8E92A0"
-            android:textSize="12sp"
-            android:visibility="gone" />
+            android:textColor="#8E8E93"
+            android:textSize="11.5sp"
+            tools:text="Movie • 2021" />
+
+        <!-- Gold Star Icon + Score -->
+        <LinearLayout
+            android:id="@+id/ratingContainer"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="★"
+                android:textColor="#E5A00D"
+                android:textSize="11.5sp" />
+
+            <TextView
+                android:id="@+id/itemRating"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="3dp"
+                android:textColor="#8E8E93"
+                android:textSize="11.5sp"
+                android:textStyle="bold"
+                tools:text="6.3" />
+        </LinearLayout>
 
     </LinearLayout>
 
-</com.google.android.material.card.MaterialCardView>
+</LinearLayout>

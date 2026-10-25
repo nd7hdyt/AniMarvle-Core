@@ -60,11 +60,9 @@
         android:paddingTop="8dp"
         android:paddingBottom="16dp">
 
-        <ProgressBar
+        <com.animarvle.app.ui.player.VortexMorphLoadingView
             android:layout_width="24dp"
-            android:layout_height="24dp"
-            android:indeterminate="true"
-            android:indeterminateTint="?attr/colorPrimary" />
+            android:layout_height="24dp" />
 
         <TextView
             android:id="@+id/statusText"

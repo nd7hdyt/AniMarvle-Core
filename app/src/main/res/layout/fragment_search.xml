@@ -4,7 +4,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#0D1017">
+    android:background="@color/bg">
 
     <!-- Status bar spacer dynamically set from insets -->
     <View
@@ -107,7 +107,7 @@
             android:layout_marginStart="16dp"
             android:contentDescription="@null"
             android:src="@drawable/ic_search"
-            app:tint="#8E92A2" />
+            app:tint="#8E8E93" />
 
         <EditText
             android:id="@+id/searchField"
@@ -123,7 +123,7 @@
             android:inputType="text"
             android:maxLines="1"
             android:textColor="#FFFFFF"
-            android:textColorHint="#6C7282"
+            android:textColorHint="#8E8E93"
             android:textCursorDrawable="@drawable/bg_cursor_cyan"
             android:textSize="15sp" />
 
@@ -137,11 +137,11 @@
             android:padding="7dp"
             android:src="@drawable/ic_close"
             android:visibility="gone"
-            app:tint="#8E92A2" />
+            app:tint="#8E8E93" />
 
     </LinearLayout>
 
-    <!-- Main Glass Card Container (Floating Glass Card wrapping content up to Mobland / last title) -->
+    <!-- Main Card Container (Obsidian card matching Settings/Profile screen) -->
     <com.google.android.material.card.MaterialCardView
         android:id="@+id/glassCard"
         android:layout_width="match_parent"
@@ -149,8 +149,8 @@
         android:layout_marginHorizontal="16dp"
         android:layout_marginTop="12dp"
         android:layout_marginBottom="24dp"
-        app:cardBackgroundColor="#F0151822"
-        app:cardCornerRadius="22dp"
+        app:cardBackgroundColor="#181818"
+        app:cardCornerRadius="16dp"
         app:cardElevation="0dp"
         app:cardPreventCornerOverlap="false"
         app:layout_constrainedHeight="true"
@@ -159,8 +159,7 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/searchBarContainer"
         app:layout_constraintVertical_bias="0.0"
-        app:strokeColor="#282D3D"
-        app:strokeWidth="1dp">
+        app:strokeWidth="0dp">
 
         <FrameLayout
             android:layout_width="match_parent"
@@ -213,7 +212,7 @@
                                 android:fontFamily="sans-serif-medium"
                                 android:padding="4dp"
                                 android:text="Clear"
-                                android:textColor="#8E92A2"
+                                android:textColor="#8E8E93"
                                 android:textSize="13sp" />
 
                         </LinearLayout>
@@ -231,7 +230,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="1dp"
                             android:layout_marginVertical="12dp"
-                            android:background="#202432" />
+                            android:background="#262626" />
 
                     </LinearLayout>
 
@@ -409,7 +408,7 @@
                     android:layout_height="64dp"
                     android:contentDescription="@null"
                     android:src="@drawable/ic_search"
-                    app:tint="#4A5164" />
+                    app:tint="#555555" />
 
                 <TextView
                     android:id="@+id/emptyTitle"
@@ -429,7 +428,7 @@
                     android:fontFamily="sans-serif"
                     android:gravity="center"
                     android:text="@string/search_empty_body"
-                    android:textColor="#8E92A2"
+                    android:textColor="#8E8E93"
                     android:textSize="13sp" />
 
                 <com.google.android.material.button.MaterialButton
@@ -439,8 +438,9 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="16dp"
                     android:text="@string/action_retry"
+                    android:textColor="#000000"
                     android:visibility="gone"
-                    app:backgroundTint="#00D4B2"
+                    app:backgroundTint="#FFFFFF"
                     app:cornerRadius="16dp" />
 
             </LinearLayout>

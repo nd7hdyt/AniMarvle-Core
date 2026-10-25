@@ -37,7 +37,6 @@ data class ChoiceRow(
 ) {
     val label: String get() = title
 
-    // Backwards-compatible constructor for ChoiceRow(label, selected, enabled)
     constructor(
         label: String,
         selected: Boolean = false,
@@ -58,22 +57,21 @@ data class MenuPage(
 )
 
 class ChoiceDialog private constructor(
-    context: Context,
+    private val context: Context,
     private val binding: DialogChoiceBinding,
     val dialog: Dialog
 ) {
     private val pageStack = ArrayDeque<MenuPage>()
     private val displayMetrics = context.resources.displayMetrics
+    private val isLandscape = context.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
     inner class Controller {
-        /** Swap to Speed / Quality / Audio inside the exact same Dialog window */
         fun navigateTo(title: String, rows: List<ChoiceRow>, onPick: (Controller, Int) -> Unit) {
             val page = MenuPage(title, rows, onPick)
             pageStack.addLast(page)
             renderPage(page, animate = true)
         }
 
-        /** Pop back to Playback Settings, or close if already at root */
         fun navigateBack() {
             if (pageStack.size > 1) {
                 pageStack.removeLast()
@@ -90,12 +88,11 @@ class ChoiceDialog private constructor(
 
     init {
         val scrollbar = VortexScrollbarDecoration(context)
-        val itemHeightDp = 52f // Standard single row height in dp
+        val itemHeightDp = 52f
         binding.dialogList.apply {
             layoutManager = LinearLayoutManager(context)
             itemAnimator = null
             overScrollMode = View.OVER_SCROLL_NEVER
-            // Clamp at 3.5 rows so 4th item peeks at the bottom just like AniVortex
             maxHeightPx = (3.5f * itemHeightDp * displayMetrics.density).toInt()
             addItemDecoration(scrollbar)
             addOnItemTouchListener(scrollbar)
@@ -122,7 +119,14 @@ class ChoiceDialog private constructor(
             TransitionManager.beginDelayedTransition(binding.cardRoot, transition)
         }
 
-        binding.dialogTitle.text = page.title
+        if (page.title.isBlank()) {
+            binding.dialogTitle.visibility = View.GONE
+            binding.dialogList.setPadding(0, (8 * displayMetrics.density).toInt(), 0, 0)
+        } else {
+            binding.dialogTitle.visibility = View.VISIBLE
+            binding.dialogTitle.text = page.title
+            binding.dialogList.setPadding(0, 0, 0, 0)
+        }
         binding.dialogList.adapter = RowAdapter(page.rows) { index ->
             page.onPick(controller, index)
         }
@@ -136,11 +140,13 @@ class ChoiceDialog private constructor(
                 binding.dialogList.scrollToPosition(0)
             }
             binding.dialogList.invalidateItemDecorations()
+            binding.cardRoot.post {
+                VortexBlurHelper.applyCardBackdropBlur(context, binding.cardRoot)
+            }
         }
     }
 
     companion object {
-        /** Single-page backwards-compatible call */
         fun show(
             context: Context,
             title: String,
@@ -158,7 +164,6 @@ class ChoiceDialog private constructor(
             )
         }
 
-        /** Multi-page call for Playback Settings -> Speed / Quality / Audio */
         fun showWithSubmenus(
             context: Context,
             initialPage: MenuPage,
@@ -173,32 +178,40 @@ class ChoiceDialog private constructor(
                 ComponentDialog(context, R.style.Theme_Animarvle_FloatingDialog).apply {
                     setContentView(binding.root)
                     setCanceledOnTouchOutside(true)
+                    binding.cardRoot.setBackgroundResource(R.drawable.bg_vortex_glass_card)
                     window?.apply {
-                        // Set rounded card drawable on the Window itself so blur clips to the 26dp corners
                         setBackgroundDrawableResource(R.drawable.bg_vortex_glass_card)
                         setGravity(Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL)
                         setWindowAnimations(R.style.Animation_Animarvle_FloatingCard)
 
-                        // Enable localized frosted-glass blur behind the card only (Android 12+)
-                        addFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                            attributes.blurBehindRadius = (30 * density).toInt()
+                            // Blurs strictly inside the windowBackground (bg_vortex_glass_card) bounds
+                            setBackgroundBlurRadius((55 * density).toInt())
                         }
-                        setDimAmount(0.15f)
+                        setDimAmount(0.10f)
 
                         setLayout(
                             (displayMetrics.widthPixels * 0.70f).toInt(),
                             WindowManager.LayoutParams.WRAP_CONTENT
                         )
-                        // Float 12dp above the bottom edge to show all 4 rounded corners
                         attributes = attributes.apply {
-                            y = (12 * density).toInt()
+                            y = (6 * density).toInt()
+                        }
+                    }
+                    setOnShowListener {
+                        binding.cardRoot.post {
+                            VortexBlurHelper.applyCardBackdropBlur(context, binding.cardRoot)
                         }
                     }
                 }
             } else {
                 BottomSheetDialog(context).apply {
                     window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+                    window?.addFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        window?.setBackgroundBlurRadius((55 * density).toInt())
+                    }
+                    window?.setDimAmount(0.12f)
                     binding.cardRoot.setBackgroundResource(R.drawable.bg_vortex_glass_card)
                     setContentView(binding.root)
                     setOnShowListener {
@@ -209,6 +222,9 @@ class ChoiceDialog private constructor(
                         BottomSheetBehavior.from(bottomSheet).apply {
                             state = BottomSheetBehavior.STATE_EXPANDED
                             skipCollapsed = true
+                        }
+                        binding.cardRoot.post {
+                            VortexBlurHelper.applyCardBackdropBlur(context, binding.cardRoot)
                         }
                     }
                 }
@@ -244,7 +260,6 @@ private class RowAdapter(
         holder.binding.rowLabel.text = row.title
 
         if (row.iconRes != null) {
-            // Root menu row with leading icon, optional subtitle value, and chevron
             holder.binding.rowIcon.visibility = View.VISIBLE
             holder.binding.rowIcon.setImageResource(row.iconRes)
             holder.binding.rowRadio.visibility = View.GONE
@@ -262,7 +277,6 @@ private class RowAdapter(
             holder.binding.rowLabel.setTypeface(null, Typeface.NORMAL)
             holder.binding.rowLabel.alpha = if (row.enabled) 1f else 0.4f
         } else {
-            // Submenu row with radio button
             holder.binding.rowIcon.visibility = View.GONE
             holder.binding.rowValue.visibility = View.GONE
             holder.binding.rowChevron.visibility = View.GONE

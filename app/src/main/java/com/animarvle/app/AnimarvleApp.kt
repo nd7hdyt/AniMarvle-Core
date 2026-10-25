@@ -161,7 +161,22 @@ private suspend fun matchTitle(
 class AppContainer(
     private val appContext: android.content.Context,
 ) {
-    val metadata: MetadataRepository by lazy { MetadataRepository() }
+    val metadata: MetadataRepository by lazy {
+        val prefs = appContext.getSharedPreferences(
+            com.animarvle.app.ui.profile.PlayerSettingsFragment.PREFS_NAME,
+            android.content.Context.MODE_PRIVATE,
+        )
+        MetadataRepository(
+            api = com.animarvle.app.data.anilist.AniListApi(
+                isAdultProvider = {
+                    prefs.getBoolean(
+                        com.animarvle.app.ui.profile.PlayerSettingsFragment.KEY_ADULT_MODE,
+                        false,
+                    )
+                }
+            )
+        )
+    }
     val sourceBindings: com.animarvle.app.data.binding.AnimeSourceBindingRepository by lazy {
         com.animarvle.app.data.binding.AnimeSourceBindingRepository(appContext)
     }

@@ -211,12 +211,14 @@
                         android:insetTop="0dp"
                         android:insetBottom="0dp"
                         android:text="@string/action_play"
+                        android:textColor="#000000"
                         android:textSize="15sp"
                         android:textStyle="bold"
                         app:cornerRadius="28dp"
                         app:icon="@drawable/ic_play_filled"
                         app:iconGravity="textStart"
-                        app:iconPadding="8dp" />
+                        app:iconPadding="8dp"
+                        app:iconTint="#000000" />
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/downloadButton"

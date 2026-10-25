@@ -137,6 +137,16 @@ class AccountRepository(context: Context) {
         return account
     }
 
+    fun updateProfile(newUsername: String, newAvatarUrl: String?): Boolean {
+        val current = currentAccount ?: return false
+        val updated = current.copy(
+            username = newUsername.trim().ifEmpty { current.username },
+            avatarUrl = if (!newAvatarUrl.isNullOrBlank()) newAvatarUrl else current.avatarUrl,
+        )
+        saveAccount(updated)
+        return true
+    }
+
     fun signOut(context: Context? = null) {
         saveAccount(null)
         if (context != null) {

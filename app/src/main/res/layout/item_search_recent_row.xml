@@ -15,7 +15,7 @@
         android:layout_height="18dp"
         android:contentDescription="@null"
         android:src="@drawable/ic_history"
-        app:tint="#8E92A2" />
+        app:tint="#8E8E93" />
 
     <TextView
         android:id="@+id/recentQueryText"
@@ -39,6 +39,6 @@
         android:contentDescription="Remove"
         android:padding="6dp"
         android:src="@drawable/ic_close"
-        app:tint="#8E92A2" />
+        app:tint="#8E8E93" />
 
 </LinearLayout>

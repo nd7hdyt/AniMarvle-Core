@@ -41,6 +41,20 @@
     </fragment>
 
     <fragment
+        android:id="@+id/detailsFragment"
+        android:name="com.animarvle.app.ui.details.DetailsFragment"
+        android:label="Details">
+        <argument
+            android:name="mediaId"
+            android:defaultValue="-1L"
+            app:argType="long" />
+        <argument
+            android:name="mediaType"
+            android:defaultValue="ANIME"
+            app:argType="string" />
+    </fragment>
+
+    <fragment
         android:id="@+id/searchFragment"
         android:name="com.animarvle.app.ui.search.SearchFragment"
         android:label="@string/search_top_searches" />
@@ -128,6 +142,12 @@
         android:name="com.animarvle.app.ui.profile.AboutFragment"
         android:label="@string/settings_about" />
 
+    <!-- Edit Profile Screen -->
+    <fragment
+        android:id="@+id/editProfileFragment"
+        android:name="com.animarvle.app.ui.profile.EditProfileFragment"
+        android:label="@string/profile_edit_title" />
+
     <!-- Onboarding & Authentication Flow -->
     <fragment
         android:id="@+id/welcomeFragment"
@@ -148,4 +168,14 @@
         android:id="@+id/signUpFragment"
         android:name="com.animarvle.app.ui.auth.SignUpFragment"
         android:label="Sign Up" />
+
+    <fragment
+        android:id="@+id/providerCatalogFragment"
+        android:name="com.animarvle.app.ui.provider.ProviderCatalogFragment"
+        android:label="Provider Catalog">
+        <argument
+            android:name="providerName"
+            android:defaultValue="Catalog"
+            app:argType="string" />
+    </fragment>
 </navigation>

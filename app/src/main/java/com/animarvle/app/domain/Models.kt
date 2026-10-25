@@ -31,6 +31,7 @@ data class MediaUi(
     val nextAiringEpisode: Int?,
     val nextAiringAtEpochSec: Long?,
     val seasons: List<SeasonUi> = emptyList(),
+    val isTmdb: Boolean = false,
 )
 
 data class SeasonUi(
@@ -39,7 +40,9 @@ data class SeasonUi(
     val posterUrl: String?,
     val isCurrent: Boolean = false,
     val seasonNumber: Int? = null,
-)
+    val episodeCount: Int? = null,
+    val startEpisodeNumber: Int? = null,
+) : java.io.Serializable
 
 data class ScheduleItem(
     val mediaId: Long,
@@ -49,4 +52,11 @@ data class ScheduleItem(
     val airingAtEpochSec: Long,
     val format: String?,
     val totalEpisodes: Int?,
+)
+
+data class EpisodeMetadata(
+    val episodeNumber: Int,
+    val title: String? = null,
+    val overview: String? = null,
+    val thumbnailUrl: String? = null,
 )

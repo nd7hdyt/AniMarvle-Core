@@ -126,7 +126,7 @@ class BatchDownloadBottomSheet : BottomSheetDialogFragment() {
 
             if (isSelected) {
                 holder.binding.epLabel.setBackgroundResource(R.drawable.bg_ep_tile_selected)
-                holder.binding.epLabel.setTextColor(android.graphics.Color.WHITE)
+                holder.binding.epLabel.setTextColor(android.graphics.Color.BLACK)
             } else {
                 holder.binding.epLabel.setBackgroundResource(R.drawable.bg_ep_tile)
                 holder.binding.epLabel.setTextColor(

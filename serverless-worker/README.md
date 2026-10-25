@@ -1,9 +1,26 @@
 # Animarvle Cloudflare Worker (Turbo Streaming Relay)
 
-This is the serverless edge backend that powers **AniVortex-style instant HLS streaming** in Animarvle.
+This is the serverless edge backend that powers **AniVortex-style instant HLS & Multi-Audio streaming** in Animarvle.
 
 ### 💰 Cost: $0.00 / Month (Cloudflare Free Tier)
 Cloudflare gives you **100,000 requests per day for free** forever. You will never need to pay for hosting this relay.
+
+---
+
+### 🌟 Key Features & Architecture
+
+1. **Phased Multi-Audio Resolver Pipeline:**
+   - **Tier 1 (Fast Primaries):** VidLink, Videasy, MovieBox (resolves English, Multi-Audio, and primary HLS streams in <800ms).
+   - **Tier 2 (Regional Multi-Audio):** MoviesMod (Hindi, Tamil, Telugu), PelisPlus (Spanish/Castellano), AnimeHLS (Japanese Sub/Dub), Donghua (Chinese Sub/Dub).
+   - **Subrequest Budgeting:** Enforces strict per-resolver timeouts and limits to stay strictly below Cloudflare Free Tier's 50-subrequest ceiling, preventing HTTP 500 crashes.
+
+2. **Google Drive & Direct Stream Byte-Range Proxying (`/proxy/stream`):**
+   - Automatically resolves multi-hop form redirects and token decryption (e.g. DriveSeed, FastDL).
+   - Proxies Google Drive direct streams with full HTTP 206 partial content slicing (`Range` headers), enabling seamless ExoPlayer seeking without hitting drive quota walls.
+   - Sniffs and preserves Matroska / EBML (`.mkv`) headers for flawless high-definition multi-track audio playback.
+
+3. **Turnstile & Bot Wall Filtering:**
+   - Detects and drops Cloudflare Turnstile bot-challenged domains (e.g. `embed69.org`) before passing streams to the client, preventing dead server entries.
 
 ---
 
@@ -37,4 +54,4 @@ Cloudflare gives you **100,000 requests per day for free** forever. You will nev
 1. Open **Animarvle** on your device.
 2. Go to **Profile** ➔ **Player Settings**.
 3. Under **Streaming Server**, tap **Cloudflare Worker URL** and paste your URL.
-4. Enjoy instant, buffer-free adaptive HLS playback with in-player quality switching!
+4. Enjoy instant, buffer-free adaptive HLS and multi-language audio playback!

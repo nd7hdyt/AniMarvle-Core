@@ -2,48 +2,53 @@ package com.animarvle.app.ui.home
 
 import android.animation.ObjectAnimator
 import android.animation.ValueAnimator
+import android.annotation.SuppressLint
+import android.graphics.Color
 import android.os.Bundle
+import android.transition.ChangeBounds
+import android.transition.TransitionManager
 import android.view.LayoutInflater
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.animation.AccelerateDecelerateInterpolator
-import android.widget.Toast
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
+import androidx.interpolator.view.animation.FastOutSlowInInterpolator
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.LinearLayoutManager
-import coil.load
+import androidx.recyclerview.widget.RecyclerView
 import com.animarvle.app.AnimarvleApp
 import com.animarvle.app.R
-import com.animarvle.app.databinding.FragmentHomeBinding
-import com.animarvle.app.databinding.ViewRailBinding
-import com.animarvle.app.domain.MediaUi
 import com.animarvle.app.data.AppMediaMode
 import com.animarvle.app.data.MediaTypeManager
+import com.animarvle.app.databinding.FragmentHomeBinding
 import com.animarvle.app.ui.mylist.AddToMyListBottomSheet
-import com.animarvle.app.ui.theme.AppTheme
+import com.animarvle.app.ui.player.VortexBlurHelper
 import kotlinx.coroutines.launch
 
 class HomeFragment : Fragment() {
 
     private var _binding: FragmentHomeBinding? = null
     private val binding get() = _binding!!
+
     private lateinit var viewModel: HomeViewModel
-    private val posterAdapters = mutableListOf<PosterAdapter>()
-    private var hasContent = false
+    private lateinit var feedAdapter: HomeFeedAdapter
+
+    private var isAnimeSelected = true
+    private var totalScrollY = 0
+    private var pullStartY = 0f
+    private var isPulling = false
     private var pulseAnimator: ObjectAnimator? = null
 
-
     override fun onCreateView(
-        inflater: LayoutInflater,
-        container: ViewGroup?,
-        savedInstanceState: Bundle?,
+        inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?
     ): View {
         _binding = FragmentHomeBinding.inflate(inflater, container, false)
         return binding.root
@@ -52,14 +57,17 @@ class HomeFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        val container = (requireActivity().application as AnimarvleApp).container
+        val app = requireActivity().application as AnimarvleApp
         val mediaTypeManager = MediaTypeManager.getInstance(requireContext())
         viewModel = ViewModelProvider(
             this,
-            HomeViewModel.Factory(container.metadata, container.history, mediaTypeManager),
+            HomeViewModel.Factory(app.container.metadata, app.container.history, mediaTypeManager)
         )[HomeViewModel::class.java]
 
-        ViewCompat.setOnApplyWindowInsetsListener(binding.homeRoot) { _, insets ->
+        isAnimeSelected = viewModel.currentDomain.value == HomeDomain.ANIME
+        syncCapsuleStyle(animate = false)
+
+        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, insets ->
             val top = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
             binding.statusBarSpacer.layoutParams = binding.statusBarSpacer.layoutParams.apply {
                 height = top
@@ -67,166 +75,295 @@ class HomeFragment : Fragment() {
             insets
         }
 
-        binding.swipe.setColorSchemeColors(AppTheme.accent(requireContext()))
-        binding.swipe.setOnRefreshListener { viewModel.load() }
-        binding.stateRetry.setOnClickListener { viewModel.load() }
-        binding.mediaToggleButton.setOnClickListener {
-            hasContent = false
-            viewModel.toggleMode()
-        }
-        binding.searchButton.setOnClickListener {
+        setupScrollAndFrostedHeader()
+        setupPullToReloadWithMorph()
+        setupCapsuleToggle()
+
+        binding.btnSearch.setOnClickListener {
             findNavController().navigate(R.id.searchFragment)
         }
 
-        // Dynamic header background on scroll: seamlessly transparent over hero, dark solid when scrolled into rails
-        binding.homeScroll.setOnScrollChangeListener { _, _, scrollY, _, _ ->
-            val maxScroll = dp(120).toFloat()
-            val fraction = (scrollY.toFloat() / maxScroll).coerceIn(0f, 1f)
-            val alphaInt = (fraction * 255).toInt()
-            val bgColor = android.graphics.Color.argb(alphaInt, 15, 15, 20)
-            binding.headerContainer.setBackgroundColor(bgColor)
+        // Tapping logo also scrolls to top and reloads
+        binding.brandLogo.setOnClickListener {
+            binding.feedRecyclerView.smoothScrollToPosition(0)
+            viewModel.refresh()
         }
 
-        val appContainer = (requireActivity().application as AnimarvleApp).container
+        feedAdapter = HomeFeedAdapter(
+            onMediaClick = { media -> openDetails(media) },
+            onResumeClick = { media -> resumePlayback(media) },
+            onPlayClick = { media -> openDetails(media) },
+            onMyListClick = { media -> openAddToMyList(media) },
+            onSeeAllClick = { category -> openCategoryInSearch(category) },
+            onProviderClick = { provider -> openProviderCatalog(provider) },
+        )
+
+        binding.feedRecyclerView.layoutManager = LinearLayoutManager(requireContext())
+        binding.feedRecyclerView.adapter = feedAdapter
+        startSkeletonAnimation()
+
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch {
-                    viewModel.state.collect(::render)
+                    viewModel.feedState.collect { rails ->
+                        feedAdapter.submitList(rails)
+                        if (rails.isNotEmpty()) {
+                            stopSkeletonAnimation()
+                        }
+                    }
                 }
                 launch {
+                    viewModel.isLoading.collect { loading ->
+                        if (loading && feedAdapter.currentList.isEmpty()) {
+                            startSkeletonAnimation()
+                        } else {
+                            binding.morphLoaderContainer.isVisible = loading
+                            if (loading) {
+                                binding.morphLoaderContainer.translationY = 0f
+                                binding.morphLoaderContainer.alpha = 1f
+                            }
+                        }
+                    }
+                }
+                launch {
+                    val appContainer = (requireActivity().application as com.animarvle.app.AnimarvleApp).container
                     appContainer.myList.itemsFlow.collect { items ->
                         val savedIds = items.map { it.mediaId }.toSet()
-                        posterAdapters.forEach { it.setSavedIds(savedIds) }
-                        updateHeroMyListButton(items)
+                        feedAdapter.setSavedIds(savedIds)
                     }
                 }
             }
         }
     }
 
-    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+    /**
+     * Pull-down gesture at the top of feedRecyclerView reveals VortexMorphLoadingView
+     * and triggers viewModel.refresh().
+     */
+    @SuppressLint("ClickableViewAccessibility")
+    private fun setupPullToReloadWithMorph() {
+        val triggerThresholdPx = 110f * resources.displayMetrics.density
 
-    private fun render(state: HomeState) {
-        val mode = (state as? HomeState.Content)?.mode ?: viewModel.currentMode
-        binding.mediaToggleButton.setImageResource(
-            if (mode == AppMediaMode.ANIME) R.drawable.ic_mode_movie else R.drawable.ic_mode_anime
-        )
-        binding.mediaToggleButton.contentDescription = getString(
-            if (mode == AppMediaMode.ANIME) R.string.tab_movies_tv else R.string.tab_anime
-        )
-
-        when (state) {
-            is HomeState.Loading -> {
-                binding.offlineContainer.isVisible = false
-                binding.headerContainer.isVisible = true
-                binding.stateBlock.isVisible = false
-                if (!hasContent) {
-                    binding.swipe.isVisible = false
-                    binding.swipe.isRefreshing = false
-                    startSkeletonAnimation()
-                } else {
-                    binding.skeletonContainer.isVisible = false
-                    binding.swipe.isVisible = true
-                    binding.swipe.isRefreshing = true
+        binding.feedRecyclerView.setOnTouchListener { _, event ->
+            if (!binding.feedRecyclerView.canScrollVertically(-1) && !viewModel.isLoading.value) {
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        pullStartY = event.rawY
+                        isPulling = false
+                    }
+                    MotionEvent.ACTION_MOVE -> {
+                        if (pullStartY == 0f) pullStartY = event.rawY
+                        val dy = event.rawY - pullStartY
+                        if (dy > 16f) {
+                            isPulling = true
+                            val drag = (dy * 0.45f).coerceAtMost(triggerThresholdPx)
+                            val progress = (drag / triggerThresholdPx).coerceIn(0f, 1f)
+                            binding.morphLoaderContainer.isVisible = true
+                            binding.morphLoaderContainer.alpha = progress
+                            binding.morphLoaderContainer.translationY = drag * 0.5f
+                        }
+                    }
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        if (isPulling) {
+                            val dy = event.rawY - pullStartY
+                            isPulling = false
+                            pullStartY = 0f
+                            if (dy * 0.45f >= triggerThresholdPx * 0.75f) {
+                                viewModel.refresh()
+                            } else {
+                                binding.morphLoaderContainer.animate()
+                                    .alpha(0f)
+                                    .translationY(0f)
+                                    .setDuration(180L)
+                                    .withEndAction {
+                                        if (!viewModel.isLoading.value) {
+                                            binding.morphLoaderContainer.isVisible = false
+                                        }
+                                    }
+                                    .start()
+                            }
+                        }
+                        pullStartY = 0f
+                    }
                 }
             }
+            false
+        }
+    }
 
-            is HomeState.Error -> {
-                binding.swipe.isRefreshing = false
-                stopSkeletonAnimation()
-                if (!hasContent) {
-                    binding.skeletonContainer.isVisible = false
-                    binding.swipe.isVisible = false
-                    binding.headerContainer.isVisible = false
-                    binding.offlineContainer.isVisible = true
-                    (activity as? com.animarvle.app.MainActivity)?.setBottomNavVisible(false)
+    /**
+     * Interpolates real Frosted-Glass Blur on headerContainer using VortexBlurHelper as the user scrolls.
+     */
+    private fun setupScrollAndFrostedHeader() {
+        val maxScrollPx = (140 * resources.displayMetrics.density).toInt()
 
-                    val rawMsg = state.message.orEmpty()
-                    val isNetworkError = rawMsg.contains("Unable to resolve host", ignoreCase = true) ||
-                        rawMsg.contains("No address", ignoreCase = true) ||
-                        rawMsg.contains("Failed to connect", ignoreCase = true) ||
-                        rawMsg.contains("timeout", ignoreCase = true) ||
-                        rawMsg.contains("hostname", ignoreCase = true) ||
-                        rawMsg.isBlank()
-
-                    binding.offlineTitle.setText(R.string.state_offline_title)
-                    binding.offlineBody.text = if (isNetworkError) {
-                        getString(R.string.state_offline_body)
-                    } else {
-                        rawMsg
-                    }
-
-                    binding.btnOfflineRetry.setOnClickListener {
-                        binding.offlineContainer.isVisible = false
-                        binding.headerContainer.isVisible = true
-                        (activity as? com.animarvle.app.MainActivity)?.setBottomNavVisible(true)
-                        viewModel.load()
-                    }
-                    binding.btnOfflineDownloads.setOnClickListener {
-                        (activity as? com.animarvle.app.MainActivity)?.setBottomNavVisible(true)
-                        (activity as? com.animarvle.app.MainActivity)?.navigateToTab(R.id.downloadFragment)
-                    }
-                    binding.rails.removeAllViews()
-                } else {
-                    Toast.makeText(
-                        requireContext(),
-                        state.message ?: getString(R.string.state_offline_body),
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
-            }
-
-            is HomeState.Content -> {
-                hasContent = true
-                stopSkeletonAnimation()
-                binding.offlineContainer.isVisible = false
-                (activity as? com.animarvle.app.MainActivity)?.setBottomNavVisible(true)
-                binding.headerContainer.isVisible = true
-                binding.skeletonContainer.isVisible = false
-                binding.swipe.isVisible = true
-                binding.swipe.isRefreshing = false
-                binding.stateBlock.isVisible = false
-                binding.hero.isVisible = true
-                val heroMedia = state.trending.firstOrNull()
-                renderHero(heroMedia)
-                renderRails(state.rails, state.continueWatching)
-                binding.heroPlay.setOnClickListener { heroMedia?.let { openDetails(it) } }
-                binding.hero.isClickable = true
-                binding.hero.setOnClickListener { heroMedia?.let { openDetails(it) } }
-                binding.heroMyList.setOnClickListener {
-                    if (heroMedia != null) {
-                        val sheet = AddToMyListBottomSheet.newInstance(
-                            mediaId = heroMedia.id,
-                            title = heroMedia.title,
-                            posterUrl = heroMedia.coverUrl,
-                            format = heroMedia.format,
-                            score = heroMedia.score,
-                            totalEpisodes = heroMedia.episodes,
-                        )
-                        sheet.show(childFragmentManager, AddToMyListBottomSheet.TAG)
-                    }
-                }
+        // Render the curved pre-scroll vignette immediately once laid out
+        binding.headerContainer.post {
+            if (_binding != null) {
+                VortexBlurHelper.applyHeaderScrollBlur(
+                    sourceView = binding.feedRecyclerView,
+                    headerBar = binding.headerContainer,
+                    scrollFraction = (totalScrollY.toFloat() / maxScrollPx).coerceIn(0f, 1f)
+                )
             }
         }
+
+        binding.feedRecyclerView.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+            override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                totalScrollY = (totalScrollY + dy).coerceAtLeast(0)
+                if (!recyclerView.canScrollVertically(-1)) {
+                    totalScrollY = 0
+                }
+
+                val fraction = (totalScrollY.toFloat() / maxScrollPx).coerceIn(0f, 1f)
+                VortexBlurHelper.applyHeaderScrollBlur(
+                    sourceView = binding.feedRecyclerView,
+                    headerBar = binding.headerContainer,
+                    scrollFraction = fraction
+                )
+            }
+        })
+    }
+
+    private fun setupCapsuleToggle() {
+        binding.toggleAnime.setOnClickListener {
+            if (!isAnimeSelected) {
+                isAnimeSelected = true
+                syncCapsuleStyle(animate = true)
+                binding.feedRecyclerView.scrollToPosition(0)
+                totalScrollY = 0
+                VortexBlurHelper.applyHeaderScrollBlur(binding.feedRecyclerView, binding.headerContainer, 0f)
+                startSkeletonAnimation()
+                viewModel.setDomain(HomeDomain.ANIME)
+            }
+        }
+
+        binding.toggleMovie.setOnClickListener {
+            if (isAnimeSelected) {
+                isAnimeSelected = false
+                syncCapsuleStyle(animate = true)
+                binding.feedRecyclerView.scrollToPosition(0)
+                totalScrollY = 0
+                VortexBlurHelper.applyHeaderScrollBlur(binding.feedRecyclerView, binding.headerContainer, 0f)
+                startSkeletonAnimation()
+                viewModel.setDomain(HomeDomain.MOVIE)
+            }
+        }
+    }
+
+    private fun syncCapsuleStyle(animate: Boolean) {
+        if (animate && binding.toggleAnime.parent is ViewGroup) {
+            val transition = ChangeBounds().apply {
+                duration = 200L
+                interpolator = FastOutSlowInInterpolator()
+            }
+            TransitionManager.beginDelayedTransition(binding.toggleAnime.parent as ViewGroup, transition)
+        }
+
+        if (isAnimeSelected) {
+            binding.toggleAnime.setBackgroundResource(R.drawable.bg_capsule_active)
+            binding.toggleAnime.setTextColor(Color.parseColor("#000000"))
+            binding.toggleMovie.setBackgroundResource(android.R.color.transparent)
+            binding.toggleMovie.setTextColor(Color.parseColor("#FFFFFF"))
+        } else {
+            binding.toggleMovie.setBackgroundResource(R.drawable.bg_capsule_active)
+            binding.toggleMovie.setTextColor(Color.parseColor("#000000"))
+            binding.toggleAnime.setBackgroundResource(android.R.color.transparent)
+            binding.toggleAnime.setTextColor(Color.parseColor("#FFFFFF"))
+        }
+    }
+
+    private fun openDetails(media: Media) {
+        val id = media.originalId ?: media.id.toLongOrNull() ?: -1L
+        val isMoviesTv = MediaTypeManager.getInstance(requireContext()).currentMode.value == AppMediaMode.MOVIES_TV
+        val mediaType = media.mediaType ?: if (media.tags.contains("MOVIE")) "MOVIE" else "ANIME"
+        val args = Bundle().apply {
+            putLong("mediaId", id)
+            putString("mediaType", mediaType)
+            putBoolean("preferTmdb", isMoviesTv)
+        }
+        findNavController().navigate(R.id.detailsFragment, args)
+    }
+
+    private fun resumePlayback(item: Media) {
+        val isDonghua = AnimarvleApp.isDonghua(item.title)
+        val effectiveType = if (isDonghua) "ANIME" else (item.mediaType ?: "ANIME")
+        val isMoviesTv = MediaTypeManager.getInstance(requireContext()).currentMode.value == AppMediaMode.MOVIES_TV
+        val isTmdb = isMoviesTv || effectiveType.equals("MOVIE", ignoreCase = true) || effectiveType.equals("TV", ignoreCase = true)
+        val id = item.originalId ?: item.id.toLongOrNull() ?: 0L
+        val args = Bundle().apply {
+            putLong("sourceId", 0L)
+            if (id > 0L) {
+                putLong("mediaId", id)
+            }
+            val url = item.mediaUrl.orEmpty()
+            val isBadDonghuaUrl = isDonghua && !url.contains("anichi", ignoreCase = true)
+            if (!isBadDonghuaUrl && url.isNotBlank()) {
+                putString("mediaUrl", url)
+                putString("animeUrl", url)
+            }
+            putString("mediaTitle", item.title)
+            putString("mediaType", effectiveType)
+            putInt("episodeCount", 0)
+            putInt("episodeNumber", item.episodeNumber ?: 1)
+            putInt("seasonNumber", item.seasonNumber ?: 1)
+            putString("audio", item.audio ?: "SUB")
+            putString("poster", item.posterUrl)
+            putString("animeTitle", item.title)
+            putBoolean("preferTmdb", isTmdb)
+        }
+        findNavController().navigate(R.id.playerFragment, args)
+    }
+
+    private fun openAddToMyList(media: Media) {
+        val id = media.originalId ?: media.id.toLongOrNull() ?: -1L
+        val sheet = AddToMyListBottomSheet.newInstance(
+            mediaId = id,
+            title = media.title,
+            posterUrl = media.posterUrl,
+            format = media.tags.firstOrNull() ?: "ANIME",
+            score = media.score,
+            totalEpisodes = null,
+            year = media.year?.toIntOrNull(),
+        )
+        sheet.show(childFragmentManager, AddToMyListBottomSheet.TAG)
+    }
+
+    private fun openCategoryInSearch(category: String) {
+        val bundle = Bundle().apply {
+            putString("category", category)
+        }
+        findNavController().navigate(R.id.searchFragment, bundle)
+    }
+
+    private fun openProviderCatalog(provider: ProviderLogo) {
+        val bundle = Bundle().apply {
+            putString("providerName", provider.name)
+        }
+        findNavController().navigate(R.id.providerCatalogFragment, bundle)
     }
 
     private fun startSkeletonAnimation() {
-        binding.skeletonContainer.isVisible = true
-        if (pulseAnimator == null) {
-            pulseAnimator = ObjectAnimator.ofFloat(
-                binding.skeletonContentLayout,
-                View.ALPHA,
-                1.0f,
-                0.42f,
-            ).apply {
-                duration = 850L
-                repeatMode = ValueAnimator.REVERSE
-                repeatCount = ValueAnimator.INFINITE
-                interpolator = AccelerateDecelerateInterpolator()
+        _binding?.let { b ->
+            b.skeletonContainer.isVisible = true
+            b.feedRecyclerView.isVisible = false
+            b.morphLoaderContainer.isVisible = false
+            if (pulseAnimator == null) {
+                pulseAnimator = ObjectAnimator.ofFloat(
+                    b.skeletonContentLayout,
+                    View.ALPHA,
+                    1.0f,
+                    0.42f,
+                ).apply {
+                    duration = 850L
+                    repeatMode = ValueAnimator.REVERSE
+                    repeatCount = ValueAnimator.INFINITE
+                    interpolator = AccelerateDecelerateInterpolator()
+                }
             }
-        }
-        if (pulseAnimator?.isRunning != true) {
-            pulseAnimator?.start()
+            if (pulseAnimator?.isRunning != true) {
+                pulseAnimator?.start()
+            }
         }
     }
 
@@ -236,137 +373,13 @@ class HomeFragment : Fragment() {
         _binding?.let { b ->
             b.skeletonContentLayout.alpha = 1.0f
             b.skeletonContainer.isVisible = false
-        }
-    }
-
-    private fun renderHero(media: MediaUi?) {
-        binding.hero.isVisible = media != null
-        if (media == null) return
-        binding.heroImage.load(media.bannerUrl ?: media.coverUrl)
-        binding.heroTitle.text = media.title
-        binding.heroGenres.text = media.genres.take(6).joinToString(", ")
-        val appContainer = (requireActivity().application as AnimarvleApp).container
-        updateHeroMyListButton(appContainer.myList.itemsFlow.value)
-    }
-
-    private fun updateHeroMyListButton(items: List<com.animarvle.app.ui.mylist.MyListItem>) {
-        val state = viewModel.state.value
-        val heroMedia = (state as? HomeState.Content)?.trending?.firstOrNull() ?: return
-        val saved = items.firstOrNull { it.mediaId == heroMedia.id }
-        val accentColor = com.animarvle.app.ui.theme.AppTheme.accent(requireContext())
-        binding.heroPlay.backgroundTintList = android.content.res.ColorStateList.valueOf(accentColor)
-        binding.heroPlay.setIconResource(R.drawable.ic_play_circle)
-        binding.heroPlay.iconTint = android.content.res.ColorStateList.valueOf(android.graphics.Color.WHITE)
-        if (saved != null) {
-            binding.heroMyList.text = "In List"
-            binding.heroMyList.setTextColor(accentColor)
-            binding.heroMyList.setIconResource(R.drawable.ic_check)
-            binding.heroMyList.iconTint = android.content.res.ColorStateList.valueOf(accentColor)
-        } else {
-            binding.heroMyList.setText(R.string.schedule_add_my_list)
-            binding.heroMyList.setTextColor(accentColor)
-            binding.heroMyList.setIconResource(R.drawable.ic_add)
-            binding.heroMyList.iconTint = android.content.res.ColorStateList.valueOf(accentColor)
-        }
-    }
-
-    private fun renderRails(
-        rails: List<HomeRail>,
-        continueWatching: List<com.animarvle.app.ui.player.HistoryItem>,
-    ) {
-        binding.rails.removeAllViews()
-        posterAdapters.clear()
-        val appContainer = (requireActivity().application as AnimarvleApp).container
-        val savedIds = appContainer.myList.itemsFlow.value.map { it.mediaId }.toSet()
-        val inflater = LayoutInflater.from(requireContext())
-
-        // Continue Watching rail (PROMPT §7.2)
-        if (continueWatching.isNotEmpty()) {
-            val railBinding = ViewRailBinding.inflate(inflater, binding.rails, false)
-            railBinding.rowTitle.setText(R.string.row_continue_watching)
-            railBinding.seeAll.isVisible = false
-            railBinding.rail.layoutManager =
-                LinearLayoutManager(requireContext(), LinearLayoutManager.HORIZONTAL, false)
-            val adapter = ContinueWatchingAdapter { item -> resumePlayback(item) }
-            railBinding.rail.adapter = adapter
-            adapter.submit(continueWatching)
-            binding.rails.addView(railBinding.root)
-        }
-
-        rails.filter { it.items.isNotEmpty() }.forEach { rail ->
-            val railBinding = ViewRailBinding.inflate(inflater, binding.rails, false)
-            railBinding.rowTitle.setText(rail.titleRes)
-            railBinding.seeAll.isVisible = true
-            railBinding.seeAll.setOnClickListener {
-                val bundle = Bundle().apply {
-                    when (rail.titleRes) {
-                        R.string.row_donghua -> putString("category", "Donghua")
-                        R.string.row_cartoons -> putString("category", "Cartoons")
-                        R.string.row_kdrama -> putString("category", "K-Drama")
-                        R.string.row_cdrama -> putString("category", "C-Drama")
-                        R.string.row_trending_movies, R.string.row_popular_movies, R.string.row_top_rated, R.string.row_now_playing -> putString("category", "Movies")
-                        R.string.row_trending_tv, R.string.row_popular_tv -> putString("category", "TV")
-                        else -> {}
-                    }
-                }
-                findNavController().navigate(R.id.searchFragment, bundle)
-            }
-            railBinding.rail.layoutManager =
-                LinearLayoutManager(requireContext(), LinearLayoutManager.HORIZONTAL, false)
-            val posterAdapter = PosterAdapter { openDetails(it) }
-            posterAdapter.setSavedIds(savedIds)
-            posterAdapter.submit(rail.items)
-            posterAdapters.add(posterAdapter)
-            railBinding.rail.adapter = posterAdapter
-            binding.rails.addView(railBinding.root)
-        }
-    }
-
-    private fun resumePlayback(item: com.animarvle.app.ui.player.HistoryItem) {
-        val isDonghua = AnimarvleApp.isDonghua(item.title)
-        val effectiveType = if (isDonghua) "ANIME" else item.mediaType
-        val args = Bundle().apply {
-            putLong("sourceId", 0L)
-            val isBadDonghuaUrl = isDonghua && !item.mediaUrl.contains("anichi", ignoreCase = true)
-            if (!isBadDonghuaUrl && item.mediaUrl.isNotBlank()) {
-                putString("mediaUrl", item.mediaUrl)
-                putString("animeUrl", item.mediaUrl)
-            }
-            putString("mediaTitle", item.title)
-            putString("mediaType", effectiveType)
-            putInt("episodeCount", 0)
-            putInt("episodeNumber", item.episodeNumber)
-            putString("audio", item.audio)
-            putString("poster", item.posterUrl)
-            putString("animeTitle", item.title)
-        }
-        findNavController().navigate(R.id.playerFragment, args)
-    }
-
-    private fun openDetails(media: MediaUi) {
-        val isMovie = media.format.equals("MOVIE", ignoreCase = true)
-        openDetails(media.id, if (isMovie) "movie" else "tv")
-    }
-
-    private fun openDetails(id: Long, mediaType: String? = null) {
-        val args = Bundle().apply {
-            putLong("mediaId", id)
-            if (mediaType != null) putString("mediaType", mediaType)
-        }
-        findNavController().navigate(R.id.detailFragment, args)
-    }
-
-    override fun onResume() {
-        super.onResume()
-        if (_binding != null && binding.offlineContainer.isVisible) {
-            (activity as? com.animarvle.app.MainActivity)?.setBottomNavVisible(false)
+            b.feedRecyclerView.isVisible = true
         }
     }
 
     override fun onDestroyView() {
-        (activity as? com.animarvle.app.MainActivity)?.setBottomNavVisible(true)
-        super.onDestroyView()
         stopSkeletonAnimation()
+        super.onDestroyView()
         _binding = null
     }
 }

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="34dp"
+    android:height="34dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Disney Arch -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M2,18 C6,8 14,5 22,11 c0.3,0.2 0.5,-0.1 0.3,-0.3 C14,3 5,7 1,18 c-0.1,0.3 0.2,0.4 0.4,0.1 Z" />
+    <!-- "D" character -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M7,8 h4.5 c3.5,0 6,2.2 6,5.5 0,3.3 -2.5,5.5 -6,5.5 H7 Z M9.5,10.5 v6 h2 c2,0 3.5,-1.2 3.5,-3 0,-1.8 -1.5,-3 -3.5,-3 Z" />
+    <!-- "+" badge -->
+    <path
+        android:fillColor="#00E5FF"
+        android:pathData="M18.5,12 h1.5 v-1.5 h1.5 v1.5 h1.5 v1.5 h-1.5 v1.5 h-1.5 v-1.5 h-1.5 Z" />
+</vector>

@@ -261,8 +261,17 @@
 
     <!-- Profile & Settings (PROMPT §7.11, §7.12) -->
     <string name="profile_my_profile">My profile</string>
+    <string name="profile_make_yours">Make Animarvle yours</string>
+    <string name="profile_make_yours_desc">Sync your list and watching history</string>
     <string name="profile_sync_desc">Sign in to synchronize your anime list</string>
-    <string name="profile_continue">Continue</string>
+    <string name="profile_continue">Sign in</string>
+    <string name="profile_edit_profile">Edit profile</string>
+    <string name="profile_edit_title">Edit Profile</string>
+    <string name="profile_display_name">Display name</string>
+    <string name="profile_choose_avatar">Choose an avatar</string>
+    <string name="profile_avatars_available">%1$d available</string>
+    <string name="profile_save_changes">Save changes</string>
+    <string name="profile_changes_saved">Profile updated</string>
     <string name="settings_player_downloads">Player &amp; Downloads</string>
     <string name="settings_subtitle">Subtitle settings</string>
     <string name="settings_sources">Sources</string>
@@ -378,7 +387,7 @@
     <string name="auth_signing_you_in">Signing you in...</string>
     <string name="auth_sync_active">✓ Cloud Synced</string>
     <string name="auth_sync_now">Sync Library</string>
-    <string name="auth_sign_out">Sign Out</string>
+    <string name="auth_sign_out">Log Out</string>
     <string name="auth_sign_in">Sign in</string>
     <string name="default_web_client_id" translatable="false"></string>
 
@@ -425,24 +434,23 @@
     <string name="quality_fetching_notice">Connecting to streaming engine · This may take a few seconds</string>
 
     <!-- About Screen -->
+    <string name="about_title">About &amp; Legal</string>
     <string name="about_app_name">animarvle</string>
     <string name="about_version_format">v1.0 (build 1)</string>
-    <string name="about_section_links">Links</string>
+    <string name="about_section_links">Community</string>
     <string name="about_telegram">Telegram</string>
     <string name="about_discord">Discord</string>
     <string name="about_github">GitHub</string>
-    <string name="about_extensions_guide">Extensions guide</string>
-    <string name="about_how_to_install">How to install sources</string>
-    <string name="about_section_app">App</string>
-    <string name="about_desc_title">About Animarvle</string>
-    <string name="about_desc_body">Anime and movie discovery &amp; streaming</string>
-    <string name="about_data_source_title">Data source</string>
-    <string name="about_data_source_body">Catalog metadata is powered by AniList</string>
-    <string name="about_privacy_title">Privacy</string>
-    <string name="about_privacy_body">Library and preferences stay on this device</string>
-    <string name="about_diagnostics_title">Copy diagnostics</string>
-    <string name="about_diagnostics_body">App version, device and library counts</string>
-    <string name="about_copyright">© 2026 animarvle</string>
+    <string name="about_section_legal">Legal Documents</string>
+    <string name="about_privacy_policy">Privacy Policy</string>
+    <string name="about_terms_of_service">Terms of Service</string>
+    <string name="about_copyright_takedown">Copyright &amp; Takedown</string>
+    <string name="about_disclaimer_title">Disclaimer</string>
+    <string name="about_disclaimer_body">Animarvle does not store media files on its servers. Media is linked from third-party services.</string>
+    <string name="about_section_diagnostics">Diagnostics</string>
+    <string name="about_diagnostics_title">Copy Diagnostics</string>
+    <string name="about_diagnostics_body">Tap to copy system and app diagnostics</string>
+    <string name="about_copyright">© 2026 animarvle. All rights reserved.</string>
     <string name="about_copy_diagnostics_success">Diagnostics copied to clipboard</string>
     <string name="about_link_error">Unable to open link</string>
 

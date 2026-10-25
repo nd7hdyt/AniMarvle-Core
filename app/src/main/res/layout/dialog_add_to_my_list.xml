@@ -2,6 +2,7 @@
 <LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:background="@drawable/bg_sheet"
@@ -11,7 +12,7 @@
     android:paddingEnd="20dp"
     android:paddingBottom="28dp">
 
-    <!-- Bottom sheet handle -->
+    <!-- Bottom sheet drag handle -->
     <View
         android:layout_width="40dp"
         android:layout_height="4dp"
@@ -19,133 +20,234 @@
         android:layout_marginBottom="16dp"
         android:background="@drawable/bg_tab_indicator" />
 
+    <!-- Title & Media Subtitle -->
     <TextView
+        android:id="@+id/tvDialogTitle"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="@string/my_list_add_title"
-        android:textColor="?attr/colorOnSurface"
+        android:textColor="#FFFFFF"
         android:textSize="20sp"
         android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/tvMediaTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="#8E8E93"
+        android:textSize="13sp"
+        tools:text="Romeo Must Die" />
 
     <View
         android:layout_width="match_parent"
         android:layout_height="1dp"
-        android:layout_marginTop="12dp"
-        android:layout_marginBottom="16dp"
-        android:background="@color/surface_container" />
+        android:layout_marginTop="14dp"
+        android:layout_marginBottom="14dp"
+        android:background="#14FFFFFF" />
 
-    <!-- Status Option Buttons matching th3-mylist-added screenshot -->
+    <!-- Option 1: Pending -->
     <LinearLayout
+        android:id="@+id/btnPending"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal">
+        android:layout_height="56dp"
+        android:layout_marginBottom="10dp"
+        android:background="@drawable/bg_mylist_option_unselected"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="16dp">
 
-        <!-- Watching -->
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnWatching"
-            style="@style/Widget.Material3.Button.TonalButton"
+        <ImageView
+            android:id="@+id/ivPendingIcon"
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_bookmark_outline"
+            app:tint="#FFFFFF" />
+
+        <LinearLayout
             android:layout_width="0dp"
-            android:layout_height="48dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="14dp"
             android:layout_weight="1"
-            android:text="@string/my_list_status_watching"
-            android:textColor="?attr/colorOnSurface"
-            android:textSize="13sp"
-            app:cornerRadius="24dp"
-            app:icon="@drawable/ic_play_circle"
-            app:iconGravity="textStart"
-            app:iconTint="?attr/colorPrimary" />
+            android:orientation="vertical">
 
-        <!-- Plan to Watch -->
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnPlanToWatch"
-            style="@style/Widget.Material3.Button.TonalButton"
-            android:layout_width="0dp"
-            android:layout_height="48dp"
-            android:layout_marginStart="10dp"
-            android:layout_weight="1.3"
-            android:text="@string/my_list_status_plan_to_watch"
-            android:textColor="?attr/colorOnSurface"
-            android:textSize="13sp"
-            app:cornerRadius="24dp"
-            app:icon="@drawable/ic_calendar"
-            app:iconGravity="textStart"
-            app:iconTint="?attr/colorPrimary" />
+            <TextView
+                android:id="@+id/tvPendingTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Pending"
+                android:textColor="#FFFFFF"
+                android:textSize="15sp"
+                android:textStyle="bold" />
 
+            <TextView
+                android:id="@+id/tvPendingSubtitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="1dp"
+                android:text="Save to watch later"
+                android:textColor="#8E8E93"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <ImageView
+            android:id="@+id/ivPendingCheck"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_check"
+            android:visibility="gone"
+            app:tint="#000000" />
     </LinearLayout>
 
+    <!-- Option 2: Watching -->
     <LinearLayout
+        android:id="@+id/btnWatching"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
-        android:orientation="horizontal">
+        android:layout_height="56dp"
+        android:layout_marginBottom="10dp"
+        android:background="@drawable/bg_mylist_option_unselected"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="16dp">
 
-        <!-- Completed -->
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnCompleted"
-            style="@style/Widget.Material3.Button.TonalButton"
+        <ImageView
+            android:id="@+id/ivWatchingIcon"
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_play_circle"
+            app:tint="#FFFFFF" />
+
+        <LinearLayout
             android:layout_width="0dp"
-            android:layout_height="48dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="14dp"
             android:layout_weight="1"
-            android:text="@string/my_list_status_completed"
-            android:textColor="?attr/colorOnSurface"
-            android:textSize="13sp"
-            app:cornerRadius="24dp"
-            app:icon="@drawable/ic_check"
-            app:iconGravity="textStart"
-            app:iconTint="?attr/colorPrimary" />
+            android:orientation="vertical">
 
-        <!-- On-Hold -->
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnOnHold"
-            style="@style/Widget.Material3.Button.TonalButton"
-            android:layout_width="0dp"
-            android:layout_height="48dp"
-            android:layout_marginStart="10dp"
-            android:layout_weight="1"
-            android:text="@string/my_list_status_on_hold"
-            android:textColor="?attr/colorOnSurface"
-            android:textSize="13sp"
-            app:cornerRadius="24dp"
-            app:icon="@drawable/ic_pause"
-            app:iconGravity="textStart"
-            app:iconTint="?attr/colorPrimary" />
+            <TextView
+                android:id="@+id/tvWatchingTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Watching"
+                android:textColor="#FFFFFF"
+                android:textSize="15sp"
+                android:textStyle="bold" />
 
+            <TextView
+                android:id="@+id/tvWatchingSubtitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="1dp"
+                android:text="Currently in progress"
+                android:textColor="#8E8E93"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <ImageView
+            android:id="@+id/ivWatchingCheck"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_check"
+            android:visibility="gone"
+            app:tint="#000000" />
     </LinearLayout>
 
+    <!-- Option 3: Completed -->
     <LinearLayout
+        android:id="@+id/btnCompleted"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
-        android:orientation="horizontal">
+        android:layout_height="56dp"
+        android:layout_marginBottom="10dp"
+        android:background="@drawable/bg_mylist_option_unselected"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="16dp">
 
-        <!-- Dropped -->
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnDropped"
-            style="@style/Widget.Material3.Button.TonalButton"
-            android:layout_width="wrap_content"
-            android:layout_height="48dp"
-            android:paddingStart="20dp"
-            android:paddingEnd="20dp"
-            android:text="@string/my_list_status_dropped"
-            android:textColor="?attr/colorOnSurface"
-            android:textSize="13sp"
-            app:cornerRadius="24dp"
-            app:icon="@drawable/ic_close"
-            app:iconGravity="textStart"
-            app:iconTint="#E53935" />
+        <ImageView
+            android:id="@+id/ivCompletedIcon"
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_check"
+            app:tint="#FFFFFF" />
 
-        <!-- Remove option if already in list -->
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnRemove"
-            style="@style/Widget.Material3.Button.TextButton"
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="14dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/tvCompletedTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Completed"
+                android:textColor="#FFFFFF"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tvCompletedSubtitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="1dp"
+                android:text="Finished watching"
+                android:textColor="#8E8E93"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <ImageView
+            android:id="@+id/ivCompletedCheck"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_check"
+            android:visibility="gone"
+            app:tint="#000000" />
+    </LinearLayout>
+
+    <!-- Remove option (visible only when item is already in list) -->
+    <LinearLayout
+        android:id="@+id/btnRemove"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="4dp"
+        android:background="@drawable/bg_mylist_btn_remove"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:visibility="gone"
+        tools:visibility="visible">
+
+        <ImageView
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_close"
+            app:tint="#FF4D4F" />
+
+        <TextView
             android:layout_width="wrap_content"
-            android:layout_height="48dp"
-            android:layout_marginStart="10dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
             android:text="@string/my_list_remove"
-            android:textColor="?attr/colorOnSurfaceVariant"
-            android:textSize="13sp"
-            android:visibility="gone" />
-
+            android:textColor="#FF4D4F"
+            android:textSize="14sp"
+            android:textStyle="bold" />
     </LinearLayout>
 
 </LinearLayout>

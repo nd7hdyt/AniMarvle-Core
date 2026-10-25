@@ -15,21 +15,49 @@ class MyListViewModel(application: Application) : AndroidViewModel(application) 
 
     private val repository = (application as AnimarvleApp).container.myList
 
-    private val _selectedStatus = MutableStateFlow<MyListStatus?>(null)
-    val selectedStatus: StateFlow<MyListStatus?> = _selectedStatus
+    val allItems: StateFlow<List<MyListItem>> = repository.itemsFlow
+
+    private val _selectedType = MutableStateFlow("Movies")
+    val selectedType: StateFlow<String> = _selectedType
+
+    private val _selectedStatus = MutableStateFlow("Pending")
+    val selectedStatus: StateFlow<String> = _selectedStatus
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery
 
     val filteredItems: StateFlow<List<MyListItem>> = combine(
         repository.itemsFlow,
+        _selectedType,
         _selectedStatus,
         _searchQuery,
-    ) { items, status, query ->
+    ) { items, type, status, query ->
         items.filter { item ->
-            val matchesStatus = (status == null || item.status == status)
+            val isAnime = item.posterUrl?.contains("anilist", ignoreCase = true) == true ||
+                item.format?.contains("ANIME", ignoreCase = true) == true ||
+                item.format in listOf("ONA", "OVA", "TV_SHORT", "SPECIAL")
+
+            val matchesType = when (type) {
+                "Movies" -> !isAnime && (item.format?.contains("MOVIE", ignoreCase = true) == true ||
+                    item.format?.contains("Movie", ignoreCase = true) == true ||
+                    (item.totalEpisodes == 1 && item.format?.contains("TV", ignoreCase = true) != true))
+                "Series" -> !isAnime && (item.format?.equals("TV", ignoreCase = true) == true ||
+                    item.format?.contains("SERIES", ignoreCase = true) == true ||
+                    item.format?.contains("Series", ignoreCase = true) == true)
+                "Anime" -> isAnime
+                else -> true
+            }
+
+            val matchesStatus = when (status) {
+                "Pending" -> item.status == MyListStatus.PLAN_TO_WATCH || (item.status != MyListStatus.WATCHING && item.status != MyListStatus.COMPLETED)
+                "Watching" -> item.status == MyListStatus.WATCHING
+                "Completed" -> item.status == MyListStatus.COMPLETED
+                else -> true
+            }
+
             val matchesQuery = query.isBlank() || item.title.contains(query, ignoreCase = true)
-            matchesStatus && matchesQuery
+
+            matchesType && matchesStatus && matchesQuery
         }
     }.stateIn(
         viewModelScope,
@@ -37,7 +65,11 @@ class MyListViewModel(application: Application) : AndroidViewModel(application) 
         emptyList(),
     )
 
-    fun selectStatus(status: MyListStatus?) {
+    fun selectType(type: String) {
+        _selectedType.value = type
+    }
+
+    fun selectStatus(status: String) {
         _selectedStatus.value = status
     }
 
@@ -48,6 +80,12 @@ class MyListViewModel(application: Application) : AndroidViewModel(application) 
     fun removeItem(mediaId: Long) {
         viewModelScope.launch {
             repository.remove(mediaId)
+        }
+    }
+
+    fun updateItemStatus(item: MyListItem, newStatus: MyListStatus) {
+        viewModelScope.launch {
+            repository.upsert(item.copy(status = newStatus, updatedAtMs = System.currentTimeMillis()))
         }
     }
 }

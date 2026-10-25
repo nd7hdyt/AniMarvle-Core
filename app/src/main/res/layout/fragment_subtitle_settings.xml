@@ -1,193 +1,444 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="?android:attr/windowBackground"
+    android:background="#000000"
     android:orientation="vertical">
 
-    <!-- Status bar spacer driven dynamically by statusBars().top -->
+    <!-- Status bar spacer -->
     <View
         android:id="@+id/statusBarSpacer"
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:background="@android:color/transparent" />
+        android:layout_height="0dp" />
 
-    <!-- Top Bar: Back · Title (54dp standard bar) -->
+    <!-- Top Bar: Left Back Arrow + Centered "Subtitle Appearance" Title -->
     <FrameLayout
-        android:id="@+id/headerBar"
         android:layout_width="match_parent"
-        android:layout_height="54dp"
+        android:layout_height="56dp"
         android:paddingHorizontal="12dp">
 
-        <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="match_parent"
+        <ImageButton
+            android:id="@+id/backButton"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
             android:layout_gravity="start|center_vertical"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/player_back"
+            android:padding="8dp"
+            android:src="@drawable/ic_arrow_back"
+            app:tint="#FFFFFF" />
 
-            <ImageButton
-                android:id="@+id/backButton"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="@string/player_close"
-                android:padding="8dp"
-                android:src="@drawable/ic_arrow_back"
-                app:tint="?attr/colorOnSurface" />
-
-            <TextView
-                android:id="@+id/toolbarTitle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:text="@string/settings_subtitle"
-                android:textColor="?attr/colorOnSurface"
-                android:textSize="20sp"
-                android:textStyle="bold" />
-
-        </LinearLayout>
-
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:text="Subtitle Appearance"
+            android:textColor="#FFFFFF"
+            android:textSize="19sp"
+            android:textStyle="bold" />
     </FrameLayout>
 
-    <ScrollView
+    <!-- Scrollable Settings Content -->
+    <androidx.core.widget.NestedScrollView
+        android:id="@+id/scrollView"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
         android:clipToPadding="false"
+        android:descendantFocusability="beforeDescendants"
+        android:focusableInTouchMode="true"
+        android:overScrollMode="never"
+        android:paddingHorizontal="16dp"
+        android:paddingTop="8dp"
         android:paddingBottom="24dp">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:paddingStart="20dp"
-            android:paddingEnd="20dp">
+            android:orientation="vertical">
 
-            <!-- Subtitle Preview Area -->
-            <FrameLayout
-                android:id="@+id/previewContainer"
+            <!-- Live Subtitle Preview Card -->
+            <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
-                android:layout_height="180dp"
-                android:layout_marginTop="12dp"
-                android:background="@android:color/white">
+                android:layout_height="176dp"
+                app:cardBackgroundColor="#181818"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="0dp"
+                app:strokeWidth="0dp">
 
-                <TextView
-                    android:id="@+id/previewSubtitleText"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="bottom|center_horizontal"
-                    android:layout_marginBottom="16dp"
-                    android:background="@drawable/bg_circle_scrim"
-                    android:paddingStart="14dp"
-                    android:paddingTop="6dp"
-                    android:paddingEnd="14dp"
-                    android:paddingBottom="6dp"
-                    android:text="@string/settings_sub_preview_text"
-                    android:textColor="@android:color/white"
-                    android:textSize="15sp" />
+                <FrameLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:paddingHorizontal="24dp">
 
-            </FrameLayout>
+                    <com.animarvle.app.ui.profile.OutlinedSubtitleTextView
+                        android:id="@+id/previewSubtitleText"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="bottom|center_horizontal"
+                        android:layout_marginBottom="20dp"
+                        android:gravity="center"
+                        android:lineSpacingExtra="2dp"
+                        android:text="Here is how your subtitles\nwill look."
+                        android:textColor="#FFFFFF"
+                        android:textSize="16sp"
+                        android:textStyle="bold" />
+                </FrameLayout>
+            </com.google.android.material.card.MaterialCardView>
 
-            <!-- Default Subtitle Language -->
+            <!-- SECTION: TYPOGRAPHY -->
             <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="24dp"
-                android:text="@string/settings_sub_default_lang"
-                android:textColor="?attr/colorOnSurface"
-                android:textSize="16sp"
-                android:textStyle="bold" />
-
-            <EditText
-                android:id="@+id/editSubLang"
-                android:layout_width="match_parent"
-                android:layout_height="52dp"
-                android:layout_marginTop="8dp"
-                android:background="@color/surface_container"
-                android:hint="@string/settings_sub_default_lang_hint"
-                android:importantForAutofill="no"
-                android:inputType="text"
-                android:paddingStart="16dp"
-                android:paddingEnd="16dp"
-                android:textColor="?attr/colorOnSurface"
-                android:textColorHint="?attr/colorOnSurfaceVariant"
-                android:textSize="15sp" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:text="@string/settings_sub_default_lang_hint"
-                android:textColor="?attr/colorOnSurfaceVariant"
-                android:textSize="13sp" />
-
-            <!-- Text Size -->
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="24dp"
-                android:text="@string/settings_sub_text_size"
-                android:textColor="?attr/colorOnSurface"
-                android:textSize="16sp"
-                android:textStyle="bold" />
-
-            <SeekBar
-                android:id="@+id/seekTextSize"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:max="28"
-                android:progress="15" />
-
-            <!-- Text Style (Normal, Bold, Italic) -->
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="24dp"
-                android:text="@string/settings_sub_text_style"
-                android:textColor="?attr/colorOnSurface"
-                android:textSize="16sp"
-                android:textStyle="bold" />
-
-            <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:orientation="horizontal">
+                android:layout_marginStart="6dp"
+                android:layout_marginTop="24dp"
+                android:layout_marginBottom="10dp"
+                android:letterSpacing="0.10"
+                android:text="TYPOGRAPHY"
+                android:textColor="#888888"
+                android:textSize="11.5sp"
+                android:textStyle="bold" />
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnStyleNormal"
-                    style="@style/Widget.Material3.Button"
-                    android:layout_width="wrap_content"
-                    android:layout_height="44dp"
-                    android:text="@string/settings_sub_style_normal"
-                    app:cornerRadius="12dp" />
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:cardBackgroundColor="#181818"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="0dp"
+                app:strokeWidth="0dp">
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnStyleBold"
-                    style="@style/Widget.Material3.Button.TonalButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="44dp"
-                    android:layout_marginStart="8dp"
-                    android:text="@string/settings_sub_style_bold"
-                    app:cornerRadius="12dp" />
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingHorizontal="18dp"
+                    android:paddingTop="18dp"
+                    android:paddingBottom="12dp">
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnStyleItalic"
-                    style="@style/Widget.Material3.Button.TonalButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="44dp"
-                    android:layout_marginStart="8dp"
-                    android:text="@string/settings_sub_style_italic"
-                    app:cornerRadius="12dp" />
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
 
-            </LinearLayout>
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Size"
+                            android:textColor="#FFFFFF"
+                            android:textSize="15.5sp" />
+
+                        <TextView
+                            android:id="@+id/tvSizeValue"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="16"
+                            android:textColor="#8E8E93"
+                            android:textSize="15sp" />
+                    </LinearLayout>
+
+                    <com.google.android.material.slider.Slider
+                        android:id="@+id/sliderSize"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:stepSize="1.0"
+                        android:value="16.0"
+                        android:valueFrom="12.0"
+                        android:valueTo="30.0"
+                        app:haloRadius="0dp"
+                        app:labelBehavior="gone"
+                        app:thumbColor="#FFFFFF"
+                        app:thumbRadius="10dp"
+                        app:thumbWidth="20dp"
+                        app:thumbHeight="20dp"
+                        app:tickVisible="false"
+                        app:trackColorActive="#FFFFFF"
+                        app:trackColorInactive="#0A0A0A"
+                        app:trackHeight="4dp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- SECTION: COLOR & STYLING -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:layout_marginTop="24dp"
+                android:layout_marginBottom="10dp"
+                android:letterSpacing="0.10"
+                android:text="COLOR &amp; STYLING"
+                android:textColor="#888888"
+                android:textSize="11.5sp"
+                android:textStyle="bold" />
+
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:cardBackgroundColor="#181818"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="0dp"
+                app:strokeWidth="0dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingHorizontal="18dp"
+                    android:paddingTop="20dp"
+                    android:paddingBottom="12dp">
+
+                    <!-- 5 Color Swatches Row -->
+                    <LinearLayout
+                        android:id="@+id/colorSwatchesRow"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:weightSum="5">
+
+                        <FrameLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1">
+                            <View
+                                android:id="@+id/swatchWhite"
+                                android:layout_width="40dp"
+                                android:layout_height="40dp"
+                                android:layout_gravity="center" />
+                        </FrameLayout>
+
+                        <FrameLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1">
+                            <View
+                                android:id="@+id/swatchYellow"
+                                android:layout_width="40dp"
+                                android:layout_height="40dp"
+                                android:layout_gravity="center" />
+                        </FrameLayout>
+
+                        <FrameLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1">
+                            <View
+                                android:id="@+id/swatchGreen"
+                                android:layout_width="40dp"
+                                android:layout_height="40dp"
+                                android:layout_gravity="center" />
+                        </FrameLayout>
+
+                        <FrameLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1">
+                            <View
+                                android:id="@+id/swatchCyan"
+                                android:layout_width="40dp"
+                                android:layout_height="40dp"
+                                android:layout_gravity="center" />
+                        </FrameLayout>
+
+                        <FrameLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1">
+                            <View
+                                android:id="@+id/swatchPink"
+                                android:layout_width="40dp"
+                                android:layout_height="40dp"
+                                android:layout_gravity="center" />
+                        </FrameLayout>
+                    </LinearLayout>
+
+                    <!-- Hairline Divider 1 -->
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginTop="20dp"
+                        android:layout_marginBottom="14dp"
+                        android:background="#2C2C2E" />
+
+                    <!-- Text Outline Switch Row -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Text outline"
+                            android:textColor="#FFFFFF"
+                            android:textSize="15.5sp" />
+
+                        <com.google.android.material.materialswitch.MaterialSwitch
+                            android:id="@+id/switchTextOutline"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:checked="true"
+                            app:thumbTint="@color/selector_vortex_switch_thumb"
+                            app:trackDecorationTint="@android:color/transparent"
+                            app:trackTint="@color/selector_vortex_switch_track" />
+                    </LinearLayout>
+
+                    <!-- Hairline Divider 2 -->
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginTop="14dp"
+                        android:layout_marginBottom="16dp"
+                        android:background="#2C2C2E" />
+
+                    <!-- Outline Thickness Slider Row -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Outline thickness"
+                            android:textColor="#FFFFFF"
+                            android:textSize="15.5sp" />
+
+                        <TextView
+                            android:id="@+id/tvOutlineThicknessValue"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="2.0"
+                            android:textColor="#8E8E93"
+                            android:textSize="15sp" />
+                    </LinearLayout>
+
+                    <com.google.android.material.slider.Slider
+                        android:id="@+id/sliderOutlineThickness"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:stepSize="0.5"
+                        android:value="2.0"
+                        android:valueFrom="0.5"
+                        android:valueTo="5.0"
+                        app:haloRadius="0dp"
+                        app:labelBehavior="gone"
+                        app:thumbColor="#FFFFFF"
+                        app:thumbRadius="10dp"
+                        app:thumbWidth="20dp"
+                        app:thumbHeight="20dp"
+                        app:tickVisible="false"
+                        app:trackColorActive="#FFFFFF"
+                        app:trackColorInactive="#0A0A0A"
+                        app:trackHeight="4dp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- SECTION: POSITION -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:layout_marginTop="24dp"
+                android:layout_marginBottom="10dp"
+                android:letterSpacing="0.10"
+                android:text="POSITION"
+                android:textColor="#888888"
+                android:textSize="11.5sp"
+                android:textStyle="bold" />
+
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:cardBackgroundColor="#181818"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="0dp"
+                app:strokeWidth="0dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingHorizontal="18dp"
+                    android:paddingTop="18dp"
+                    android:paddingBottom="12dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Bottom padding"
+                            android:textColor="#FFFFFF"
+                            android:textSize="15.5sp" />
+
+                        <TextView
+                            android:id="@+id/tvBottomPaddingValue"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="20"
+                            android:textColor="#8E8E93"
+                            android:textSize="15sp" />
+                    </LinearLayout>
+
+                    <com.google.android.material.slider.Slider
+                        android:id="@+id/sliderBottomPadding"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:stepSize="2.0"
+                        android:value="20.0"
+                        android:valueFrom="0.0"
+                        android:valueTo="60.0"
+                        app:haloRadius="0dp"
+                        app:labelBehavior="gone"
+                        app:thumbColor="#FFFFFF"
+                        app:thumbRadius="10dp"
+                        app:thumbWidth="20dp"
+                        app:thumbHeight="20dp"
+                        app:tickVisible="false"
+                        app:trackColorActive="#FFFFFF"
+                        app:trackColorInactive="#0A0A0A"
+                        app:trackHeight="4dp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
 
         </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
 
-    </ScrollView>
+    <!-- Bottom Pinned "Apply settings" Pill Button -->
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="#000000"
+        android:paddingHorizontal="16dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="20dp">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnApplySettings"
+            android:layout_width="match_parent"
+            android:layout_height="54dp"
+            android:text="Apply settings"
+            android:textAllCaps="false"
+            android:textColor="#000000"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            app:backgroundTint="#FFFFFF"
+            app:cornerRadius="27dp" />
+    </FrameLayout>
 
 </LinearLayout>

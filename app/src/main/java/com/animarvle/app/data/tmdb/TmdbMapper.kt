@@ -74,13 +74,15 @@ object TmdbMapper {
             nextAiringAtEpochSec = null,
             seasons = item.seasons.filter { (it.seasonNumber ?: 0) > 0 }.map { s ->
                 com.animarvle.app.domain.SeasonUi(
-                    id = s.id ?: (item.id * 1000 + (s.seasonNumber ?: 1)),
+                    id = item.id,
                     title = s.name ?: "Season ${s.seasonNumber}",
                     posterUrl = s.posterPath?.let { "$IMG_W500$it" } ?: item.posterPath?.let { "$IMG_W500$it" },
                     isCurrent = (s.seasonNumber == 1),
                     seasonNumber = s.seasonNumber,
+                    episodeCount = s.episodeCount,
                 )
             },
+            isTmdb = true,
         )
     }
 

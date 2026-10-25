@@ -43,7 +43,7 @@
             android:paddingEnd="7dp"
             android:paddingBottom="2dp"
             tools:text="1080p"
-            android:textColor="#FFFFFF"
+            android:textColor="#000000"
             android:textSize="11sp"
             android:textStyle="bold" />
 

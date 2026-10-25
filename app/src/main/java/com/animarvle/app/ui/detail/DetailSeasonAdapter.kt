@@ -51,6 +51,7 @@ class DetailSeasonAdapter(
                 binding.card.strokeColor = accent
                 binding.currentBadge.visibility = View.VISIBLE
                 binding.currentBadge.backgroundTintList = android.content.res.ColorStateList.valueOf(accent)
+                binding.currentBadge.setTextColor(Color.BLACK)
                 binding.title.setTextColor(accent)
             } else {
                 binding.card.strokeWidth = 0
