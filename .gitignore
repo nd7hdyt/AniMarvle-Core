@@ -23,6 +23,7 @@ node_modules/
 *.keystore
 google-services.json
 release.properties
+PROMPT.md
 
 # Scratch dumps & temporary captures in root
 /*.png

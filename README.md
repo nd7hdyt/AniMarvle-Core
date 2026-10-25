@@ -125,9 +125,9 @@ An Android application for streaming Anime, Movies, and TV series, built with na
 ## 🚀 Building & Running
 
 ### Prerequisites
-- **Android Studio Ladybug (2024.2+)** or **Android Studio Meerkat / 2025+**
-- **Gradle 9.8.0** (bundled via `./gradlew`) & **AGP 9.4.1**
-- **JDK 17 or 21**
+- **Android Studio**: Latest release supporting AGP 9.4+ (or build directly using bundled `./gradlew`)
+- **Gradle**: **9.8.2** (bundled via `./gradlew`) & **AGP 9.4.1**
+- **JDK**: **17** or **21**
 - **Android SDK Platforms**: `compileSdk = 37`, `targetSdk = 37`, `minSdk = 26` (Android 8.0+)
 
 ### Clone & Build
