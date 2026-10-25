@@ -1,6 +1,6 @@
 # Animarvle Cloudflare Worker (Turbo Streaming Relay)
 
-This is the serverless edge backend that powers **AniVortex-style instant HLS & Multi-Audio streaming** in Animarvle.
+This is the serverless edge backend that powers **instant HLS & Multi-Audio stream relaying** in Animarvle.
 
 ### 💰 Cost: $0.00 / Month (Cloudflare Free Tier)
 Cloudflare gives you **100,000 requests per day for free** forever. You will never need to pay for hosting this relay.
@@ -15,12 +15,12 @@ Cloudflare gives you **100,000 requests per day for free** forever. You will nev
    - **Subrequest Budgeting:** Enforces strict per-resolver timeouts and limits to stay strictly below Cloudflare Free Tier's 50-subrequest ceiling, preventing HTTP 500 crashes.
 
 2. **Google Drive & Direct Stream Byte-Range Proxying (`/proxy/stream`):**
-   - Automatically resolves multi-hop form redirects and token decryption (e.g. DriveSeed, FastDL).
-   - Proxies Google Drive direct streams with full HTTP 206 partial content slicing (`Range` headers), enabling seamless ExoPlayer seeking without hitting drive quota walls.
+   - Automatically resolves multi-hop form redirects and URL token verification (e.g. DriveSeed, FastDL).
+   - Proxies direct streams with full HTTP 206 partial content slicing (`Range` headers), enabling seamless ExoPlayer seeking without hitting bandwidth walls.
    - Sniffs and preserves Matroska / EBML (`.mkv`) headers for flawless high-definition multi-track audio playback.
 
-3. **Turnstile & Bot Wall Filtering:**
-   - Detects and drops Cloudflare Turnstile bot-challenged domains (e.g. `embed69.org`) before passing streams to the client, preventing dead server entries.
+3. **Stream Availability & Dead-Link Filtering:**
+   - Detects and drops challenged or unreachable endpoints before passing streams to the client, preventing dead server entries.
 
 ---
 

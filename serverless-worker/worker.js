@@ -2,14 +2,14 @@
  * Animarvle Cloudflare Worker - Turbo Streaming Relay
  * 
  * Provides instantaneous (<1s) adaptive streams for Movies, TV Shows, and Anime.
- * Architecture: Pure Cloudflare Edge Relay (AniVortex model).
+ * Architecture: Pure Cloudflare Edge Relay.
  * Features:
  *  - Native TweetNaCl SecretBox token encryption for high-speed CDN stream extraction
  *  - VidLink Pro multi-quality (1080p, 720p, 480p, 360p) + multi-language subtitles
  *  - Fast anime adaptive HLS (.m3u8) resolution (HiAnime, Zoro, GogoAnime)
  *  - HTTP 206 Partial Content byte-range proxying (downloads exact 2s slices; no data waste)
  *  - Zero monolithic 4-6 MB/s data leaks (replaces old MKV scrapers)
- *  - Clean AniVortex 3-server presentation: [Spiral] [Turbo] [FastX]
+ *  - Clean 3-server presentation: [Spiral] [Turbo] [FastX]
  *  - Edge Caching (15ms subsequent response times via caches.default)
  *  - 100% Free Tier compatible on Cloudflare Workers ($0/month)
  */
