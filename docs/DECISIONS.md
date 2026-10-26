@@ -2325,3 +2325,37 @@ Following the feature and layout implementations across the app, an audit of int
      - If an update is detected and the version has not been explicitly skipped, automatically presents `UpdateBottomSheet` to remind the user to update.
   5. *FileProvider Permissions (`file_paths.xml`, `AndroidManifest.xml`)*:
      - Added `<cache-path name="updates" path="updates/" />` and `<external-cache-path name="external_updates" path="updates/" />` to `file_paths.xml` for secure APK installation handling across Android 8.0+.
+
+
+## Decision 43: Permanent Shared Keystore & Deterministic CI Signing for Cross-Device OAuth (2026-10-26)
+- **Context:**
+  - Google Sign-In previously threw `Developer Error (10)` on device installs. Investigation revealed that the APK was signed with an ephemeral debug keystore generated on GitHub Actions runners whose SHA-1 fingerprint did not match any Android OAuth Client registered in Google Cloud Console.
+  - Furthermore, building locally produced a different debug certificate than GitHub Actions CI, resulting in `INSTALL_FAILED_UPDATE_INCOMPATIBLE` whenever updating a device between CI releases and local builds.
+- **Resolution:**
+  1. *Committed Permanent Keystore (`signing/debug.keystore`)*:
+     - Placed the shared development and release keystore into `signing/debug.keystore` (SHA-1: `DD:1B:59:E1:CD:79:40:CC:67:40:82:F5:85:DD:7D:90:C4:BF:73:43`, alias `androiddebugkey`, password `android`).
+     - Whitelisted `!signing/debug.keystore` in `.gitignore`.
+  2. *Unified BuildType Signing (`app/build.gradle.kts`)*:
+     - Configured `signingConfigs.getByName("debug")` to explicitly bind `storeFile = rootProject.file("signing/debug.keystore")`.
+     - Wired both `debug` and `release` build types to use this configuration.
+  3. *CI & Cloud Console Synchronization*:
+     - Both GitHub Actions runners (`.github/workflows/android.yml`) and local machine builds now deterministically produce bit-identical signing certificates matching the registered Android OAuth client ID (`547903414124-tplfbep9g2du7895u08gk3iqvvv8e9tn.apps.googleusercontent.com`).
+     - Devices can now install and upgrade builds seamlessly between local debugging and GitHub Releases without signature collision or OAuth rejection.
+
+## Decision 44: Google Drive AppData Cloud Synchronization for "My List" (2026-10-26)
+- **Context:**
+  - Previously, Google Sign-In only verified user identity; the watchlist ("My List") was stored strictly in local device `SharedPreferences` (`animarvel_my_list.xml`). As a result, signing in on a fresh install or a secondary device presented an empty list without cloud synchronization.
+  - The project required cross-device sync without requiring dedicated backend server hosting or recurring infrastructure costs.
+- **Resolution:**
+  1. *Google Drive REST API v3 AppData Architecture (`GoogleDriveSyncRepository.kt`)*:
+     - Leveraged Google Drive's hidden `appDataFolder` (`https://www.googleapis.com/drive/v3/files?spaces=appDataFolder`).
+     - Stored watchlist data as `my_list_sync.json`. Because the AppData folder is sandboxed to the application, it remains completely hidden from the user's regular Google Drive files and cannot be accidentally deleted or tampered with.
+  2. *Two-Way Merge by Timestamp (`MyListRepository.kt`)*:
+     - Added `updatedAtMs: Long` to `MyListItem`.
+     - Implemented two-way merge algorithm: downloads remote items from Google Drive, merges with local items by comparing `updatedAtMs` (latest timestamp wins), writes the unified list locally, and uploads the merged JSON back to Google Drive in a single sync transaction.
+  3. *Real-Time Reactive Sync Hook (`AnimarvleApp.kt`)*:
+     - Attached `onListChangedListener` to `MyListRepository`. Any watchlist mutation (adding an anime, updating status between Pending/Watching/Completed, or removing an item) immediately schedules an asynchronous background sync job via coroutines on `Dispatchers.IO`.
+  4. *Profile UI & Incremental OAuth Consent (`fragment_profile.xml`, `ProfileFragment.kt`)*:
+     - Added an obsidian `#181818` Google Drive Sync card displaying sync status ("Not synced yet", "Last synced: X ago (N items)") and a manual "Sync" button.
+     - Handled `UserRecoverableAuthException` via `ActivityResultContracts.StartActivityForResult()`: if incremental Drive consent (`https://www.googleapis.com/auth/drive.appdata`) has not yet been granted, smoothly prompts Google's system permission sheet and resumes sync immediately upon approval.
+     - Added MaterialAlertDialog with a direct "Open Console" link to `https://console.cloud.google.com/apis/library/drive.googleapis.com?project=547903414124` if the Google Drive API service is disabled on the Google Cloud project.

@@ -8,6 +8,16 @@ Dates are ISO-8601. Milestones follow `PROMPT.md` §10.
 
 ## [Unreleased]
 
+### Cloud Synchronization & Serverless Architecture
+- **Google Drive AppData Watchlist Sync (`GoogleDriveSyncRepository.kt`):** Implemented zero-cost, private cross-device sync using Google Drive's sandboxed `appDataFolder` (`my_list_sync.json`). Watchlist items are stored without requiring external backend servers or recurring infrastructure costs.
+- **Two-Way Merge by Timestamp (`MyListRepository.kt`):** Added `updatedAtMs: Long` to `MyListItem` and implemented an automatic conflict-resolution merge algorithm (latest timestamp wins), keeping local and cloud watchlists in sync across multiple devices.
+- **Real-Time Reactive Background Sync (`AnimarvleApp.kt`):** Attached `onListChangedListener` to `MyListRepository` to automatically trigger asynchronous background cloud sync whenever titles are added, removed, or updated.
+- **Profile Cloud Sync UI & Incremental Consent (`ProfileFragment.kt`, `fragment_profile.xml`):** Added an obsidian Google Drive Sync card in Profile settings with live sync timestamp, manual "Sync" button, incremental OAuth permission handling (`drive.appdata`), and an interactive dialog with one-tap link to enable the Google Drive API in Google Cloud Console.
+
+### Security, Build Determinism & Google OAuth
+- **Permanent Shared Keystore (`signing/debug.keystore`):** Committed a deterministic development/release keystore (SHA-1 `DD:1B:59:E1:CD:79:40:CC:67:40:82:F5:85:DD:7D:90:C4:BF:73:43`) and whitelisted it in `.gitignore`.
+- **Deterministic CI & Local Build Signing (`app/build.gradle.kts`):** Configured both `debug` and `release` build types to sign with `signing/debug.keystore`, ensuring GitHub Actions CI releases and local machine builds share identical cryptographic certificates matching Google Cloud Console OAuth credentials. Resolves `Developer Error (10)` and `INSTALL_FAILED_UPDATE_INCOMPATIBLE` across all devices.
+
 ## [0.1.3] - 2026-10-26
 
 ### Security & In-App Updates Hardening

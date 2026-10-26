@@ -38,6 +38,7 @@ Fragment ──observes──> ViewModel (StateFlow<UiState>) ──calls──>
                                                                           ├─ MetadataRepository (AniList + cache)
                                                                           ├─ LibraryRepository / HistoryRepository (Room)
                                                                           ├─ SourceRegistry ──> MediaSource (plugin)
+                                                                          ├─ GoogleDriveSyncRepository (Drive REST v3 appDataFolder)
                                                                           └─ DownloadRepository (Room + Media3 downloader)
 ```
 - UI state = sealed `Loading | Content | Empty | Error(retry)`; one-off events via `Channel`.
@@ -360,4 +361,36 @@ Settings/PlayerDownloads, Settings/Subtitles, Sources. Player is entered from Ho
 | D17 | Dual-Layer Edge + Extension Architecture | Tier 0 zero-extension streaming for friends/new users + Tier 1 extension fallback for unindexed anime (e.g. One Piece) |
 | D18 | Clean Multi-Quality & Multi-Audio Engine | Titlecase language names, Japanese Sub vs English Dub anime switcher, sanitized 1080p-360p quality ladder, coroutine cancellation guard |
 | D19 | Resilient Multi-Tier Metadata Fallback (AniList, MAL, Simkl, TMDB) | Stored credentials in .env and BuildConfig; resilient fallback chain ensures anime and movie rails/search remain 100% operational during upstream outages or rate-limits. |
+| D20 | Serverless Watchlist Sync via Google Drive AppData (`GoogleDriveSyncRepository.kt`) | Free, zero-backend, encrypted cross-device sync of My List using Google Drive's hidden `appDataFolder` (`my_list_sync.json`) and two-way merge by `updatedAtMs`. |
+| D21 | Deterministic Signing Keystore (`signing/debug.keystore`) | Hardcoded permanent development and release keystore eliminating CI signature drift, ensuring Google OAuth Android client consistency across local and CI releases. |
+
+## 17. Authentication, Cloud Sync & Keystore Architecture `[D]`
+
+### 17.1 Google Play Services Authentication
+- Native OAuth 2.0 authentication powered by `com.google.android.gms:play-services-auth:21.3.0`.
+- Scopes requested:
+  - Identity: `GoogleSignInOptions.DEFAULT_SIGN_IN` (`email`, `profile`).
+  - Cloud Storage: Incremental OAuth scope `https://www.googleapis.com/auth/drive.appdata` acquired via `GoogleAuthUtil.getToken()` and `UserRecoverableAuthException`.
+- High-resolution user avatars loaded reactively via Coil into the Profile view.
+
+### 17.2 Serverless Google Drive AppData Sync (`my_list_sync.json`)
+- **Zero Server Costs**: Instead of maintaining a custom database server (PostgreSQL/MongoDB), user watchlist state syncs directly to the user's personal Google Drive account in a hidden, sandboxed configuration space (`appDataFolder`).
+- **Data Encapsulation**: Stored as `my_list_sync.json`, completely isolated from regular user-facing Drive folders and immune to accidental manual deletion.
+- **Conflict Resolution (Two-Way Merge)**:
+  - Every `MyListItem` maintains an `updatedAtMs: Long` timestamp.
+  - When sync executes, remote items from Drive and local items from SharedPreferences are merged:
+    $$\text{item}_{\text{resolved}} = \begin{cases} \text{item}_{\text{local}}, & \text{if } \text{local.updatedAtMs} \ge \text{remote.updatedAtMs} \\ \text{item}_{\text{remote}}, & \text{otherwise} \end{cases}$$
+  - The unified list is persisted locally and pushed back to `appDataFolder` in a single multipart HTTP upload.
+- **Reactive Background Trigger**:
+  - `MyListRepository` provides an `onListChangedListener`.
+  - Adding an anime/movie, toggling watch status (`Pending`, `Watching`, `Completed`), or deleting an entry immediately fires an asynchronous background sync job on `Dispatchers.IO`.
+
+### 17.3 Deterministic Build Signing & OAuth Client Mapping
+- Android Google OAuth credentials strictly validate the application's Package Name (`com.animarvle.app`) and Certificate SHA-1 fingerprint.
+- **The Issue**: Ephemeral GitHub Actions runners dynamically generated arbitrary debug keystores, producing build artifacts with differing SHA-1 hashes that broke Google Sign-In with Developer Error (10) and prevented device updates (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`).
+- **The Solution**:
+  - The repository maintains a permanent, reproducible keystore at `signing/debug.keystore` (SHA-1: `DD:1B:59:E1:CD:79:40:CC:67:40:82:F5:85:DD:7D:90:C4:BF:73:43`).
+  - Both `debug` and `release` build types in `app/build.gradle.kts` explicitly consume this keystore.
+  - CI runners and local workstations build identical cryptographic signatures, guaranteeing out-of-the-box Google Sign-In and seamless update compatibility across all user devices.
+
 

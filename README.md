@@ -39,6 +39,9 @@ An Android application for streaming Anime, Movies, and TV series, built with na
   - Reactive `My List` button with real-time `itemsFlow` synchronization: dynamically displays filled accent bookmark with `"In List"` when saved, or outline bookmark with `"My List"` when unsaved.
   - Refined available-options bottom sheet (Pending, Watching, Completed, Remove from My List).
   - Clean pagination indicator (`01 ━━━ 08`).
+- **Cross-Device Cloud Sync**:
+  - Automatically synchronizes watchlist mutations to Google Drive AppData (`my_list_sync.json`) in the background.
+  - Seamless two-way merging across multiple devices linked to the same Google account.
 
 ### ⏱️ 4. Vertical Continue Watching Rail & Domain Isolation
 - **2:3 Cover Poster Geometry**:
@@ -93,9 +96,14 @@ An Android application for streaming Anime, Movies, and TV series, built with na
   - Interactive "Check for updates" row with version badges and instant live check.
 
 ### 👤 10. User Account, Preferences & Profile System
-- **Google Play Services Authentication (`play-services-auth`)**:
-  - Account sync with high-resolution Google avatar loading via Coil circular crop.
+- **Google Play Services Authentication & Cloud Watchlist Sync**:
+  - One-tap sign in via Google Play Services with profile metadata and avatar display.
+  - **Serverless Cloud Sync**: Zero-cost, privacy-first watchlist sync using Google Drive's hidden `appDataFolder` (`my_list_sync.json`).
+  - **Two-Way Conflict Resolution**: Automatic timestamp-based merging (`updatedAtMs`) ensures list integrity when syncing across multiple devices.
+  - **Profile Sync Card**: Real-time sync status indicator ("Last synced: X ago"), manual "Sync" trigger, and one-tap Google Cloud Console activation dialog.
   - Migration to Android Credential Manager (`androidx.credentials`) is queued on the technical roadmap.
+- **Reproducible & Deterministic Build Signing**:
+  - Hardened signing configuration via permanent `signing/debug.keystore`, ensuring identical cryptographic signatures and 100% Google OAuth compatibility across both local builds and GitHub Actions releases.
 - **OLED Obsidian Preferences Suite**:
   - **Player & Downloads**: Quality, audio language, download paths, and concurrency.
   - **Subtitle Settings**: Real-time typography styling, font size, text colors, outline thickness, and subtitle positioning.
