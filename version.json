@@ -1,8 +1,8 @@
 {
-  "version_code": 4,
-  "version_name": "0.1.3",
-  "apk_url": "https://github.com/nd7hdyt/AniMarvle/releases/download/v0.1.3/app-debug.apk",
+  "version_code": 5,
+  "version_name": "0.1.4",
+  "apk_url": "https://github.com/nd7hdyt/AniMarvle/releases/download/v0.1.4/app-debug.apk",
   "sha256": "3faddcf00769f028abd10bfbcfbce2449ebed0cfe38b74f2050ebd9607826a2f",
-  "release_notes": "• Enforced strict HTTPS updates and SHA-256 binary integrity verification\n• Added sliding-window IP rate limiting to Cloudflare Worker relay\n• Added automated GitHub Actions CI workflow\n• Added unit tests for version comparison logic\n• Standardized branding to pure Animarvle across settings and docs",
-  "github_url": "https://github.com/nd7hdyt/AniMarvle/releases/tag/v0.1.3"
+  "release_notes": "• Added Google Drive AppData cloud synchronization for My List watchlist\n• Added deterministic last-write-wins timestamp conflict resolution\n• Updated in-app Privacy Policy disclosing hidden Google Drive AppData storage\n• Isolated release signing configurations from debug keystore\n• Added unit tests for cloud sync conflict resolution",
+  "github_url": "https://github.com/nd7hdyt/AniMarvle/releases/tag/v0.1.4"
 }

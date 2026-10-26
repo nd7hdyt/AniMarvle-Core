@@ -24,8 +24,8 @@ android {
         applicationId = "com.animarvle.app"
         minSdk = 26
         targetSdk = 37
-        versionCode = 4
-        versionName = "0.1.3"
+        versionCode = 5
+        versionName = "0.1.4"
 
         val tmdbKey = getSecret("TMDB_API_KEY")
         val googleClientId = getSecret("GOOGLE_WEB_CLIENT_ID")
@@ -51,6 +51,15 @@ android {
             keyAlias = "androiddebugkey"
             keyPassword = "android"
         }
+        create("release") {
+            val keystorePath = System.getenv("RELEASE_KEYSTORE_PATH")
+            if (!keystorePath.isNullOrBlank() && file(keystorePath).exists()) {
+                storeFile = file(keystorePath)
+                storePassword = System.getenv("RELEASE_KEYSTORE_PASSWORD") ?: System.getenv("RELEASE_STORE_PASSWORD")
+                keyAlias = System.getenv("RELEASE_KEY_ALIAS")
+                keyPassword = System.getenv("RELEASE_KEY_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
@@ -59,8 +68,17 @@ android {
         }
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("debug")
+            val releaseConfig = signingConfigs.getByName("release")
+            signingConfig = if (releaseConfig.storeFile != null && releaseConfig.storeFile!!.exists()) {
+                releaseConfig
+            } else {
+                null
+            }
         }
+    }
+
+    testOptions {
+        unitTests.isReturnDefaultValues = true
     }
 
     compileOptions {

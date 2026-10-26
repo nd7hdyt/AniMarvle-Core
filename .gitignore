@@ -24,6 +24,7 @@ node_modules/
 !signing/debug.keystore
 google-services.json
 release.properties
+keystore.properties
 PROMPT.md
 
 # Scratch dumps & temporary captures in root

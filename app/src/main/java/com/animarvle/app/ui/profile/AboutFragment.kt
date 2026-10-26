@@ -82,6 +82,7 @@ class AboutFragment : Fragment() {
 
                     • Information on Device: Downloaded files, watch history, My List, search history, settings, and playback preferences are stored locally on your device.
                     • Account & Profile: For optional sign-in, profile details, avatar, and watch progress are processed to sync across devices.
+                    • Cloud Storage (Google Drive AppData): If you choose to enable cloud synchronization, your My List watchlist is saved to a private, hidden appDataFolder in your personal Google Drive account. We do not access, view, or store any of your other Google Drive files.
                     • Diagnostics: Anonymous crash reports and error logs are used solely to fix bugs and measure reliability.
                     • Third-Party Media: Media streams are linked from independent third-party services. Your device connects directly with those providers.
                     • No Data Selling: We do not sell personal data or use it for targeted advertising.

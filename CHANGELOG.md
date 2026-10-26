@@ -6,17 +6,22 @@ semantic versioning once a release cadence is agreed.
 
 Dates are ISO-8601. Milestones follow `PROMPT.md` §10.
 
-## [Unreleased]
+## [0.1.4] - 2026-10-26
 
-### Cloud Synchronization & Serverless Architecture
+### Cloud Synchronization & Offline Conflict Resolution
 - **Google Drive AppData Watchlist Sync (`GoogleDriveSyncRepository.kt`):** Implemented zero-cost, private cross-device sync using Google Drive's sandboxed `appDataFolder` (`my_list_sync.json`). Watchlist items are stored without requiring external backend servers or recurring infrastructure costs.
-- **Two-Way Merge by Timestamp (`MyListRepository.kt`):** Added `updatedAtMs: Long` to `MyListItem` and implemented an automatic conflict-resolution merge algorithm (latest timestamp wins), keeping local and cloud watchlists in sync across multiple devices.
+- **Two-Way Merge by Timestamp (`GoogleDriveSyncRepository.mergeLists`):** Added `updatedAtMs: Long` to `MyListItem` and implemented an automatic conflict-resolution merge algorithm (latest timestamp wins, with local-priority tie-breaking), keeping local and cloud watchlists in sync across multiple devices.
+- **Unit Testing Suite (`GoogleDriveSyncRepositoryTest.kt`):** Added comprehensive unit test coverage verifying disjoint list merging, local newer overwrite, remote newer overwrite, equal timestamp tie-break determinism, empty list handling, and descending chronological sorting.
 - **Real-Time Reactive Background Sync (`AnimarvleApp.kt`):** Attached `onListChangedListener` to `MyListRepository` to automatically trigger asynchronous background cloud sync whenever titles are added, removed, or updated.
 - **Profile Cloud Sync UI & Incremental Consent (`ProfileFragment.kt`, `fragment_profile.xml`):** Added an obsidian Google Drive Sync card in Profile settings with live sync timestamp, manual "Sync" button, incremental OAuth permission handling (`drive.appdata`), and an interactive dialog with one-tap link to enable the Google Drive API in Google Cloud Console.
+- **Privacy Policy Update (`AboutFragment.kt`):** Updated the in-app Privacy Policy to explicitly disclose that watchlist data is saved exclusively to the user's private Google Drive `appDataFolder` without accessing any personal files.
+- **Scope Restriction:** Confirmed and verified minimal OAuth scope usage (`https://www.googleapis.com/auth/drive.appdata`), avoiding broad `drive` access.
+- **Modern Auth Migration Roadmap:** Established architecture plan for transitioning legacy `play-services-auth` to Android Credential Manager + Google `AuthorizationClient` for granular Drive authorization.
 
-### Security, Build Determinism & Google OAuth
-- **Permanent Shared Keystore (`signing/debug.keystore`):** Committed a deterministic development/release keystore (SHA-1 `DD:1B:59:E1:CD:79:40:CC:67:40:82:F5:85:DD:7D:90:C4:BF:73:43`) and whitelisted it in `.gitignore`.
-- **Deterministic CI & Local Build Signing (`app/build.gradle.kts`):** Configured both `debug` and `release` build types to sign with `signing/debug.keystore`, ensuring GitHub Actions CI releases and local machine builds share identical cryptographic certificates matching Google Cloud Console OAuth credentials. Resolves `Developer Error (10)` and `INSTALL_FAILED_UPDATE_INCOMPATIBLE` across all devices.
+### Security, Signing Isolation & Build Determinism
+- **Release Signing Isolation (`app/build.gradle.kts`):** Hardened release build type to dynamically load production credentials from environment variables (`RELEASE_KEYSTORE_PATH`, etc.) or remain unsigned. Decoupled release APKs completely from the debug keystore.
+- **Shared Development Keystore (`signing/debug.keystore`):** Clarified in `signing/README.md` that `debug.keystore` is strictly for development and debug builds (with default public credentials `androiddebugkey` / `android`).
+- **Hardened Git Exclusions (`.gitignore`):** Ensured `*.jks`, `*.keystore` (except `signing/debug.keystore`), and `keystore.properties` are strictly excluded from git tracking.
 
 ## [0.1.3] - 2026-10-26
 

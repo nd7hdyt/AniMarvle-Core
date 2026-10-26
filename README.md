@@ -102,8 +102,9 @@ An Android application for streaming Anime, Movies, and TV series, built with na
   - **Two-Way Conflict Resolution**: Automatic timestamp-based merging (`updatedAtMs`) ensures list integrity when syncing across multiple devices.
   - **Profile Sync Card**: Real-time sync status indicator ("Last synced: X ago"), manual "Sync" trigger, and one-tap Google Cloud Console activation dialog.
   - Migration to Android Credential Manager (`androidx.credentials`) is queued on the technical roadmap.
-- **Reproducible & Deterministic Build Signing**:
-  - Hardened signing configuration via permanent `signing/debug.keystore`, ensuring identical cryptographic signatures and 100% Google OAuth compatibility across both local builds and GitHub Actions releases.
+- **Isolated & Reproducible Build Signing**:
+  - Development builds use a committed `signing/debug.keystore` for reproducible local and debug CI runs, matching development Google OAuth credentials.
+  - Production release builds are strictly isolated in `app/build.gradle.kts` and dynamically sign using environment variables (`RELEASE_KEYSTORE_PATH`) without exposing private release keys.
 - **OLED Obsidian Preferences Suite**:
   - **Player & Downloads**: Quality, audio language, download paths, and concurrency.
   - **Subtitle Settings**: Real-time typography styling, font size, text colors, outline thickness, and subtitle positioning.

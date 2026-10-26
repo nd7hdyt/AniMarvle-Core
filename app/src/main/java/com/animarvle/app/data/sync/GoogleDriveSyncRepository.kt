@@ -52,11 +52,28 @@ class GoogleDriveSyncRepository(
         private const val KEY_LAST_SYNC_COUNT = "last_sync_count"
 
         const val DRIVE_APPDATA_SCOPE = "https://www.googleapis.com/auth/drive.appdata"
-        val DRIVE_SCOPE = Scope(DRIVE_APPDATA_SCOPE)
 
         private const val SYNC_FILENAME = "my_list_sync.json"
         private const val DRIVE_FILES_API = "https://www.googleapis.com/drive/v3/files"
         private const val DRIVE_UPLOAD_API = "https://www.googleapis.com/upload/drive/v3/files"
+
+        fun mergeLists(local: List<MyListItem>, remote: List<MyListItem>): List<MyListItem> {
+            val map = LinkedHashMap<Long, MyListItem>()
+
+            // 1. Put all remote items
+            remote.forEach { map[it.mediaId] = it }
+
+            // 2. Merge local items: if local item was updated more recently, overwrite remote (last-write-wins)
+            local.forEach { localItem ->
+                val remoteItem = map[localItem.mediaId]
+                if (remoteItem == null || localItem.updatedAtMs >= remoteItem.updatedAtMs) {
+                    map[localItem.mediaId] = localItem
+                }
+            }
+
+            // Return descending sorted by last updated
+            return map.values.sortedByDescending { it.updatedAtMs }
+        }
     }
 
     fun getLastSyncTime(): Long = prefs.getLong(KEY_LAST_SYNC_TIME, 0L)
@@ -64,7 +81,7 @@ class GoogleDriveSyncRepository(
 
     fun hasDrivePermission(context: Context): Boolean {
         val account = GoogleSignIn.getLastSignedInAccount(context) ?: return false
-        return GoogleSignIn.hasPermissions(account, DRIVE_SCOPE)
+        return GoogleSignIn.hasPermissions(account, Scope(DRIVE_APPDATA_SCOPE))
     }
 
     suspend fun getAccessToken(context: Context): Result<String> = withContext(Dispatchers.IO) {
@@ -229,23 +246,5 @@ class GoogleDriveSyncRepository(
         if (!response.isSuccessful) {
             throw IllegalStateException("Drive file update failed (${response.code}): ${response.body?.string()}")
         }
-    }
-
-    private fun mergeLists(local: List<MyListItem>, remote: List<MyListItem>): List<MyListItem> {
-        val map = LinkedHashMap<Long, MyListItem>()
-
-        // 1. Put all remote items
-        remote.forEach { map[it.mediaId] = it }
-
-        // 2. Merge local items: if local item was updated more recently, overwrite remote
-        local.forEach { localItem ->
-            val remoteItem = map[localItem.mediaId]
-            if (remoteItem == null || localItem.updatedAtMs >= remoteItem.updatedAtMs) {
-                map[localItem.mediaId] = localItem
-            }
-        }
-
-        // Return descending sorted by last updated
-        return map.values.sortedByDescending { it.updatedAtMs }
     }
 }
