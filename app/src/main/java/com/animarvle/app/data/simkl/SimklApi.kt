@@ -101,6 +101,10 @@ class SimklApi(
                 val arr = JSONArray(body)
                 if (arr.length() == 0) return@runCatching null
                 val obj = arr.getJSONObject(0)
+                val simklTitle = obj.optString("title")
+                if (!com.animarvle.app.data.MetadataRepository.isTitleMatch(title, simklTitle)) {
+                    return@runCatching null
+                }
                 val idsObj = obj.optJSONObject("ids") ?: return@runCatching null
                 val simklId = idsObj.optLong("simkl_id", 0L).takeIf { it > 0 } ?: return@runCatching null
                 val tmdbId = idsObj.optString("tmdb").toLongOrNull()

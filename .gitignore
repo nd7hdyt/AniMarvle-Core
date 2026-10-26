@@ -42,3 +42,4 @@ PROMPT.md
 safe_backup/
 scratch/
 serverless-worker/test_*.js
+.wrangler/

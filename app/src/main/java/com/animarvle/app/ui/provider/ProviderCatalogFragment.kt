@@ -152,10 +152,12 @@ class ProviderCatalogFragment : Fragment() {
         val isMoviesTv = com.animarvle.app.data.MediaTypeManager.getInstance(requireContext())
             .currentMode.value == com.animarvle.app.data.AppMediaMode.MOVIES_TV
         val mediaType = media.mediaType ?: if (media.tags.contains("MOVIE")) "MOVIE" else "ANIME"
+        val isExplicitAnime = mediaType.equals("ANIME", ignoreCase = true)
+        val preferTmdb = if (isExplicitAnime) false else isMoviesTv
         val args = Bundle().apply {
             putLong("mediaId", id)
             putString("mediaType", mediaType)
-            putBoolean("preferTmdb", isMoviesTv)
+            putBoolean("preferTmdb", preferTmdb)
         }
         findNavController().navigate(R.id.detailsFragment, args)
     }

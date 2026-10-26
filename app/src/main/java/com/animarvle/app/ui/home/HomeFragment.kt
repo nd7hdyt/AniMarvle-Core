@@ -30,6 +30,7 @@ import com.animarvle.app.data.AppMediaMode
 import com.animarvle.app.data.MediaTypeManager
 import com.animarvle.app.databinding.FragmentHomeBinding
 import com.animarvle.app.ui.mylist.AddToMyListBottomSheet
+import com.animarvle.app.ui.player.HistoryRepository
 import com.animarvle.app.ui.player.VortexBlurHelper
 import kotlinx.coroutines.launch
 
@@ -277,20 +278,27 @@ class HomeFragment : Fragment() {
         val id = media.originalId ?: media.id.toLongOrNull() ?: -1L
         val isMoviesTv = MediaTypeManager.getInstance(requireContext()).currentMode.value == AppMediaMode.MOVIES_TV
         val mediaType = media.mediaType ?: if (media.tags.contains("MOVIE")) "MOVIE" else "ANIME"
+        val isExplicitAnime = mediaType.equals("ANIME", ignoreCase = true)
+        val preferTmdb = if (isExplicitAnime) false else isMoviesTv
         val args = Bundle().apply {
             putLong("mediaId", id)
             putString("mediaType", mediaType)
-            putBoolean("preferTmdb", isMoviesTv)
+            putBoolean("preferTmdb", preferTmdb)
         }
         findNavController().navigate(R.id.detailsFragment, args)
     }
 
     private fun resumePlayback(item: Media) {
         val isDonghua = AnimarvleApp.isDonghua(item.title)
-        val effectiveType = if (isDonghua) "ANIME" else (item.mediaType ?: "ANIME")
+        val effectiveType = if (isDonghua) "ANIME" else HistoryRepository.sanitizeMediaType(
+            item.mediaType ?: "ANIME",
+            item.title,
+            item.mediaUrl.orEmpty()
+        )
+        val isExplicitAnime = effectiveType.equals("ANIME", ignoreCase = true)
         val isMoviesTv = MediaTypeManager.getInstance(requireContext()).currentMode.value == AppMediaMode.MOVIES_TV
-        val isTmdb = isMoviesTv || effectiveType.equals("MOVIE", ignoreCase = true) || effectiveType.equals("TV", ignoreCase = true)
-        val id = item.originalId ?: item.id.toLongOrNull() ?: 0L
+        val isTmdb = if (isExplicitAnime) false else (isMoviesTv || effectiveType.equals("MOVIE", ignoreCase = true) || effectiveType.equals("TV", ignoreCase = true))
+        val id = item.originalId ?: item.mediaUrl?.toLongOrNull() ?: item.id.toLongOrNull() ?: 0L
         val args = Bundle().apply {
             putLong("sourceId", 0L)
             if (id > 0L) {

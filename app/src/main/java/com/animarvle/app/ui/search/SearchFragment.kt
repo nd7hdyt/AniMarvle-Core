@@ -347,16 +347,17 @@ class SearchFragment : Fragment() {
             viewModel.commitSearchQuery(currentQuery)
         }
         val isMovie = media.format.equals("MOVIE", ignoreCase = true)
-        val curSearchType = viewModel.state.value.type
-        val isMovieTvMode = com.animarvle.app.data.MediaTypeManager.getInstance(requireContext())
-            .currentMode.value == com.animarvle.app.data.AppMediaMode.MOVIES_TV
-        val preferTmdb = media.isTmdb || when (curSearchType) {
-            SearchType.MOVIE, SearchType.TV_SHOW -> true
-            SearchType.ANIME -> false
-            SearchType.ASIAN -> isMovieTvMode || media.isTmdb
-            SearchType.ALL -> isMovieTvMode || media.isTmdb
+        val isAnimeMedia = !media.isTmdb ||
+            com.animarvle.app.ui.player.HistoryRepository.isAnimeTitle(media.title) ||
+            media.coverUrl?.contains("anilist.co") == true ||
+            media.coverUrl?.contains("myanimelist.net") == true
+        val preferTmdb = if (isAnimeMedia) false else media.isTmdb
+        val mediaType = if (preferTmdb) {
+            if (isMovie) "movie" else "tv"
+        } else {
+            if (isMovie) "movie" else "anime"
         }
-        openDetails(media.id, if (isMovie) "movie" else "tv", preferTmdb)
+        openDetails(media.id, mediaType, preferTmdb)
     }
 
     private fun openDetails(id: Long, mediaType: String? = null, preferTmdb: Boolean = false) {

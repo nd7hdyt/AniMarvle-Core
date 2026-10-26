@@ -79,8 +79,11 @@ class DetailFragment : Fragment() {
         val mediaId = arguments?.getLong("mediaId") ?: -1L
         val mediaType = arguments?.getString("mediaType")
         val repo = (requireActivity().application as AnimarvleApp).container.metadata
+        val isExplicitAnime = mediaType?.equals("anime", ignoreCase = true) == true
         val preferTmdb = if (arguments?.containsKey("preferTmdb") == true) {
             arguments?.getBoolean("preferTmdb", false) ?: false
+        } else if (isExplicitAnime) {
+            false
         } else {
             com.animarvle.app.data.MediaTypeManager.getInstance(requireContext())
                 .currentMode.value == com.animarvle.app.data.AppMediaMode.MOVIES_TV
@@ -381,11 +384,16 @@ class DetailFragment : Fragment() {
                 com.animarvle.app.data.MediaTypeManager.getInstance(requireContext())
                     .currentMode.value == com.animarvle.app.data.AppMediaMode.MOVIES_TV
             }
+            val isAdult = media.genres.any { it.equals("Hentai", ignoreCase = true) } ||
+                com.animarvle.app.data.MetadataRepository.isAdultTitle(media.title) ||
+                com.animarvle.app.data.MetadataRepository.isAdultTitle(media.romajiTitle)
             val metaMap = appContainer.metadata.episodeMetadata(
                 mediaId = media.id,
                 title = media.title,
                 seasonNumber = selectedSeasonNumber,
                 isTmdb = preferTmdb,
+                isAdult = isAdult,
+                romaji = media.romajiTitle,
             )
             if (metaMap.isNotEmpty() && current?.id == media.id) {
                 val maxEp = maxOf(totalEps, metaMap.keys.maxOrNull() ?: totalEps)
@@ -511,12 +519,7 @@ class DetailFragment : Fragment() {
             putString("audio", if (defaultDub) "DUB" else "SUB")
             putString("poster", seasonObj?.posterUrl ?: media.bannerUrl ?: media.coverUrl)
             putString("animeTitle", media.title)
-            val preferTmdb = if (arguments?.containsKey("preferTmdb") == true) {
-                arguments?.getBoolean("preferTmdb", false) ?: false
-            } else {
-                com.animarvle.app.data.MediaTypeManager.getInstance(requireContext())
-                    .currentMode.value == com.animarvle.app.data.AppMediaMode.MOVIES_TV
-            }
+            val preferTmdb = media.isTmdb
             putBoolean("preferTmdb", preferTmdb)
             putBoolean("isMovie", isMovie)
         }

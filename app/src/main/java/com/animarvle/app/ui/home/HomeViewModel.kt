@@ -283,10 +283,11 @@ class HomeViewModel(
 
     private fun isAnimeHistory(item: com.animarvle.app.ui.player.HistoryItem): Boolean {
         val sanitized = HistoryRepository.sanitizeMediaType(
-            item.mediaType,
-            item.title,
-            item.mediaUrl,
-            item.durationMs,
+            rawMediaType = item.mediaType,
+            title = item.title,
+            mediaUrl = item.mediaUrl,
+            durationMs = item.durationMs,
+            posterUrl = item.posterUrl,
         )
         return sanitized.equals("ANIME", ignoreCase = true)
     }

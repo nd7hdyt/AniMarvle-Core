@@ -142,7 +142,15 @@ class PlayerFragment : Fragment() {
         val args = requireArguments()
 
         val mediaTitle = args.getString("mediaTitle").orEmpty()
-        val rawMediaType = PlayerViewModel.typeFrom(args.getString("mediaType"))
+        val rawMediaUrl = args.getString("mediaUrl").orEmpty()
+        val posterUrl = args.getString("poster")
+        val sanitizedTypeStr = HistoryRepository.sanitizeMediaType(
+            args.getString("mediaType") ?: "ANIME",
+            mediaTitle,
+            rawMediaUrl,
+            posterUrl = posterUrl
+        )
+        val rawMediaType = PlayerViewModel.typeFrom(sanitizedTypeStr)
         val isDonghua = AnimarvleApp.isDonghua(mediaTitle)
         val mediaType = if (isDonghua) MediaType.ANIME else rawMediaType
         val sourceId = args.getLong("sourceId", 0L).takeIf { it != 0L }
@@ -175,9 +183,15 @@ class PlayerFragment : Fragment() {
         val episodeCount = args.getInt("episodeCount", 0).takeIf { it > 0 }
         val mediaId = args.getLong("mediaId", 0L)
 
-        val preferTmdb = (args.getBoolean("preferTmdb", false)) ||
+        val isExplicitAnime = mediaType == MediaType.ANIME || isDonghua
+        val preferTmdb = if (isExplicitAnime) {
+            false
+        } else if (args.containsKey("preferTmdb")) {
+            args.getBoolean("preferTmdb", false)
+        } else {
             (mediaType == MediaType.MOVIE) ||
-            (com.animarvle.app.data.MediaTypeManager.getInstance(requireContext()).currentMode.value == com.animarvle.app.data.AppMediaMode.MOVIES_TV)
+                (com.animarvle.app.data.MediaTypeManager.getInstance(requireContext()).currentMode.value == com.animarvle.app.data.AppMediaMode.MOVIES_TV)
+        }
         val metaPrefix = if (preferTmdb) "tmdb" else "anilist"
         val metaQuery = MetaQuery(
             metaId = "$metaPrefix:$mediaId",
@@ -192,7 +206,6 @@ class PlayerFragment : Fragment() {
             episodeCount = episodeCount,
         )
 
-        val rawMediaUrl = args.getString("mediaUrl").orEmpty()
         val isExplicitSourceMatch = sourceId != null && candidateSource != null && candidateSource.id == initialSource?.id
         val isExtensionUrl = rawMediaUrl.startsWith("http://") || rawMediaUrl.startsWith("https://") || rawMediaUrl.startsWith("/")
         val isRawNumberId = rawMediaUrl.isNotEmpty() && rawMediaUrl.all { it.isDigit() }
@@ -2417,17 +2430,25 @@ class PlayerFragment : Fragment() {
         if (mediaUrl.isBlank()) return
         val poster = arguments?.getString("poster")
         val isDonghua = AnimarvleApp.isDonghua(state.title)
-        val preferTmdb = (arguments?.getBoolean("preferTmdb", false) ?: false) ||
+        val rawTypeArg = arguments?.getString("mediaType")
+        val isExplicitAnime = isDonghua ||
+            rawTypeArg?.equals("ANIME", ignoreCase = true) == true ||
+            HistoryRepository.isAnimeTitle(state.title) ||
+            poster?.contains("anilist.co") == true ||
+            poster?.contains("myanimelist.net") == true ||
+            poster?.contains("hentai") == true ||
+            poster?.contains("animesex") == true
+        val preferTmdb = if (isExplicitAnime) false else (
+            (arguments?.getBoolean("preferTmdb", false) ?: false) ||
             mediaUrl.toLongOrNull() != null ||
             mediaUrl.contains("tmdb=")
-        val rawTypeArg = arguments?.getString("mediaType")
+        )
         val mediaType = when {
-            isDonghua -> "ANIME"
+            isExplicitAnime -> "ANIME"
+            !preferTmdb -> "ANIME"
             rawTypeArg?.equals("TV", ignoreCase = true) == true -> "TV"
             rawTypeArg?.equals("MOVIE", ignoreCase = true) == true -> "MOVIE"
-            preferTmdb -> if (state.isMovie) "MOVIE" else "TV"
-            state.isMovie -> "MOVIE"
-            else -> rawTypeArg ?: "ANIME"
+            else -> if (state.isMovie) "MOVIE" else "TV"
         }
         viewLifecycleOwner.lifecycleScope.launch {
             app.container.history.saveProgress(

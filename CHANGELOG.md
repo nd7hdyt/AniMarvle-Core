@@ -6,6 +6,26 @@ semantic versioning once a release cadence is agreed.
 
 Dates are ISO-8601. Milestones follow `PROMPT.md` §10.
 
+## [0.1.5] - 2026-10-26
+
+### Cloudflare Worker Runtime Standards & TypeScript Diagnostics
+- **TweetNaCl Void IIFE Formatting (`serverless-worker/worker.js`):** Resolved TypeScript error `ts(1345)` (*"An expression of type 'void' cannot be tested for truthiness"*) by replacing minified `!function(i){...}(...)` with standard parentheses grouping `(function(i){...})(...)`. Eliminates unary negation on void return while preserving exact TweetNaCl encryption functionality.
+- **Web Standard `atob()` Migration (`serverless-worker/worker.js`):** Resolved TypeScript error `ts(2591)` (*"Cannot find name 'Buffer'"*) by replacing Node.js `Buffer.from(b64, "base64").toString("utf8")` with native Web API `atob(b64)`. Eliminates `@types/node` dependency and ensures clean execution across all standard Cloudflare Workers environments.
+- **Episode Metadata Resolution Endpoint (`serverless-worker/worker.js`):** Added `GET /api/episodes` endpoint resolving full episode lists with titles and high-definition `.webp` snapshot thumbnails for anime and adult anime/hentai via HentaiMama scrapers in <1.5s.
+
+### Adult Anime Episode Metadata & Real Snapshot Thumbnails
+- **Adult Episode Resolution & Worker URL Correction (`MetadataRepository.kt`):** Fixed worker URL to dynamically target `AnimarvleStreamSource.DEFAULT_WORKER_URL` (`animarvle-edge.grandfootball21.workers.dev/api/episodes`), replacing obsolete dead worker reference. Implemented a resilient multi-query candidate fallback (`cleanTitle`, `alphaTitle`, first-3-words, `romaji`) that queries HentaiMama directly with authentic User-Agent and parses exact episode numbers, titles, and `.webp` snapshot thumbnails.
+- **Strict Cross-Provider Title Match Verification (`MetadataRepository.kt`, `SimklApi.kt`):** Implemented `isTitleMatch(query, target)` with token normalization, stop-word removal, and containment heuristics. Integrated across Kitsu API, AniZip mappings, Simkl API, and TMDB TV searches. Completely eliminates metadata hijacking where adult titles (e.g., *Euphoria*, *Overflow*, *Mankitsu Happening*) were erroneously overridden by unrelated mainstream anime (e.g., *Hibike! Euphonium*, *Panty & Stocking with Garterbelt*, *Lovely Muuuuuuuco!*).
+- **Adult Anime Source Isolation (`MetadataRepository.kt`):** If a title is identified as adult (via genre, `isAdultTitle`, or `isAdult` flag), the metadata pipeline is strictly restricted to adult episode scrapers and isolated from non-matching AniZip, Kitsu, or TMDB TV fallbacks.
+- **Snapshot Thumbnail Protection (`PlayerViewModel.kt`):** Hardened `PlayerViewModel.enrichEpisodesAsync` so existing episode snapshot thumbnails (containing `.webp`, `hentaimama`, `gdvid`, or `yesterdaymail`) are preserved and cannot be overwritten by generic fallbacks or empty metadata.
+- **Detail Screen Enrichment (`DetailsFragment.kt`, `DetailFragment.kt`):** Passed `isAdult` flag (derived from `Hentai` genre and title heuristics) and `romajiTitle` to `episodeMetadata`, ensuring the Details screen renders genuine episode titles and snapshot cards.
+- **Streaming Source Episode Enrichment (`AnimarvleStreamSource.kt`):** Updated `episodes(media)` to enrich episode counts, snapshot thumbnails, and episode titles directly when generating the episode stream list.
+
+### History Classification Isolation & Continue Watching Cleanup
+- **Anime Title & Poster Heuristics (`HistoryRepository.kt`):** Enhanced `HistoryRepository.sanitizeMediaType` with `isAnimeTitle(title)` and poster URL checks (`anilist.co`, `myanimelist.net`, `kitsu.io`, `hentaimama`, `hentaini`, `animesex`, `yesterdaymail`, `gdvid`). Poster and title checks take strict precedence over `tmdb=` URL query parameters.
+- **Automatic Corrupt Entry Migration (`HistoryRepository.kt`):** `HistoryRepository.load()` now re-evaluates all saved entries on app launch; any anime or hentai previously misclassified as `"TV"` is auto-migrated back to `"ANIME"` and rewritten to disk, immediately removing them from the Movies & TV Continue Watching rail.
+- **Player & Search Media Type Guarding (`PlayerFragment.kt`, `SearchFragment.kt`, `HomeViewModel.kt`):** Added `isExplicitAnime` guard in `PlayerFragment.saveCurrentProgress()` so streams with `tmdb=` query parameters do not corrupt anime entries to `"TV"`. Guarded `SearchFragment.openDetails()` and passed `posterUrl` in `HomeViewModel.isAnimeHistory()`.
+
 ## [0.1.4] - 2026-10-26
 
 ### Cloud Synchronization & Offline Conflict Resolution

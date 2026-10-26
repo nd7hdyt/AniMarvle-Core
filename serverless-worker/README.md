@@ -14,13 +14,18 @@ Cloudflare gives you **100,000 requests per day for free** forever. You will nev
    - **Tier 2 (Regional Multi-Audio):** MoviesMod (Hindi, Tamil, Telugu), PelisPlus (Spanish/Castellano), AnimeHLS (Japanese Sub/Dub), Donghua (Chinese Sub/Dub).
    - **Subrequest Budgeting:** Enforces strict per-resolver timeouts and limits to stay strictly below Cloudflare Free Tier's 50-subrequest ceiling, preventing HTTP 500 crashes.
 
-2. **Google Drive & Direct Stream Byte-Range Proxying (`/proxy/stream`):**
+2. **Google Drive & Direct Stream Byte-Range Proxying (`/proxy/stream`, `/proxy/video`, `/proxy/m3u8`):**
    - Automatically resolves multi-hop form redirects and URL token verification (e.g. DriveSeed, FastDL).
    - Proxies direct streams with full HTTP 206 partial content slicing (`Range` headers), enabling seamless ExoPlayer seeking without hitting bandwidth walls.
    - Sniffs and preserves Matroska / EBML (`.mkv`) headers for flawless high-definition multi-track audio playback.
 
-3. **Stream Availability & Dead-Link Filtering:**
+3. **Episode Metadata Resolution (`/api/episodes`):**
+   - Resolves full episode lists with real titles and high-definition `.webp` snapshot thumbnails for anime & adult anime/hentai.
+   - Returns structured JSON `{ success: true, title: "...", episodes: [{ episode, title, thumbnail, url }] }` in <1.5s.
+
+4. **Stream Availability & Dead-Link Filtering:**
    - Detects and drops challenged or unreachable endpoints before passing streams to the client, preventing dead server entries.
+   - Built 100% on standard Cloudflare Worker Web APIs (`fetch`, `atob`, `crypto.getRandomValues`) with pure-JS TweetNaCl and zero Node.js runtime dependencies.
 
 ---
 

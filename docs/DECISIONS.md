@@ -2359,3 +2359,54 @@ Following the feature and layout implementations across the app, an audit of int
      - Added an obsidian `#181818` Google Drive Sync card displaying sync status ("Not synced yet", "Last synced: X ago (N items)") and a manual "Sync" button.
      - Handled `UserRecoverableAuthException` via `ActivityResultContracts.StartActivityForResult()`: if incremental Drive consent (`https://www.googleapis.com/auth/drive.appdata`) has not yet been granted, smoothly prompts Google's system permission sheet and resumes sync immediately upon approval.
      - Added MaterialAlertDialog with a direct "Open Console" link to `https://console.cloud.google.com/apis/library/drive.googleapis.com?project=547903414124` if the Google Drive API service is disabled on the Google Cloud project.
+
+## Decision 45: Cloudflare Worker Runtime Standards, Adult Anime Episode Metadata & History Classification Isolation (2026-10-26)
+- **Context:**
+  1. *Worker TypeScript / Diagnostics Errors:*
+     - The Cloudflare serverless worker (`serverless-worker/worker.js`) showed two compiler/editor diagnostic errors:
+       - `ts(1345)`: "An expression of type 'void' cannot be tested for truthiness" caused by minified TweetNaCl IIFE invocation `!function(i){...}(...)`.
+       - `ts(2591)`: "Cannot find name 'Buffer'" in the adult MP4 resolver fallback (`Buffer.from(b64, "base64").toString("utf8")`), requiring Node.js typings that are unavailable in standard Cloudflare Workers environments.
+  2. *Adult Anime Episode Thumbnails & Titles Missing:*
+     - Adult anime (hentai) series lacked real episode titles and high-definition thumbnails, falling back to generic "Episode X" and reusing the main poster/banner. Neither AniZip, Simkl, Kitsu, nor TMDB index 18+ adult episodes.
+  3. *Movies & TV "Continue Watching" Rail Contamination:*
+     - Animes like *The Beginning After the End*, *The Eminence in Shadow*, *DanMachi*, and hentai titles were appearing on the "Continue Watching" rail under the Movies & TV hub.
+     - Investigation of device storage (`history_dump.xml`) revealed that when anime streams resolved via the Cloudflare Worker passed `tmdb=<id>`, `PlayerFragment.kt` set `preferTmdb = true`, overriding the media argument and saving `mediaType = "TV"`. Subsequently, `HistoryRepository.sanitizeMediaType` saw `type=tv` and `tmdb=` in the stored URL and classified the entry as `"TV"`.
+- **Resolution:**
+  1. *Cloudflare Worker Web Standards (`serverless-worker/worker.js`):*
+     - Replaced `!function(i){...}(...)` with standard parentheses grouping `(function(i){...})(...)`, removing unary negation on the void function without altering crypto semantics.
+     - Replaced `Buffer.from(b64, "base64").toString("utf8")` with native Web API `atob(b64)`, ensuring 100% clean compatibility with Cloudflare Workers runtime and eliminating all `Buffer` dependencies.
+     - Added `GET /api/episodes?title=...&romaji=...` endpoint resolving HentaiMama show pages and returning exact episode numbers, titles, and `.webp` snapshot thumbnail URLs in structured JSON in <1.5s.
+  2. *Hentai Episode Metadata Resolution (`MetadataRepository.kt`, `AnimarvleStreamSource.kt`):*
+     - Added `fetchAdultEpisodeMetadata(title)` in `MetadataRepository.kt` calling the `/api/episodes` endpoint with fallback to direct HentaiMama HTML scraping.
+     - Hooked directly into `fetchAnimeEpisodeMetadata` prior to TMDB fallback, ensuring `DetailsFragment` and `PlayerViewModel` receive real episode titles and snapshot thumbnails.
+     - Updated `AnimarvleStreamSource.episodes` to enrich `SourceEpisode`s with snapshot thumbnails and real titles directly during source resolution.
+  3. *History Classification Isolation & Automatic Migration (`HistoryRepository.kt`, `PlayerFragment.kt`, `HomeViewModel.kt`, `SearchFragment.kt`):*
+     - Added `HistoryRepository.isAnimeTitle(title)` recognizing popular anime and adult anime keywords.
+     - Extended `HistoryRepository.sanitizeMediaType` to accept `posterUrl`. Any item bearing a poster from `anilist.co`, `myanimelist.net`, `kitsu.io`, `hentaimama`, `hentaini`, `animesex`, `yesterdaymail`, or `gdvid` is strictly classified as `"ANIME"`.
+     - Title and poster checks take precedence over `tmdb=` URL query parameters.
+     - In `HistoryRepository.load()`, existing persisted entries are re-sanitized on app launch; any misclassified entries are auto-migrated and rewritten to SharedPreferences, immediately clearing them from the Movies & TV hub.
+     - Guarded `PlayerFragment.saveCurrentProgress()` with `isExplicitAnime` so `tmdb=` stream URLs do not corrupt anime history entries to `"TV"`.
+     - Guarded `SearchFragment.openDetails()` so anime search results are not routed as TMDB TV shows.
+
+## Decision 46: Cross-Provider Title Verification & Adult Anime Episode Metadata Isolation (2026-10-26)
+- **Context:**
+  - On details and player screens for adult anime/hentai (e.g. Euphoria, Overflow, Mankitsu Happening), while video playback streamed the correct content, episode titles and thumbnails were being hijacked by completely unrelated mainstream anime (e.g. Hibike! Euphonium, Panty & Stocking with Garterbelt, Lovely Muuuuuuuco!).
+  - Root Cause Investigation revealed four cascading factors:
+    1. *Kitsu API Content Filtering & Blind Fallback:* Kitsu filters out 18+ adult content. Searching for "Euphoria" returned Hibike! Euphonium as the 1st result; searching for "Overflow" returned Panty & Stocking. MetadataRepository.fetchKitsuEpisodes() blindly took data.getJSONObject(0) without title verification.
+    2. *AniZip ID Mapping Collision:* AniZip's mapping database for AniList ID 21228 (Mankitsu Happening) collided with Lovely Muuuuuuuco! ("Shiny-Nosed Muco Loves Komatsu-san!"). AniZip results were accepted without checking whether any AniZip title matched the requested title.
+    3. *Obsolete Worker URL & Incomplete Fallback:* fetchAdultEpisodeMetadata targeted an obsolete dead worker domain (nd7hdyt.workers.dev), and single-string fallback queries failed on HentaiMama when titles had subtitle phrases or punctuation.
+    4. *PlayerViewModel Thumbnail Overwrite:* PlayerViewModel.enrichEpisodesAsync() unconditionally overwrote valid episode snapshots with whatever Kitsu or AniZip returned.
+- **Resolution:**
+  1. *Fuzzy Title Match Algorithm (MetadataRepository.isTitleMatch):*
+     - Added robust token-based title matcher in MetadataRepository.companion object: normalizes titles, removes noise tags ((Dub), (TV), (Uncensored)), discards common stop words, checks substring containment (length >= 4), and requires >= 50% distinctive keyword overlap.
+     - Kitsu API now queries up to 5 results and discards all if no title matches isTitleMatch.
+     - AniZip mappings are strictly validated against aniZip.titles.values.any { isTitleMatch(title, it) }.
+     - Simkl API findCrossIds verifies isTitleMatch(title, obj.optString("title")).
+     - TMDB TV search results require isTitleMatch(title, it.name ?: it.title).
+  2. *Adult Anime Pipeline Isolation (MetadataRepository.kt):*
+     - If a series is identified as adult (via AniList genre "Hentai", isAdultTitle, or isAdult flag), the pipeline queries the Cloudflare Worker /api/episodes endpoint and direct HentaiMama multi-query scrapers. If unmapped, it immediately returns emptyMap(), strictly preventing fallbacks from drifting into AniZip, Kitsu, or TMDB TV.
+  3. *Cloudflare Worker Endpoint & Resilient Multi-Candidate Fallback:*
+     - Updated worker URL to active AnimarvleStreamSource.DEFAULT_WORKER_URL (animarvle-edge.grandfootball21.workers.dev).
+     - Implemented multi-query candidate generation (cleanTitle, alphaTitle, first 3 words, and romaji) in both Android and Cloudflare Worker (resolveAdultAnimeEpisodes).
+  4. *Snapshot Thumbnail Preservation (PlayerViewModel.kt):*
+     - Protected existing episode snapshot URLs containing .webp, hentaimama, gdvid, or yesterdaymail from being overwritten by generic or empty metadata.

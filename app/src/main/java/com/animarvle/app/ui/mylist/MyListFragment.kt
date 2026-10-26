@@ -96,12 +96,14 @@ class MyListFragment : Fragment() {
                 val isTv = item.format?.equals("TV", ignoreCase = true) == true ||
                     item.format?.contains("SERIES", ignoreCase = true) == true
                 val mediaType = if (isMovie) "MOVIE" else if (isTv) "TV" else "ANIME"
+                val isExplicitAnime = mediaType.equals("ANIME", ignoreCase = true)
                 val isMoviesTv = com.animarvle.app.data.MediaTypeManager.getInstance(requireContext())
                     .currentMode.value == com.animarvle.app.data.AppMediaMode.MOVIES_TV
+                val preferTmdb = if (isExplicitAnime) false else isMoviesTv
                 val args = Bundle().apply {
                     putLong("mediaId", item.mediaId)
                     putString("mediaType", mediaType)
-                    putBoolean("preferTmdb", isMoviesTv)
+                    putBoolean("preferTmdb", preferTmdb)
                 }
                 findNavController().navigate(R.id.detailsFragment, args)
             },

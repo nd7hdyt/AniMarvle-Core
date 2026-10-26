@@ -13,6 +13,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
 import java.util.Calendar
+import java.util.Locale
 import java.util.TimeZone
 import java.util.concurrent.ConcurrentHashMap
 
@@ -306,9 +307,7 @@ class MetadataRepository(
                 if (rawMovie != null) return TmdbMapper.toMediaUi(rawMovie)
                 if (rawTv != null) return TmdbMapper.toMediaUi(rawTv)
             }
-            val anilist = runCatching { api.details(id)?.let(AniListMapper::toMediaUi) }.getOrNull()
-            if (anilist != null) return anilist
-            return runCatching { mal.details(id) }.getOrNull()
+            return null
         }
 
         val anilist = runCatching { api.details(id)?.let(AniListMapper::toMediaUi) }.getOrNull()
@@ -363,27 +362,6 @@ class MetadataRepository(
         val malMedia = runCatching { mal.details(id) }.getOrNull()
         if (malMedia != null) return malMedia
 
-        if (isTv) {
-            val tmdbTv = runCatching { tmdb.tvDetails(id)?.let(TmdbMapper::toMediaUi) }.getOrNull()
-            if (tmdbTv != null) return tmdbTv
-            val tmdbMovie = runCatching { tmdb.movieDetails(id)?.let(TmdbMapper::toMediaUi) }.getOrNull()
-            if (tmdbMovie != null) return tmdbMovie
-        } else if (isMovie) {
-            val tmdbMovie = runCatching { tmdb.movieDetails(id)?.let(TmdbMapper::toMediaUi) }.getOrNull()
-            if (tmdbMovie != null) return tmdbMovie
-            val tmdbTv = runCatching { tmdb.tvDetails(id)?.let(TmdbMapper::toMediaUi) }.getOrNull()
-            if (tmdbTv != null) return tmdbTv
-        } else {
-            val rawMovie = runCatching { tmdb.movieDetails(id) }.getOrNull()
-            val rawTv = runCatching { tmdb.tvDetails(id) }.getOrNull()
-            if (rawTv != null && rawMovie != null) {
-                val tvPop = rawTv.popularity ?: 0.0
-                val moviePop = rawMovie.popularity ?: 0.0
-                return if (tvPop >= moviePop) TmdbMapper.toMediaUi(rawTv) else TmdbMapper.toMediaUi(rawMovie)
-            }
-            if (rawMovie != null) return TmdbMapper.toMediaUi(rawMovie)
-            if (rawTv != null) return TmdbMapper.toMediaUi(rawTv)
-        }
         return null
     }
 
@@ -403,21 +381,10 @@ class MetadataRepository(
                 val tmdbTv = runCatching { tmdb.tvRecommendations(id).map(TmdbMapper::toMediaUi) }.getOrDefault(emptyList())
                 if (tmdbTv.isNotEmpty()) return tmdbTv
             }
-            return runCatching { api.recommendations(id).map(AniListMapper::toMediaUi) }.getOrDefault(emptyList())
+            return emptyList()
         }
 
-        val anilist = runCatching { api.recommendations(id).map(AniListMapper::toMediaUi) }.getOrDefault(emptyList())
-        if (anilist.isNotEmpty()) return anilist
-
-        if (isTv) {
-            val tmdbTv = runCatching { tmdb.tvRecommendations(id).map(TmdbMapper::toMediaUi) }.getOrDefault(emptyList())
-            if (tmdbTv.isNotEmpty()) return tmdbTv
-            return runCatching { tmdb.movieRecommendations(id).map(TmdbMapper::toMediaUi) }.getOrDefault(emptyList())
-        } else {
-            val tmdbMovie = runCatching { tmdb.movieRecommendations(id).map(TmdbMapper::toMediaUi) }.getOrDefault(emptyList())
-            if (tmdbMovie.isNotEmpty()) return tmdbMovie
-            return runCatching { tmdb.tvRecommendations(id).map(TmdbMapper::toMediaUi) }.getOrDefault(emptyList())
-        }
+        return runCatching { api.recommendations(id).map(AniListMapper::toMediaUi) }.getOrDefault(emptyList())
     }
 
     /** Episodes airing between local midnight today and the end of the given day offset. */
@@ -443,6 +410,8 @@ class MetadataRepository(
         title: String,
         seasonNumber: Int = 1,
         isTmdb: Boolean = false,
+        isAdult: Boolean = false,
+        romaji: String? = null,
     ): Map<Int, EpisodeMetadata> = withContext(Dispatchers.IO) {
         val cacheKey = "${if (isTmdb) "tmdb" else "anilist"}:$mediaId:$title:$seasonNumber"
         episodeMetadataCache[cacheKey]?.let { return@withContext it }
@@ -450,7 +419,7 @@ class MetadataRepository(
         val result = if (isTmdb) {
             fetchTmdbEpisodeMetadata(mediaId, title, seasonNumber)
         } else {
-            fetchAnimeEpisodeMetadata(mediaId, title, seasonNumber)
+            fetchAnimeEpisodeMetadata(mediaId, title, seasonNumber, isAdult = isAdult, romaji = romaji)
         }
 
         if (result.isNotEmpty()) {
@@ -463,7 +432,18 @@ class MetadataRepository(
         mediaId: Long,
         title: String,
         seasonNumber: Int,
+        isAdult: Boolean = false,
+        romaji: String? = null,
     ): Map<Int, EpisodeMetadata> {
+        val adult = isAdult || isAdultTitle(title) || (romaji != null && isAdultTitle(romaji))
+
+        if (adult) {
+            val adultEps = fetchAdultEpisodeMetadata(title, romaji)
+            if (adultEps.isNotEmpty()) return adultEps
+            // For adult anime, do not allow Kitsu, AniZip, or TMDB to hijack with unrelated mainstream anime
+            return emptyMap()
+        }
+
         // 1. AniZip by AniList ID
         var anilistId = mediaId.toInt().takeIf { it > 0 }
         if (anilistId == null && title.isNotBlank()) {
@@ -471,18 +451,24 @@ class MetadataRepository(
         }
 
         if (anilistId != null && anilistId > 0) {
-            val aniZipEpisodes = runCatching { AniZipHelper.getEpisodeMetadata(http, anilistId, seasonNumber) }.getOrDefault(emptyMap())
-            if (aniZipEpisodes.isNotEmpty() && aniZipEpisodes.values.any { !it.thumbnailUrl.isNullOrBlank() }) {
-                return aniZipEpisodes
-            }
-
-            // Check if AniZip mapped to TMDB TV ID
             val aniZip = runCatching { AniZipHelper.getMappings(http, anilistId) }.getOrNull()
-            val tmdbId = aniZip?.tmdbId
-            if (tmdbId != null && tmdbId > 0) {
-                val tmdbEpisodes = fetchTmdbEpisodeMetadata(tmdbId, title, seasonNumber)
-                if (tmdbEpisodes.isNotEmpty()) {
-                    return tmdbEpisodes
+            val titleMatches = if (title.isNotBlank() && aniZip != null && aniZip.titles.isNotEmpty()) {
+                aniZip.titles.values.any { isTitleMatch(title, it) }
+            } else true
+
+            if (titleMatches) {
+                val aniZipEpisodes = runCatching { AniZipHelper.getEpisodeMetadata(http, anilistId, seasonNumber) }.getOrDefault(emptyMap())
+                if (aniZipEpisodes.isNotEmpty() && aniZipEpisodes.values.any { !it.thumbnailUrl.isNullOrBlank() }) {
+                    return aniZipEpisodes
+                }
+
+                // Check if AniZip mapped to TMDB TV ID
+                val tmdbId = aniZip?.tmdbId
+                if (tmdbId != null && tmdbId > 0) {
+                    val tmdbEpisodes = fetchTmdbEpisodeMetadata(tmdbId, title, seasonNumber)
+                    if (tmdbEpisodes.isNotEmpty()) {
+                        return tmdbEpisodes
+                    }
                 }
             }
         }
@@ -495,13 +481,19 @@ class MetadataRepository(
             }
         }
 
-        // 3. Kitsu API by title
+        // 3. Kitsu API by title (with strict title verification)
         val kitsuEpisodes = fetchKitsuEpisodes(title)
         if (kitsuEpisodes.isNotEmpty() && kitsuEpisodes.values.any { !it.thumbnailUrl.isNullOrBlank() }) {
             return kitsuEpisodes
         }
 
-        // 4. Fallback to TMDB TV
+        // 4. Secondary Adult Fallback
+        val adultEpisodes = fetchAdultEpisodeMetadata(title, romaji)
+        if (adultEpisodes.isNotEmpty()) {
+            return adultEpisodes
+        }
+
+        // 5. Fallback to TMDB TV
         val tmdbEpisodes = fetchTmdbEpisodeMetadata(0L, title, seasonNumber)
         if (tmdbEpisodes.isNotEmpty()) {
             return tmdbEpisodes
@@ -535,8 +527,10 @@ class MetadataRepository(
         // Search TMDB TV by title
         if (title.isNotBlank()) {
             val searchResults = runCatching { tmdb.searchMulti(title) }.getOrDefault(emptyList())
-            val matchedTv = searchResults.firstOrNull { it.mediaType == "tv" || it.numberOfEpisodes != null }
-                ?: searchResults.firstOrNull()
+            val matchedTv = searchResults.firstOrNull {
+                (it.mediaType == "tv" || it.numberOfEpisodes != null) &&
+                isTitleMatch(title, it.name ?: it.title)
+            }
             if (matchedTv != null) {
                 val episodes = runCatching { tmdb.seasonEpisodes(matchedTv.id, seasonNumber) }.getOrDefault(emptyList())
                 if (episodes.isNotEmpty()) {
@@ -567,18 +561,34 @@ class MetadataRepository(
         if (title.isBlank()) return emptyMap()
         return runCatching {
             val encoded = java.net.URLEncoder.encode(title, "UTF-8")
-            val searchUrl = "https://kitsu.io/api/edge/anime?filter[text]=$encoded&page[limit]=1"
+            val searchUrl = "https://kitsu.io/api/edge/anime?filter[text]=$encoded&page[limit]=5"
             val req = Request.Builder().url(searchUrl).header("User-Agent", "Animarvle/1.0").build()
             val text = http.newCall(req).execute().use { if (it.isSuccessful) it.body.string() else null } ?: return@runCatching emptyMap()
             val data = JSONObject(text).optJSONArray("data") ?: return@runCatching emptyMap()
             if (data.length() == 0) return@runCatching emptyMap()
-            val animeId = data.getJSONObject(0).optString("id")
-            if (animeId.isNullOrBlank()) return@runCatching emptyMap()
+
+            var matchedAnimeId: String? = null
+            for (i in 0 until data.length()) {
+                val item = data.getJSONObject(i)
+                val attrs = item.optJSONObject("attributes") ?: continue
+                val canTitle = attrs.optString("canonicalTitle")
+                val titlesObj = attrs.optJSONObject("titles")
+                val enTitle = titlesObj?.optString("en")
+                val enJpTitle = titlesObj?.optString("en_jp")
+                val jaJpTitle = titlesObj?.optString("ja_jp")
+                if (isTitleMatch(title, canTitle) || isTitleMatch(title, enTitle) ||
+                    isTitleMatch(title, enJpTitle) || isTitleMatch(title, jaJpTitle)
+                ) {
+                    matchedAnimeId = item.optString("id")
+                    break
+                }
+            }
+            if (matchedAnimeId.isNullOrBlank()) return@runCatching emptyMap()
 
             val resultMap = mutableMapOf<Int, EpisodeMetadata>()
-            fetchKitsuEpisodePage(animeId, 0, resultMap)
+            fetchKitsuEpisodePage(matchedAnimeId, 0, resultMap)
             if (resultMap.size >= 20) {
-                fetchKitsuEpisodePage(animeId, 20, resultMap)
+                fetchKitsuEpisodePage(matchedAnimeId, 20, resultMap)
             }
             resultMap
         }.getOrDefault(emptyMap())
@@ -611,8 +621,175 @@ class MetadataRepository(
         }
     }
 
+    private suspend fun fetchAdultEpisodeMetadata(
+        title: String,
+        romaji: String? = null,
+    ): Map<Int, EpisodeMetadata> {
+        if (title.isBlank()) return emptyMap()
+
+        // 1. Serverless Cloudflare worker /api/episodes (instant <1s resolution)
+        val workerRes = runCatching {
+            val encodedTitle = java.net.URLEncoder.encode(title, "UTF-8")
+            val romajiParam = if (!romaji.isNullOrBlank()) "&romaji=" + java.net.URLEncoder.encode(romaji, "UTF-8") else ""
+            val workerUrl = "${com.animarvle.app.data.source.builtin.AnimarvleStreamSource.DEFAULT_WORKER_URL}/api/episodes?title=$encodedTitle$romajiParam"
+            val req = Request.Builder()
+                .url(workerUrl)
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 AnimarvleApp")
+                .build()
+            val resp = http.newCall(req).execute()
+            if (resp.isSuccessful) {
+                val body = resp.body.string()
+                val json = JSONObject(body)
+                if (json.optBoolean("success", false)) {
+                    val arr = json.optJSONArray("episodes") ?: org.json.JSONArray()
+                    val map = mutableMapOf<Int, EpisodeMetadata>()
+                    for (i in 0 until arr.length()) {
+                        val ep = arr.getJSONObject(i)
+                        val epNum = ep.optInt("episode", i + 1)
+                        val epTitle = ep.optString("title", "Episode $epNum")
+                        val thumb = if (ep.has("thumbnail") && !ep.isNull("thumbnail")) ep.getString("thumbnail") else null
+                        map[epNum] = EpisodeMetadata(
+                            episodeNumber = epNum,
+                            title = epTitle,
+                            thumbnailUrl = thumb,
+                            overview = null,
+                        )
+                    }
+                    if (map.isNotEmpty()) return@runCatching map
+                }
+            }
+            null
+        }.getOrNull()
+
+        if (!workerRes.isNullOrEmpty()) {
+            return workerRes
+        }
+
+        // 2. Direct HentaiMama multi-query scraper fallback
+        return runCatching {
+            val cleanTitle = title.replace(Regex("\\s*\\((?:Dub|Sub|TV|Uncensored|Raw)\\)", RegexOption.IGNORE_CASE), "").trim()
+            val alphaTitle = cleanTitle.replace(Regex("[^a-zA-Z0-9]"), " ").replace(Regex("\\s+"), " ").trim()
+            val words = cleanTitle.split(Regex("\\s+"))
+            val first3Words = if (words.size > 2) words.take(3).joinToString(" ") else ""
+
+            val queryCandidates = linkedSetOf<String>()
+            if (cleanTitle.isNotBlank()) queryCandidates.add(cleanTitle)
+            if (alphaTitle.isNotBlank()) queryCandidates.add(alphaTitle)
+            if (first3Words.isNotBlank()) queryCandidates.add(first3Words)
+            if (!romaji.isNullOrBlank()) {
+                val cleanRomaji = romaji.replace(Regex("\\s*\\((?:Dub|Sub|TV|Uncensored|Raw)\\)", RegexOption.IGNORE_CASE), "").trim()
+                if (cleanRomaji.isNotBlank()) queryCandidates.add(cleanRomaji)
+            }
+
+            for (q in queryCandidates) {
+                if (q.length < 2) continue
+                val searchUrl = "https://hentaimama.io/?s=" + java.net.URLEncoder.encode(q, "UTF-8")
+                val req = Request.Builder()
+                    .url(searchUrl)
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                    .build()
+                val resp = http.newCall(req).execute()
+                if (!resp.isSuccessful) continue
+                val html = resp.body.string()
+
+                val tvRegex = Regex("https://hentaimama\\.io/tvshows/[^\"'\\s]+")
+                val tvLinks = tvRegex.findAll(html).map { it.value }.toSet().toList()
+                val showUrl = tvLinks.firstOrNull { l ->
+                    isTitleMatch(cleanTitle, l.replace('-', ' '))
+                } ?: (if (tvLinks.size == 1) tvLinks[0] else null)
+
+                if (showUrl != null) {
+                    val showReq = Request.Builder()
+                        .url(showUrl)
+                        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                        .build()
+                    val showResp = http.newCall(showReq).execute()
+                    if (showResp.isSuccessful) {
+                        val showHtml = showResp.body.string()
+                        val itemRegex = Regex("<a class=\"dt-se-item\"[^>]*href=\"([^\"]+)\"[^>]*>([\\s\\S]*?)</a>", RegexOption.IGNORE_CASE)
+                        val map = mutableMapOf<Int, EpisodeMetadata>()
+                        itemRegex.findAll(showHtml).forEachIndexed { idx, match ->
+                            val epUrl = match.groupValues[1]
+                            val inner = match.groupValues[2]
+                            val imgMatch = Regex("<img[^>]+src=\"([^\"]+)\"", RegexOption.IGNORE_CASE).find(inner)
+                            val numMatch = Regex("<b class=\"dt-se-num\">[^<]*?(\\d+)</b>", RegexOption.IGNORE_CASE).find(inner)
+                                ?: Regex("episode-(\\d+)", RegexOption.IGNORE_CASE).find(epUrl)
+                                ?: Regex("alt=\"Episode\\s*(\\d+)\"", RegexOption.IGNORE_CASE).find(inner)
+                            val titleMatch = Regex("<span class=\"dt-se-title\">([^<]+)</span>", RegexOption.IGNORE_CASE).find(inner)
+                                ?: Regex("alt=\"([^\"]+)\"", RegexOption.IGNORE_CASE).find(inner)
+
+                            val epNum = numMatch?.groupValues?.get(1)?.toIntOrNull() ?: (idx + 1)
+                            val thumb = imgMatch?.groupValues?.get(1)
+                            val rawTitle = titleMatch?.groupValues?.get(1)?.trim()
+                            val epTitle = if (!rawTitle.isNullOrBlank() && !rawTitle.equals("null", ignoreCase = true)) rawTitle else "Episode $epNum"
+                            map[epNum] = EpisodeMetadata(
+                                episodeNumber = epNum,
+                                title = epTitle,
+                                thumbnailUrl = thumb,
+                                overview = null,
+                            )
+                        }
+                        if (map.isNotEmpty()) return@runCatching map
+                    }
+                }
+            }
+            emptyMap()
+        }.getOrDefault(emptyMap())
+    }
+
     companion object {
         fun localTimeZone(): TimeZone = TimeZone.getDefault()
+
+        private val STOP_WORDS = setOf("the", "and", "for", "with", "from", "animation", "project", "season")
+
+        val KNOWN_ADULT_KEYWORDS = setOf(
+            "overflow", "euphoria", "mankitsu", "resort boin", "boku no pico",
+            "eroge", "fella pure", "fela pure", "mitarashi", "kaihatsu zanmai",
+            "araiya", "adam's sweet agony", "kimi omou koi", "what she fell on",
+            "bikini warriors", "seven mortal sins", "tsunpure", "fault", "rance",
+            "disciplina", "night shift nurses", "discipline", "bible black",
+            "itadaki seieki", "kuroinu", "shoujo ramune", "ane wa yanmama",
+            "dropout", "kyonyuu", "tamashii insert", "dokidoki little",
+            "onichichi", "succubus stayed", "shoujo kyouiku", "harem camp"
+        )
+
+        fun isAdultTitle(title: String?): Boolean {
+            if (title.isNullOrBlank()) return false
+            val lower = title.trim().lowercase(Locale.ROOT)
+            return KNOWN_ADULT_KEYWORDS.any { lower.contains(it) }
+        }
+
+        fun normalizeTitle(title: String?): String {
+            if (title.isNullOrBlank()) return ""
+            return title.lowercase(Locale.ROOT)
+                .replace(Regex("\\s*\\((?:dub|sub|raw|tv|uncensored|the animation)\\)", RegexOption.IGNORE_CASE), " ")
+                .replace(Regex("\\[(?:dub|sub|raw|tv|uncensored|the animation)\\]", RegexOption.IGNORE_CASE), " ")
+                .replace(Regex("[^a-z0-9]"), " ")
+                .replace(Regex("\\s+"), " ")
+                .trim()
+        }
+
+        fun isTitleMatch(query: String?, target: String?): Boolean {
+            val q = normalizeTitle(query)
+            val t = normalizeTitle(target)
+            if (q.isBlank() || t.isBlank()) return false
+            if (q == t) return true
+
+            if (q.length >= 4 && t.contains(q)) return true
+            if (t.length >= 4 && q.contains(t)) return true
+
+            val qTokens = q.split(" ").filter { it.length > 2 && it !in STOP_WORDS }
+            val tTokens = t.split(" ").filter { it.length > 2 && it !in STOP_WORDS }
+            if (qTokens.isEmpty() || tTokens.isEmpty()) return false
+
+            val common = qTokens.intersect(tTokens.toSet())
+            if (common.isNotEmpty()) {
+                if (qTokens.size == 1 && tTokens.contains(qTokens.first())) return true
+                if (tTokens.size == 1 && qTokens.contains(tTokens.first())) return true
+                if (common.size.toDouble() / minOf(qTokens.size, tTokens.size) >= 0.5) return true
+            }
+            return false
+        }
     }
 }
 

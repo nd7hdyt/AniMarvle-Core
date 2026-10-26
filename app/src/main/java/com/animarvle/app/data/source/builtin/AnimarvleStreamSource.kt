@@ -142,20 +142,66 @@ class AnimarvleStreamSource(
     override suspend fun episodes(media: SourceMedia): List<SourceEpisode> = withContext(Dispatchers.IO) {
         val tmdbId = media.extra["tmdbId"].orEmpty()
         val title = media.extra["title"] ?: media.title
+        val romaji = media.extra["romaji"].orEmpty()
+        val synonyms = media.extra["synonyms"].orEmpty()
         val year = media.extra["year"].orEmpty()
         val mediaType = media.extra["mediaType"] ?: if (media.type == MediaType.MOVIE) "movie" else if (media.type == MediaType.ANIME) "anime" else "tv"
         val season = media.extra["season"] ?: "1"
         val count = media.episodeCount ?: 1
 
-        (1..count).map { epNum ->
+        val isAdultOrAnime = mediaType.equals("anime", ignoreCase = true) ||
+            com.animarvle.app.ui.player.HistoryRepository.isAnimeTitle(title)
+
+        val adultMetadataMap = if (isAdultOrAnime) {
+            runCatching {
+                val baseUrl = getWorkerBaseUrl()
+                val qTitle = URLEncoder.encode(title, "UTF-8")
+                val qRomaji = if (romaji.isNotBlank()) "&romaji=" + URLEncoder.encode(romaji, "UTF-8") else ""
+                val epReq = Request.Builder()
+                    .url("$baseUrl/api/episodes?title=$qTitle$qRomaji")
+                    .header("User-Agent", "AnimarvleApp/1.0")
+                    .build()
+                http.newCall(epReq).execute().use { resp ->
+                    if (resp.isSuccessful) {
+                        val body = resp.body.string()
+                        val json = JSONObject(body)
+                        if (json.optBoolean("success", false)) {
+                            val arr = json.optJSONArray("episodes") ?: org.json.JSONArray()
+                            val m = mutableMapOf<Int, Pair<String, String?>>()
+                            for (i in 0 until arr.length()) {
+                                val item = arr.getJSONObject(i)
+                                val num = item.optInt("episode", i + 1)
+                                val epTitle = item.optString("title", "Episode $num")
+                                val thumb = if (item.has("thumbnail") && !item.isNull("thumbnail")) item.getString("thumbnail") else null
+                                m[num] = epTitle to thumb
+                            }
+                            m
+                        } else null
+                    } else null
+                }
+            }.getOrNull()
+        } else null
+
+        val finalCount = if (!adultMetadataMap.isNullOrEmpty()) {
+            maxOf(count, adultMetadataMap.keys.maxOrNull() ?: count)
+        } else {
+            count
+        }
+
+        (1..finalCount).map { epNum ->
+            val meta = adultMetadataMap?.get(epNum)
+            val epTitle = meta?.first?.takeIf { it.isNotBlank() } ?: (if (finalCount == 1) title else "Episode $epNum")
+            val epThumb = meta?.second?.takeIf { it.isNotBlank() } ?: media.poster
             SourceEpisode(
                 url = "${media.url}&season=$season&episode=$epNum",
                 number = epNum.toFloat(),
-                title = if (count == 1) title else "Episode $epNum",
-                thumbnail = media.poster,
+                title = epTitle,
+                thumbnail = epThumb,
                 extra = buildMap {
                     put("tmdbId", tmdbId)
                     put("title", title)
+                    if (romaji.isNotBlank()) put("romaji", romaji)
+                    if (synonyms.isNotBlank()) put("synonyms", synonyms)
                     put("year", year)
                     put("mediaType", mediaType)
                     put("season", season)
@@ -170,6 +216,8 @@ class AnimarvleStreamSource(
     override suspend fun options(episode: SourceEpisode): EpisodeOptions = withContext(Dispatchers.IO) {
         val baseUrl = getWorkerBaseUrl()
         val title = episode.extra["title"] ?: episode.title
+        val romaji = episode.extra["romaji"].orEmpty()
+        val synonyms = episode.extra["synonyms"].orEmpty()
         val tmdbId = episode.extra["tmdbId"].orEmpty()
         val year = episode.extra["year"].orEmpty()
         val mediaType = episode.extra["mediaType"] ?: "anime"
@@ -180,6 +228,8 @@ class AnimarvleStreamSource(
             append("$baseUrl/api/stream?")
             if (tmdbId.isNotBlank()) append("tmdb=").append(URLEncoder.encode(tmdbId, "UTF-8")).append("&")
             append("title=").append(URLEncoder.encode(title, "UTF-8"))
+            if (romaji.isNotBlank()) append("&romaji=").append(URLEncoder.encode(romaji, "UTF-8"))
+            if (synonyms.isNotBlank()) append("&synonyms=").append(URLEncoder.encode(synonyms, "UTF-8"))
             if (year.isNotBlank()) append("&year=").append(URLEncoder.encode(year, "UTF-8"))
             append("&type=").append(mediaType)
             append("&season=").append(season)

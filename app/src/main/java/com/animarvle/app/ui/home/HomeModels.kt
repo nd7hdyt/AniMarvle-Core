@@ -118,7 +118,7 @@ fun com.animarvle.app.ui.player.HistoryItem.toMedia(): Media {
         progress = prog,
         timeLeft = timeLeftStr,
         mediaType = mediaType,
-        originalId = null,
+        originalId = mediaUrl.toLongOrNull(),
         episodeNumber = episodeNumber,
         seasonNumber = seasonNumber,
         mediaUrl = mediaUrl,

@@ -858,11 +858,19 @@ class PlayerViewModel(
             _state.update { it.copy(matchedTitle = targetMedia.title) }
 
             // 2. Fetch episodes list from source (with 25s timeout)
-            val mediaWithSeason = if (currentSeasonNumber > 1 || !targetMedia.extra.containsKey("season")) {
-                targetMedia.copy(extra = targetMedia.extra + ("season" to currentSeasonNumber.toString()))
-            } else {
-                targetMedia
+            val enrichedExtra = targetMedia.extra.toMutableMap().apply {
+                if (currentSeasonNumber > 1 || !containsKey("season")) {
+                    put("season", currentSeasonNumber.toString())
+                }
+                metaQuery.titles.romaji?.takeIf { it.isNotBlank() }?.let { put("romaji", it) }
+                if (metaQuery.synonyms.isNotEmpty()) {
+                    put("synonyms", metaQuery.synonyms.joinToString("|"))
+                }
+                if (isAnime) {
+                    put("mediaType", "anime")
+                }
             }
+            val mediaWithSeason = targetMedia.copy(extra = enrichedExtra)
             val fetchedEpisodesResult = withContext(Dispatchers.IO) {
                 withTimeoutOrNull(25000L) {
                     runCatching { source.episodes(mediaWithSeason) }
@@ -1217,11 +1225,13 @@ class PlayerViewModel(
             runCatching {
                 val isTmdb = metaQuery.metaId.startsWith("tmdb:")
                 val metaId = metaQuery.metaId.substringAfter(":").toLongOrNull() ?: 0L
+                val isAdult = com.animarvle.app.data.MetadataRepository.isAdultTitle(mediaTitle) || metaQuery.metaId.contains("hentai", ignoreCase = true)
                 val metaMap = repo.episodeMetadata(
                     mediaId = metaId,
                     title = mediaTitle,
                     seasonNumber = _state.value.seasonNumber,
                     isTmdb = isTmdb,
+                    isAdult = isAdult,
                 )
                 if (metaMap.isNotEmpty()) {
                     _state.update { current ->
@@ -1229,9 +1239,21 @@ class PlayerViewModel(
                             val num = ep.number.toInt()
                             val m = metaMap[num]
                             if (m != null) {
+                                val currentThumb = ep.thumbnail.orEmpty()
+                                val isExistingSnapshot = currentThumb.contains(".webp", ignoreCase = true) ||
+                                    currentThumb.contains("hentaimama", ignoreCase = true) ||
+                                    currentThumb.contains("gdvid", ignoreCase = true) ||
+                                    currentThumb.contains("yesterdaymail", ignoreCase = true)
+                                val finalThumb = if (isExistingSnapshot && currentThumb.isNotBlank()) {
+                                    currentThumb
+                                } else {
+                                    m.thumbnailUrl?.takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) } ?: ep.thumbnail
+                                }
+                                val finalTitle = m.title?.takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) && !it.equals("Episode $num", ignoreCase = true) }
+                                    ?: ep.title
                                 ep.copy(
-                                    title = m.title?.takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) } ?: ep.title,
-                                    thumbnail = m.thumbnailUrl?.takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) } ?: ep.thumbnail,
+                                    title = finalTitle,
+                                    thumbnail = finalThumb,
                                     extra = if (m.overview.isNullOrBlank() || m.overview.equals("null", ignoreCase = true)) ep.extra else (ep.extra + ("overview" to m.overview)),
                                 )
                             } else {
@@ -1252,7 +1274,8 @@ class PlayerViewModel(
                 val isTmdb = metaQuery.metaId.startsWith("tmdb:")
                 val metaId = metaQuery.metaId.substringAfter(":").toLongOrNull() ?: 0L
                 if (metaId > 0L) {
-                    val details = repo.details(metaId, preferTmdb = isTmdb, mediaType = if (metaQuery.type == MediaType.MOVIE) "movie" else "tv")
+                    val targetMediaType = if (metaQuery.type == MediaType.MOVIE) "movie" else if (isTmdb) "tv" else "anime"
+                    val details = repo.details(metaId, preferTmdb = isTmdb, mediaType = targetMediaType)
                     if (details != null && details.seasons.isNotEmpty()) {
                         val hasSeriesSeasons = details.seasons.size > 1 || details.seasons.any { s -> (s.episodeCount ?: 0) > 1 || (s.seasonNumber ?: 1) > 1 }
                         _state.update { current ->

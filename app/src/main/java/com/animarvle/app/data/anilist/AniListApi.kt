@@ -115,6 +115,7 @@ class AniListApi(
             .url(ENDPOINT)
             .post(body)
             .header("Accept", "application/json")
+            .header("User-Agent", "AnimarvleApp/1.0 (Android; Linux)")
             .build()
 
         client.newCall(request).execute().use { response ->

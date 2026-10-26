@@ -49,8 +49,9 @@ class HistoryRepository(context: Context) {
                 val rawMediaType = o.optString("mediaType", "ANIME")
                 val mediaUrl = o.getString("mediaUrl")
                 val title = o.getString("title")
+                val posterUrl = if (o.has("posterUrl") && !o.isNull("posterUrl")) o.getString("posterUrl") else null
                 val durationMs = o.optLong("durationMs", 0L)
-                val sanitizedType = sanitizeMediaType(rawMediaType, title, mediaUrl, durationMs)
+                val sanitizedType = sanitizeMediaType(rawMediaType, title, mediaUrl, durationMs, posterUrl)
                 if (sanitizedType != rawMediaType) {
                     modified = true
                 }
@@ -108,7 +109,7 @@ class HistoryRepository(context: Context) {
         seasonNumber: Int = 1,
     ) = withContext(Dispatchers.IO) {
         if (durationMs <= 0 || positionMs <= 0) return@withContext
-        val sanitizedType = sanitizeMediaType(mediaType, title, mediaUrl, durationMs)
+        val sanitizedType = sanitizeMediaType(mediaType, title, mediaUrl, durationMs, posterUrl)
         val current = _historyFlow.value.toMutableList()
         // Deduplicate and update in-place: if title matches (or mediaUrl matches), remove previous entry
         current.removeAll {
@@ -208,15 +209,65 @@ class HistoryRepository(context: Context) {
         const val KEY_ITEMS = "history_entries"
         const val MAX_HISTORY_ENTRIES = 20
 
-        fun sanitizeMediaType(
-            rawMediaType: String,
-            title: String,
-            mediaUrl: String,
-            durationMs: Long = 0L,
-        ): String {
-            if (com.animarvle.app.AnimarvleApp.isDonghua(title)) return "ANIME"
+        private val KNOWN_ANIME_KEYWORDS = setOf(
+            "the beginning after the end", "eminence in shadow", "dungeon",
+            "danmachi", "seven mortal sins", "bikini warriors", "kimi omou koi",
+            "what she fell on", "adam's sweet agony", "araiya", "overflow",
+            "euphoria", "mankitsu", "resort boin", "boku no pico", "eroge",
+            "fella pure", "fela pure", "mitarashi", "kaihatsu zanmai", "jujutsu kaisen",
+            "demon slayer", "attack on titan", "naruto", "one piece", "bleach",
+            "my hero academia", "chainsaw man", "solo leveling", "black clover",
+            "sword art online", "death note", "fullmetal alchemist", "hunter x hunter",
+            "tokyo ghoul", "re:zero", "konosuba", "mushoku tensei", "overlord",
+            "slime datta ken", "blue lock", "haikyuu", "vinland saga", "spy x family",
+            "fate/stay", "fate/zero", "classroom of the elite", "mob psycho",
+            "hell's paradise", "kaiju no. 8", "oshi no ko", "frieren", "dandadan"
+        )
 
-            val lowerTitle = title.trim().lowercase(Locale.ROOT)
+        fun isAnimeTitle(title: String?): Boolean {
+            if (title.isNullOrBlank()) return false
+            val lower = title.trim().lowercase(Locale.ROOT)
+            return KNOWN_ANIME_KEYWORDS.any { lower.contains(it) }
+        }
+
+        fun sanitizeMediaType(
+            rawMediaType: String?,
+            title: String?,
+            mediaUrl: String?,
+            durationMs: Long = 0L,
+            posterUrl: String? = null,
+        ): String {
+            if (title != null && com.animarvle.app.AnimarvleApp.isDonghua(title)) return "ANIME"
+
+            val lowerTitle = title.orEmpty().trim().lowercase(Locale.ROOT)
+            val lowerUrl = mediaUrl.orEmpty().trim().lowercase(Locale.ROOT)
+            val lowerPoster = posterUrl.orEmpty().trim().lowercase(Locale.ROOT)
+
+            // 1. Posters from AniList, MyAnimeList, Kitsu, or adult anime hosts are 100% ANIME
+            if (lowerPoster.contains("anilist.co") || lowerPoster.contains("myanimelist.net") ||
+                lowerPoster.contains("kitsu.io") || lowerPoster.contains("hentaimama") ||
+                lowerPoster.contains("hentaini") || lowerPoster.contains("animesex") ||
+                lowerPoster.contains("yesterdaymail") || lowerPoster.contains("gdvid")
+            ) {
+                return "ANIME"
+            }
+
+            // 2. Anime & adult anime titles are ALWAYS ANIME
+            if (isAnimeTitle(lowerTitle)) {
+                return "ANIME"
+            }
+
+            // 3. Known adult / anime domains or streaming URLs are ALWAYS ANIME
+            if (lowerUrl.contains("hentaini") || lowerUrl.contains("yesterdaymail") ||
+                lowerUrl.contains("hentaimama") || lowerUrl.contains("gdvid") ||
+                lowerUrl.contains("animesex") || lowerUrl.contains("clean-tube-player") ||
+                lowerUrl.contains("povblowjob") || lowerUrl.contains("anitaku") ||
+                lowerUrl.contains("gogoanime") || lowerUrl.contains("hianime") ||
+                lowerUrl.contains("zoro") || lowerUrl.contains("type=anime")
+            ) {
+                return "ANIME"
+            }
+
             val knownTvTitles = setOf(
                 "peaky blinders", "the simpsons", "breaking bad", "mobland",
                 "lupin", "the terminal list", "game of thrones", "stranger things",
@@ -224,33 +275,28 @@ class HistoryRepository(context: Context) {
             )
             val knownMovieTitles = setOf(
                 "masterplan", "swapped", "the cycle", "foursome",
-                "spider-man: brand new day", "avatar aang: the last airbender"
+                "spider-man: brand new day", "avatar aang: the last airbender",
+                "prey", "hope"
             )
 
             if (knownTvTitles.contains(lowerTitle)) return "TV"
             if (knownMovieTitles.contains(lowerTitle)) return "MOVIE"
 
             // Pure numeric mediaUrl indicates a TMDB ID (e.g. "61595", "212488", "220360")
-            if (mediaUrl.toLongOrNull() != null) {
+            if (mediaUrl?.toLongOrNull() != null) {
                 return if (durationMs > 50 * 60 * 1000L) "MOVIE" else "TV"
             }
 
-            if (mediaUrl.contains("type=movie")) return "MOVIE"
-            if (mediaUrl.contains("type=tv")) {
-                if (rawMediaType.equals("ANIME", ignoreCase = true)) {
-                    val isAnimeTitle = lowerTitle.contains("season") ||
-                        lowerTitle.contains("student council") ||
-                        lowerTitle.contains("black clover") ||
-                        lowerTitle.contains("apothecary") ||
-                        lowerTitle.contains("dan da dan") ||
-                        lowerTitle.contains("edgerunners")
-                    if (isAnimeTitle) return "ANIME"
-                }
-                return "TV"
-            }
+            if (lowerUrl.contains("type=movie") && (lowerUrl.contains("tmdb=") || lowerUrl.contains("/movie/"))) return "MOVIE"
+            if (lowerUrl.contains("type=tv") && (lowerUrl.contains("tmdb=") || lowerUrl.contains("/tv/"))) return "TV"
 
-            if (rawMediaType.equals("MOVIE", ignoreCase = true) || rawMediaType.equals("TV", ignoreCase = true)) {
-                return rawMediaType.uppercase(Locale.ROOT)
+            val raw = rawMediaType.orEmpty()
+            if (raw.equals("MOVIE", ignoreCase = true) || raw.equals("TV", ignoreCase = true)) {
+                // If the URL has http/https and is not a TMDB embed/resolve, it's an anime stream
+                if (lowerUrl.startsWith("http") && !lowerUrl.contains("tmdb") && !lowerUrl.contains("videasy") && !lowerUrl.contains("vidlink") && !lowerUrl.contains("2embed")) {
+                    return "ANIME"
+                }
+                return raw.uppercase(Locale.ROOT)
             }
 
             return "ANIME"

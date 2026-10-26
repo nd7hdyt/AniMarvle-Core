@@ -81,8 +81,11 @@ class DetailsFragment : Fragment() {
         val mediaId = arguments?.getLong("mediaId") ?: -1L
         val mediaTypeArg = arguments?.getString("mediaType")
         val app = requireActivity().application as AnimarvleApp
+        val isExplicitAnime = mediaTypeArg?.equals("anime", ignoreCase = true) == true
         val preferTmdb = if (arguments?.containsKey("preferTmdb") == true) {
             arguments?.getBoolean("preferTmdb", false) ?: false
+        } else if (isExplicitAnime) {
+            false
         } else {
             MediaTypeManager.getInstance(requireContext()).currentMode.value == AppMediaMode.MOVIES_TV
         }
@@ -491,17 +494,18 @@ class DetailsFragment : Fragment() {
         // Enrich with real episode titles/metadata asynchronously
         val appContainer = (requireActivity().application as AnimarvleApp).container
         viewLifecycleOwner.lifecycleScope.launch {
-            val preferTmdb = if (arguments?.containsKey("preferTmdb") == true) {
-                arguments?.getBoolean("preferTmdb", false) ?: false
-            } else {
-                MediaTypeManager.getInstance(requireContext()).currentMode.value == AppMediaMode.MOVIES_TV
-            }
+            val preferTmdb = media.isTmdb
+            val isAdult = media.genres.any { it.equals("Hentai", ignoreCase = true) } ||
+                com.animarvle.app.data.MetadataRepository.isAdultTitle(targetTitle) ||
+                com.animarvle.app.data.MetadataRepository.isAdultTitle(media.romajiTitle)
             val metaMap = runCatching {
                 appContainer.metadata.episodeMetadata(
                     mediaId = targetMediaId,
                     title = targetTitle,
                     seasonNumber = targetSeasonNumber,
                     isTmdb = preferTmdb,
+                    isAdult = isAdult,
+                    romaji = media.romajiTitle,
                 )
             }.getOrDefault(emptyMap())
 
@@ -574,8 +578,7 @@ class DetailsFragment : Fragment() {
             putString("romajiTitle", media.romajiTitle)
             putString("nativeTitle", media.nativeTitle)
             putStringArrayList("synonyms", ArrayList(media.synonyms))
-            val preferTmdb = media.isTmdb || (arguments?.getBoolean("preferTmdb", false) ?: false) ||
-                (MediaTypeManager.getInstance(requireContext()).currentMode.value == AppMediaMode.MOVIES_TV)
+            val preferTmdb = media.isTmdb
             val effectiveMediaType = when {
                 isDonghua -> "ANIME"
                 preferTmdb -> if (isMovie) "MOVIE" else "TV"
@@ -606,7 +609,10 @@ class DetailsFragment : Fragment() {
 
     private fun openMedia(media: Media) {
         val id = media.originalId ?: media.id.toLongOrNull() ?: -1L
-        val isMoviesTv = if (arguments?.containsKey("preferTmdb") == true) {
+        val isAnimeMedia = media.mediaType?.equals("ANIME", ignoreCase = true) == true
+        val isMoviesTv = if (isAnimeMedia) {
+            false
+        } else if (arguments?.containsKey("preferTmdb") == true) {
             arguments?.getBoolean("preferTmdb", false) ?: false
         } else {
             MediaTypeManager.getInstance(requireContext()).currentMode.value == AppMediaMode.MOVIES_TV
@@ -746,17 +752,14 @@ class DetailsFragment : Fragment() {
         val isDonghuaMedia = AnimarvleApp.isDonghua(media?.title) ||
             media?.genres?.any { it.contains("donghua", ignoreCase = true) } == true
         val isAnimation = media?.genres?.any { it.equals("Animation", ignoreCase = true) } == true
-        val isMoviesAndTv = MediaTypeManager.getInstance(requireContext())
-            .currentMode.value == AppMediaMode.MOVIES_TV || media?.isTmdb == true || (arguments?.getBoolean("preferTmdb", false) ?: false)
+        val isTmdbMedia = media?.isTmdb == true || (media == null && (arguments?.getBoolean("preferTmdb", false) ?: false))
         val isMovieFormat = media?.format?.contains("MOVIE", ignoreCase = true) == true ||
             media?.format?.contains("FILM", ignoreCase = true) == true
-        val isMovie = isMovieFormat || (isMoviesAndTv && !isAnimation && !isDonghuaMedia && (media?.episodes ?: 1) <= 1 && media?.seasons.isNullOrEmpty())
-        val type = if (isDonghuaMedia || isAnimation) {
+        val isMovie = isMovieFormat || (isTmdbMedia && !isAnimation && !isDonghuaMedia && (media?.episodes ?: 1) <= 1 && media?.seasons.isNullOrEmpty())
+        val type = if (isDonghuaMedia || !isTmdbMedia || isAnimation) {
             MediaType.ANIME
-        } else if (isMoviesAndTv || isMovieFormat) {
-            MediaType.MOVIE
         } else {
-            MediaType.ANIME
+            MediaType.MOVIE
         }
         return type to isMovie
     }
