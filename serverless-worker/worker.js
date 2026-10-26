@@ -277,6 +277,15 @@ async function handleStreamResolve(request, url, ctx, env) {
     );
   }
 
+  // Provider J: Adult Anime Streams (HentaiMama)
+  if (type === "anime" || type === "hentai" || type === "adult" || url.searchParams.get("adult") === "1") {
+    fetchPromises.push(
+      resolveAdultAnimeStreams(title || resolvedTitle, episode, url.origin)
+        .then(res => { if (res) streams.push(...res); })
+        .catch(() => {})
+    );
+  }
+
   await Promise.allSettled(fetchPromises);
 
   // If a specific language was requested, prioritize streams matching that language
@@ -1138,6 +1147,141 @@ async function resolveDonghuaStreams(title, episode, workerOrigin) {
   return results;
 }
 
+// --- Adult Anime & OVA Stream Resolver (HentaiMama) ------------------------
+
+async function resolveAdultAnimeStreams(title, episode, workerOrigin) {
+  const results = [];
+  if (!title) return results;
+
+  try {
+    const clean = title.replace(/[^\w\s]/gi, "").trim();
+    const epNum = parseInt(episode, 10) || 1;
+    const searchUrl = `https://hentaimama.io/?s=${encodeURIComponent(clean)}`;
+
+    const searchRes = await fetchWithTimeout(searchUrl, {
+      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
+    }, 3500);
+
+    if (!searchRes.ok) return results;
+    const searchHtml = await searchRes.text();
+
+    const cleanSlug = clean.toLowerCase().replace(/\s+/g, "-");
+    let tvLinks = Array.from(new Set(searchHtml.match(/https:\/\/hentaimama\.io\/tvshows\/[^"'\s]+/gi) || []));
+    let epUrl = null;
+
+    if (tvLinks.length > 0) {
+      const showUrl = tvLinks.find(l => l.toLowerCase().includes(`/tvshows/${cleanSlug}/`) || l.toLowerCase().includes(cleanSlug)) ||
+                      tvLinks.find(l => clean.split(/\s+/).every(word => l.toLowerCase().includes(word.toLowerCase()))) ||
+                      tvLinks[0];
+      const showRes = await fetchWithTimeout(showUrl, {
+        headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
+      }, 3500);
+      if (showRes.ok) {
+        const showHtml = await showRes.text();
+        const epLinks = Array.from(new Set(showHtml.match(/https:\/\/hentaimama\.io\/episodes\/[^"'\s]+/gi) || []));
+        const match = epLinks.find(l => l.endsWith(`-episode-${epNum}/`)) ||
+                      epLinks.find(l => l.includes(`episode-${epNum}`)) ||
+                      epLinks[epLinks.length - epNum] ||
+                      epLinks[0];
+        epUrl = match;
+      }
+    }
+
+    if (!epUrl) {
+      const directEps = Array.from(new Set(searchHtml.match(/https:\/\/hentaimama\.io\/episodes\/[^"'\s]+/gi) || []));
+      epUrl = directEps.find(l => l.toLowerCase().includes(cleanSlug) && l.includes(`episode-${epNum}`)) ||
+              directEps.find(l => l.includes(`episode-${epNum}`)) ||
+              directEps[0];
+    }
+
+    if (!epUrl) return results;
+
+    const epRes = await fetchWithTimeout(epUrl, {
+      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
+    }, 3500);
+    if (!epRes.ok) return results;
+    const epHtml = await epRes.text();
+
+    const postMatch = epHtml.match(/data-post="(\d+)"/i) || epHtml.match(/a:\s*['"](\d+)['"]/i);
+    const postId = postMatch ? postMatch[1] : null;
+    if (!postId) return results;
+
+    const form = new URLSearchParams();
+    form.append("action", "get_player_contents");
+    form.append("a", postId);
+    form.append("i", "1");
+
+    const ajaxRes = await fetchWithTimeout("https://hentaimama.io/wp-admin/admin-ajax.php", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Referer": epUrl,
+        "X-Requested-With": "XMLHttpRequest"
+      },
+      body: form.toString()
+    }, 3500);
+
+    if (!ajaxRes.ok) return results;
+    const ajaxData = await ajaxRes.text();
+    let embedUrl = null;
+    try {
+      const items = JSON.parse(ajaxData);
+      const iframeHtml = items.find(x => x && x.includes("src="));
+      const embedMatch = iframeHtml?.match(/src="([^"]+)"/i);
+      embedUrl = embedMatch ? embedMatch[1].replace(/&#038;/g, "&").replace(/&amp;/g, "&") : null;
+    } catch (_) {}
+
+    if (!embedUrl) return results;
+
+    const embedRes = await fetchWithTimeout(embedUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Referer": epUrl
+      }
+    }, 3500);
+
+    if (!embedRes.ok) return results;
+    const embedHtml = await embedRes.text();
+    const fileMatch = embedHtml.match(/"file":\s*"([^"]+)"/i) ||
+                      embedHtml.match(/file:\s*["']([^"']+\.(?:mp4|m3u8)[^"']*)["']/i);
+
+    if (fileMatch) {
+      const streamUrl = fileMatch[1].replace(/\\\//g, "/");
+      const isM3u8 = streamUrl.includes(".m3u8");
+      const proxyUrl = isM3u8
+        ? `${workerOrigin}/proxy/m3u8?url=${encodeURIComponent(streamUrl)}&referer=${encodeURIComponent("https://hentaimama.io/")}`
+        : `${workerOrigin}/proxy/video?url=${encodeURIComponent(streamUrl)}&referer=${encodeURIComponent("https://hentaimama.io/")}`;
+
+      results.push({
+        server: "Spiral",
+        url: proxyUrl,
+        rawUrl: streamUrl,
+        kind: isM3u8 ? "hls" : "mp4",
+        quality: "720p",
+        audio: "SUB",
+        audioLanguage: "Japanese",
+        languageCode: "ja",
+        headers: { "Referer": "https://hentaimama.io/" }
+      });
+
+      results.push({
+        server: "Turbo",
+        url: streamUrl,
+        rawUrl: streamUrl,
+        kind: isM3u8 ? "hls" : "mp4",
+        quality: "720p",
+        audio: "SUB",
+        audioLanguage: "Japanese",
+        languageCode: "ja",
+        headers: { "Referer": "https://hentaimama.io/" }
+      });
+    }
+  } catch (_) {}
+
+  return results;
+}
+
 // --- Video Partial Content (HTTP 206) Proxy ---------------------------------
 
 async function handleVideoProxy(request, url) {
@@ -1150,6 +1294,10 @@ async function handleVideoProxy(request, url) {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
     "Accept": "*/*"
   };
+  const referer = url.searchParams.get("referer");
+  if (referer) {
+    upstreamHeaders["Referer"] = referer;
+  }
   if (targetUrl.includes("vidlink") || targetUrl.includes("hakunaymatata")) {
     upstreamHeaders["Origin"] = "https://vidlink.pro";
     upstreamHeaders["Referer"] = "https://vidlink.pro/";
@@ -1297,7 +1445,7 @@ async function handleSearch(request, url) {
   const q = url.searchParams.get("q") || "";
   if (!q) return jsonResponse({ results: [] });
 
-  const tmdbUrl = `https://api.themoviedb.org/3/search/multi?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(q)}`;
+  const tmdbUrl = `https://api.themoviedb.org/3/search/multi?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(q)}&include_adult=true`;
   try {
     const res = await fetch(tmdbUrl);
     if (!res.ok) return jsonResponse({ results: [] });
