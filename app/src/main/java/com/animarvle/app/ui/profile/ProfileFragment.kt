@@ -15,8 +15,10 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.fragment.findNavController
 import coil.load
 import coil.transform.CircleCropTransformation
+import androidx.activity.result.contract.ActivityResultContracts
 import com.animarvle.app.BuildConfig
 import com.animarvle.app.R
+import com.animarvle.app.data.sync.SyncState
 import com.animarvle.app.data.updater.AppUpdateRepository
 import com.animarvle.app.databinding.FragmentProfileBinding
 import com.animarvle.app.ui.updater.UpdateBottomSheet
@@ -26,6 +28,12 @@ class ProfileFragment : Fragment() {
 
     private var _binding: FragmentProfileBinding? = null
     private val binding get() = _binding!!
+
+    private val googleDrivePermLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        performDriveSync()
+    }
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -87,13 +95,25 @@ class ProfileFragment : Fragment() {
                             binding.userAvatarInitial.visibility = View.VISIBLE
                             binding.userAvatarInitial.text = account.username.take(1).uppercase()
                         }
+
+                        if (account.provider == "Google") {
+                            binding.cardGoogleDriveSync.visibility = View.VISIBLE
+                            updateSyncStatusText()
+                        } else {
+                            binding.cardGoogleDriveSync.visibility = View.GONE
+                        }
                     } else {
                         binding.accountCard.visibility = View.VISIBLE
                         binding.loggedInLayout.visibility = View.GONE
                         binding.btnLogOut.visibility = View.GONE
+                        binding.cardGoogleDriveSync.visibility = View.GONE
                     }
                 }
             }
+        }
+
+        binding.btnSyncNow.setOnClickListener {
+            performDriveSync()
         }
 
         val prefs = requireContext().getSharedPreferences(PlayerSettingsFragment.PREFS_NAME, Context.MODE_PRIVATE)
@@ -218,6 +238,69 @@ class ProfileFragment : Fragment() {
         // 5. About & Legal
         binding.cardAbout.setOnClickListener {
             findNavController().navigate(R.id.aboutFragment)
+        }
+    }
+
+    private fun updateSyncStatusText() {
+        if (_binding == null) return
+        val driveSync = (requireActivity().application as com.animarvle.app.AnimarvleApp).container.driveSync
+        val lastSync = driveSync.getLastSyncTime()
+        val count = driveSync.getLastSyncCount()
+        if (lastSync == 0L) {
+            binding.tvSyncStatus.text = "Not synced yet"
+        } else {
+            val timeAgo = android.text.format.DateUtils.getRelativeTimeSpanString(
+                lastSync,
+                System.currentTimeMillis(),
+                android.text.format.DateUtils.MINUTE_IN_MILLIS
+            )
+            binding.tvSyncStatus.text = "Last synced: $timeAgo ($count items)"
+        }
+    }
+
+    private fun performDriveSync() {
+        val app = (requireActivity().application as com.animarvle.app.AnimarvleApp)
+        val driveSync = app.container.driveSync
+
+        binding.btnSyncNow.isEnabled = false
+        binding.btnSyncNow.text = "Syncing..."
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            val result = driveSync.sync()
+            binding.btnSyncNow.isEnabled = true
+            binding.btnSyncNow.text = "Sync"
+
+            result.onSuccess { count ->
+                android.widget.Toast.makeText(
+                    requireContext(),
+                    "Synced $count items with Google Drive!",
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+                updateSyncStatusText()
+            }.onFailure { err ->
+                if (err is com.google.android.gms.auth.UserRecoverableAuthException) {
+                    googleDrivePermLauncher.launch(err.intent)
+                } else if (err.message?.contains("Google Drive API is disabled", ignoreCase = true) == true) {
+                    com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext(), com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog)
+                        .setTitle("Enable Google Drive API")
+                        .setMessage("Google Drive sync requires the Google Drive API to be enabled in your Google Cloud Console project (547903414124).\n\nTap below to open the console and click 'Enable'.")
+                        .setPositiveButton("Open Console") { _, _ ->
+                            val intent = android.content.Intent(
+                                android.content.Intent.ACTION_VIEW,
+                                android.net.Uri.parse("https://console.cloud.google.com/apis/library/drive.googleapis.com?project=547903414124")
+                            )
+                            startActivity(intent)
+                        }
+                        .setNegativeButton("Close", null)
+                        .show()
+                } else {
+                    android.widget.Toast.makeText(
+                        requireContext(),
+                        "Sync failed: ${err.localizedMessage ?: err.message}",
+                        android.widget.Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
         }
     }
 

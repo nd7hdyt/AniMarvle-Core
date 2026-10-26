@@ -411,10 +411,22 @@ class AppContainer(
         com.animarvle.app.ui.download.DownloadRepository(appContext, downloadManager, downloadDirectory)
     }
     val myList: com.animarvle.app.ui.mylist.MyListRepository by lazy {
-        com.animarvle.app.ui.mylist.MyListRepository(appContext)
+        com.animarvle.app.ui.mylist.MyListRepository(appContext).apply {
+            onListChangedListener = {
+                val acc = account.currentAccount
+                if (acc != null && acc.isLoggedIn && acc.provider == "Google") {
+                    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                        runCatching { driveSync.sync() }
+                    }
+                }
+            }
+        }
     }
     val account: com.animarvle.app.data.account.AccountRepository by lazy {
         com.animarvle.app.data.account.AccountRepository(appContext)
+    }
+    val driveSync: com.animarvle.app.data.sync.GoogleDriveSyncRepository by lazy {
+        com.animarvle.app.data.sync.GoogleDriveSyncRepository(appContext, myList, account, http)
     }
 }
 
