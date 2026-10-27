@@ -43,62 +43,52 @@ jobs:
         RELEASE_DIR="release_artifacts"
         mkdir -p "$RELEASE_DIR"
 
-        # Map AGP outputs to release naming convention matching AnymeX
-        cp "$OUT_DIR/app-arm64-v8a-debug.apk" "$RELEASE_DIR/Animarvle-Android-arm64-v8a.apk" || true
-        cp "$OUT_DIR/app-armeabi-v7a-debug.apk" "$RELEASE_DIR/Animarvle-Android-armeabi-v7a.apk" || true
-        cp "$OUT_DIR/app-x86_64-debug.apk" "$RELEASE_DIR/Animarvle-Android-x86_64.apk" || true
-        cp "$OUT_DIR/app-universal-debug.apk" "$RELEASE_DIR/Animarvle-Android-universal.apk" || true
+        # Copy the multi-architecture & universal APKs
+        if compgen -G "$OUT_DIR/Animarvle-Android-*.apk" > /dev/null; then
+          cp "$OUT_DIR"/Animarvle-Android-*.apk "$RELEASE_DIR/"
+        else
+          cp "$OUT_DIR/app-arm64-v8a-debug.apk" "$RELEASE_DIR/Animarvle-Android-arm64-v8a.apk" 2>/dev/null || true
+          cp "$OUT_DIR/app-armeabi-v7a-debug.apk" "$RELEASE_DIR/Animarvle-Android-armeabi-v7a.apk" 2>/dev/null || true
+          cp "$OUT_DIR/app-x86_64-debug.apk" "$RELEASE_DIR/Animarvle-Android-x86_64.apk" 2>/dev/null || true
+          cp "$OUT_DIR/app-universal-debug.apk" "$RELEASE_DIR/Animarvle-Android-universal.apk" 2>/dev/null || true
+          cp "$OUT_DIR/app-debug.apk" "$RELEASE_DIR/Animarvle-Android-universal.apk" 2>/dev/null || true
+        fi
 
         # Generate sha256 checksum files for each APK
         cd "$RELEASE_DIR"
         for apk in *.apk; do
           if [ -f "$apk" ]; then
             sha256sum "$apk" > "${apk}.sha256"
-            echo "Checksum for $apk: $(cat ${apk}.sha256)"
+            echo "Checksum for $apk: $(cat "${apk}.sha256")"
           fi
         done
         cd ..
 
         # On release tags, auto-commit the computed multi-arch sha256 to version.json on main
         if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-          UNI_HASH=$(awk '{print $1}' "$RELEASE_DIR/Animarvle-Android-universal.apk.sha256")
-          ARM64_HASH=$(awk '{print $1}' "$RELEASE_DIR/Animarvle-Android-arm64-v8a.apk.sha256")
-          ARM7_HASH=$(awk '{print $1}' "$RELEASE_DIR/Animarvle-Android-armeabi-v7a.apk.sha256")
-          X86_HASH=$(awk '{print $1}' "$RELEASE_DIR/Animarvle-Android-x86_64.apk.sha256")
+          UNI_HASH=$(awk '{print $1}' "$RELEASE_DIR/Animarvle-Android-universal.apk.sha256" 2>/dev/null || echo "")
+          ARM64_HASH=$(awk '{print $1}' "$RELEASE_DIR/Animarvle-Android-arm64-v8a.apk.sha256" 2>/dev/null || echo "")
+          ARM7_HASH=$(awk '{print $1}' "$RELEASE_DIR/Animarvle-Android-armeabi-v7a.apk.sha256" 2>/dev/null || echo "")
+          X86_HASH=$(awk '{print $1}' "$RELEASE_DIR/Animarvle-Android-x86_64.apk.sha256" 2>/dev/null || echo "")
 
           git fetch origin main
           git checkout main
-          python3 -c "
-import json
-d = json.load(open('version.json'))
-d['sha256'] = '$UNI_HASH'
-d['apk_url'] = 'https://github.com/nd7hdyt/AniMarvle/releases/download/${{ github.ref_name }}/Animarvle-Android-universal.apk'
-d['architectures'] = {
-    'arm64-v8a': {
-        'apk_url': 'https://github.com/nd7hdyt/AniMarvle/releases/download/${{ github.ref_name }}/Animarvle-Android-arm64-v8a.apk',
-        'sha256': '$ARM64_HASH'
-    },
-    'armeabi-v7a': {
-        'apk_url': 'https://github.com/nd7hdyt/AniMarvle/releases/download/${{ github.ref_name }}/Animarvle-Android-armeabi-v7a.apk',
-        'sha256': '$ARM7_HASH'
-    },
-    'x86_64': {
-        'apk_url': 'https://github.com/nd7hdyt/AniMarvle/releases/download/${{ github.ref_name }}/Animarvle-Android-x86_64.apk',
-        'sha256': '$X86_HASH'
-    },
-    'universal': {
-        'apk_url': 'https://github.com/nd7hdyt/AniMarvle/releases/download/${{ github.ref_name }}/Animarvle-Android-universal.apk',
-        'sha256': '$UNI_HASH'
-    }
-}
-open('version.json', 'w').write(json.dumps(d, indent=2) + '\n')
-"
+          python3 -c "import json; tag = '${{ github.ref_name }}'; base = f'https://github.com/nd7hdyt/AniMarvle/releases/download/{tag}'; d = json.load(open('version.json', encoding='utf-8')); d['sha256'] = '$UNI_HASH'; d['apk_url'] = f'{base}/Animarvle-Android-universal.apk'; d['architectures'] = {'arm64-v8a': {'apk_url': f'{base}/Animarvle-Android-arm64-v8a.apk', 'sha256': '$ARM64_HASH'}, 'armeabi-v7a': {'apk_url': f'{base}/Animarvle-Android-armeabi-v7a.apk', 'sha256': '$ARM7_HASH'}, 'x86_64': {'apk_url': f'{base}/Animarvle-Android-x86_64.apk', 'sha256': '$X86_HASH'}, 'universal': {'apk_url': f'{base}/Animarvle-Android-universal.apk', 'sha256': '$UNI_HASH'}}; open('version.json', 'w', encoding='utf-8').write(json.dumps(d, indent=2, ensure_ascii=False) + '\n')"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add version.json
           git diff-index --quiet HEAD || git commit -m "chore(release): auto-sync multi-arch version.json for ${{ github.ref_name }} [skip ci]"
           git push origin main
         fi
+
+    - name: Upload Build Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: Animarvle-Android-APKs
+        path: |
+          release_artifacts/*.apk
+          release_artifacts/*.sha256
+        if-no-files-found: warn
 
     - name: Publish GitHub Release
       if: startsWith(github.ref, 'refs/tags/v')
@@ -108,5 +98,6 @@ open('version.json', 'w').write(json.dumps(d, indent=2) + '\n')
           release_artifacts/*.apk
           release_artifacts/*.sha256
         generate_release_notes: true
+
 
 

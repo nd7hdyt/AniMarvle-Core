@@ -140,3 +140,13 @@ dependencies {
 
     testImplementation(libs.junit)
 }
+
+androidComponents {
+    onVariants { variant ->
+        variant.outputs.forEach { output ->
+            val abi = output.filters.find { it.filterType == com.android.build.api.variant.FilterConfiguration.FilterType.ABI }?.identifier
+            val arch = abi ?: "universal"
+            output.outputFileName.set("Animarvle-Android-$arch.apk")
+        }
+    }
+}
