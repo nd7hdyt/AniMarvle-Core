@@ -133,10 +133,37 @@ object AppUpdateRepository {
 
                     val remoteVersionCode = json.optInt("version_code", 0)
                     val remoteVersionName = json.optString("version_name", "")
-                    val apkUrl = json.optString("apk_url", "")
-                    val sha256 = json.optString("sha256", "").trim()
+                    var apkUrl = json.optString("apk_url", "")
+                    var sha256 = json.optString("sha256", "").trim()
                     val releaseNotes = json.optString("release_notes", "")
                     val githubUrl = json.optString("github_url", "https://github.com/nd7hdyt/AniMarvle/releases")
+
+                    // Check if version.json provides per-architecture APK mappings
+                    val archs = json.optJSONObject("architectures")
+                    if (archs != null) {
+                        for (abi in Build.SUPPORTED_ABIS) {
+                            val key = abi.lowercase()
+                            if (archs.has(key)) {
+                                val archObj = archs.optJSONObject(key)
+                                if (archObj != null) {
+                                    apkUrl = archObj.optString("apk_url", apkUrl)
+                                    sha256 = archObj.optString("sha256", sha256)
+                                } else {
+                                    apkUrl = archs.optString(key, apkUrl)
+                                }
+                                break
+                            }
+                        }
+                        if (apkUrl.isBlank() && archs.has("universal")) {
+                            val uniObj = archs.optJSONObject("universal")
+                            if (uniObj != null) {
+                                apkUrl = uniObj.optString("apk_url", apkUrl)
+                                sha256 = uniObj.optString("sha256", sha256)
+                            } else {
+                                apkUrl = archs.optString("universal", apkUrl)
+                            }
+                        }
+                    }
 
                     val currentCode = BuildConfig.VERSION_CODE
                     val hasUpdate = isNewerVersion(remoteVersionCode, remoteVersionName, currentCode, BuildConfig.VERSION_NAME)
@@ -185,18 +212,40 @@ object AppUpdateRepository {
             val releaseNotes = json.optString("body", "")
             val htmlUrl = json.optString("html_url", "https://github.com/nd7hdyt/AniMarvle/releases")
 
-            var apkUrl = ""
-            var shaAssetUrl = ""
+            val supportedAbis = Build.SUPPORTED_ABIS.map { it.lowercase() }
+            data class ApkCandidate(val url: String, val name: String, val score: Int)
+            val apkCandidates = mutableListOf<ApkCandidate>()
+            val shaAssets = mutableMapOf<String, String>()
+
             val assets = json.optJSONArray("assets") ?: JSONArray()
             for (i in 0 until assets.length()) {
                 val asset = assets.optJSONObject(i) ?: continue
                 val name = asset.optString("name", "")
+                val url = asset.optString("browser_download_url", "")
                 if (name.endsWith(".apk", ignoreCase = true)) {
-                    apkUrl = asset.optString("browser_download_url", "")
+                    val lower = name.lowercase()
+                    var score = 10
+                    if (lower.contains("universal")) {
+                        score = 50
+                    }
+                    for ((abiIdx, abi) in supportedAbis.withIndex()) {
+                        if (lower.contains(abi)) {
+                            score = 1000 - (abiIdx * 100)
+                            break
+                        }
+                    }
+                    apkCandidates.add(ApkCandidate(url, name, score))
                 } else if (name.endsWith(".sha256", ignoreCase = true) || name.endsWith(".sha256.txt", ignoreCase = true)) {
-                    shaAssetUrl = asset.optString("browser_download_url", "")
+                    shaAssets[name.lowercase()] = url
                 }
             }
+
+            val bestCandidate = apkCandidates.maxByOrNull { it.score }
+            var apkUrl = bestCandidate?.url.orEmpty()
+            var shaAssetUrl = if (bestCandidate != null) {
+                shaAssets["${bestCandidate.name.lowercase()}.sha256"]
+                    ?: shaAssets.values.firstOrNull().orEmpty()
+            } else ""
 
             // Extract SHA-256 hash from release body or companion checksum asset
             val shaRegex = Regex("""(?i)(?:sha-?256|checksum)[:\s]+([a-f0-9]{64})""")

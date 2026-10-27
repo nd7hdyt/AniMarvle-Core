@@ -9,17 +9,21 @@
     <!-- Status Bar Spacer -->
     <View
         android:id="@+id/statusBarSpacer"
-        android:layout_width="match_parent"
+        android:layout_width="0dp"
         android:layout_height="0dp"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
     <!-- Top Navigation Bar -->
     <FrameLayout
         android:id="@+id/topBar"
-        android:layout_width="match_parent"
+        android:layout_width="0dp"
         android:layout_height="54dp"
         android:paddingStart="16dp"
         android:paddingEnd="16dp"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toBottomOf="@id/statusBarSpacer">
 
         <ImageView
@@ -38,12 +42,14 @@
     <!-- Main Content Container -->
     <LinearLayout
         android:id="@+id/mainContent"
-        android:layout_width="match_parent"
+        android:layout_width="0dp"
         android:layout_height="0dp"
         android:gravity="center_horizontal"
         android:orientation="vertical"
         android:paddingStart="24dp"
         android:paddingEnd="24dp"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintBottom_toTopOf="@id/footerLayout"
         app:layout_constraintTop_toBottomOf="@id/topBar">
 
@@ -194,11 +200,15 @@
     <!-- Fullscreen Loading Overlay (Image 4 "Signing you in...") -->
     <LinearLayout
         android:id="@+id/loadingOverlay"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
         android:background="?android:windowBackground"
         android:clickable="true"
         android:focusable="true"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
         android:gravity="center"
         android:orientation="vertical"
         android:visibility="gone"

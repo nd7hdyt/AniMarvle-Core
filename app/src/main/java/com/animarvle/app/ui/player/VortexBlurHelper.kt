@@ -471,20 +471,24 @@ object VortexBlurHelper {
             val cropX = (barLoc[0] - srcLoc[0]).coerceAtLeast(0)
             val cropY = (barLoc[1] - srcLoc[1]).coerceAtLeast(0)
 
-            val rawSmall = Bitmap.createBitmap(smallW, smallH, Bitmap.Config.ARGB_8888)
-            val rawCanvas = Canvas(rawSmall)
-            rawCanvas.scale(1f / scaleFactor, 1f / scaleFactor)
-            rawCanvas.translate(-cropX.toFloat(), -cropY.toFloat())
-            sourceView.draw(rawCanvas)
+            try {
+                val rawSmall = Bitmap.createBitmap(smallW, smallH, Bitmap.Config.ARGB_8888)
+                val rawCanvas = Canvas(rawSmall)
+                rawCanvas.scale(1f / scaleFactor, 1f / scaleFactor)
+                rawCanvas.translate(-cropX.toFloat(), -cropY.toFloat())
+                sourceView.draw(rawCanvas)
 
-            val blurred = fastStackBlur(rawSmall, radius = 12)
-            rawSmall.recycle()
+                val blurred = fastStackBlur(rawSmall, radius = 12)
+                rawSmall.recycle()
 
-            val blurPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
-                alpha = (f * 255).toInt()
+                val blurPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
+                    alpha = (f * 255).toInt()
+                }
+                canvas.drawBitmap(blurred, 0f, 0f, blurPaint)
+                blurred.recycle()
+            } catch (_: Throwable) {
+                // Graceful fallback: Software canvas cannot render hardware-backed bitmaps (e.g. Coil cached images)
             }
-            canvas.drawBitmap(blurred, 0f, 0f, blurPaint)
-            blurred.recycle()
         }
 
         // 2. Always draw the Curved Pre-Scroll Arch Vignette (strongest at top-left & top-right corners,
@@ -633,54 +637,62 @@ object VortexBlurHelper {
      * so the strong white tab icons and labels pop with maximum contrast.
      */
     fun applyBottomNavBlur(
-        sourceView: View,
+        sourceView: View? = null,
         bottomNavContainer: View
     ) {
-        if (bottomNavContainer.width <= 0 || bottomNavContainer.height <= 0 ||
-            sourceView.width <= 0 || sourceView.height <= 0
-        ) return
+        if (bottomNavContainer.width <= 0 || bottomNavContainer.height <= 0) return
 
-        val barLoc = IntArray(2)
-        val srcLoc = IntArray(2)
-        bottomNavContainer.getLocationOnScreen(barLoc)
-        sourceView.getLocationOnScreen(srcLoc)
+        val cropW = bottomNavContainer.width
+        val cropH = bottomNavContainer.height
 
-        val cropX = (barLoc[0] - srcLoc[0]).coerceAtLeast(0)
-        val cropY = (barLoc[1] - srcLoc[1]).coerceAtLeast(0)
-        val cropW = bottomNavContainer.width.coerceAtMost(sourceView.width - cropX)
-        val cropH = bottomNavContainer.height.coerceAtMost(sourceView.height - cropY)
-        if (cropW <= 0 || cropH <= 0) return
-
-        val scaleFactor = 10
+        val scaleFactor = 4
         val smallW = (cropW / scaleFactor).coerceAtLeast(16)
         val smallH = (cropH / scaleFactor).coerceAtLeast(8)
 
-        val smallBmp = Bitmap.createBitmap(smallW, smallH, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(smallBmp)
-        canvas.scale(1f / scaleFactor, 1f / scaleFactor)
-        canvas.translate(-cropX.toFloat(), -cropY.toFloat())
-        sourceView.draw(canvas)
+        val bmp = Bitmap.createBitmap(smallW, smallH, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bmp)
 
-        val blurred = fastStackBlur(smallBmp, radius = 10)
-        smallBmp.recycle()
+        // Try software snapshot of sourceView if present, but NEVER crash if Hardware Bitmap is encountered
+        if (sourceView != null && sourceView.width > 0 && sourceView.height > 0) {
+            val barLoc = IntArray(2)
+            val srcLoc = IntArray(2)
+            bottomNavContainer.getLocationOnScreen(barLoc)
+            sourceView.getLocationOnScreen(srcLoc)
 
-        val finalCanvas = Canvas(blurred)
+            val cropX = (barLoc[0] - srcLoc[0]).coerceAtLeast(0)
+            val cropY = (barLoc[1] - srcLoc[1]).coerceAtLeast(0)
+
+            try {
+                val rawSmall = Bitmap.createBitmap(smallW, smallH, Bitmap.Config.ARGB_8888)
+                val rawCanvas = Canvas(rawSmall)
+                rawCanvas.scale(1f / scaleFactor, 1f / scaleFactor)
+                rawCanvas.translate(-cropX.toFloat(), -cropY.toFloat())
+                sourceView.draw(rawCanvas)
+                val blurred = fastStackBlur(rawSmall, radius = 8)
+                rawSmall.recycle()
+                canvas.drawBitmap(blurred, 0f, 0f, null)
+                blurred.recycle()
+            } catch (_: Throwable) {
+                // Gracefully ignore software rendering exception on hardware bitmaps
+            }
+        }
+
         val gradientPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             shader = android.graphics.LinearGradient(
                 0f, 0f, 0f, smallH.toFloat(),
                 intArrayOf(
                     Color.argb(0, 0, 0, 0),     // Seamless top feather edge
-                    Color.argb(210, 0, 0, 0),   // Dark glass transition above icons
-                    Color.argb(250, 0, 0, 0),   // Deep black behind icons
+                    Color.argb(210, 6, 6, 10),  // Dark glass transition above icons
+                    Color.argb(250, 4, 4, 6),   // Deep black behind icons
                     Color.argb(255, 0, 0, 0)    // Pure OLED black behind labels & indicator
                 ),
                 floatArrayOf(0f, 0.22f, 0.45f, 1f),
                 android.graphics.Shader.TileMode.CLAMP
             )
         }
-        finalCanvas.drawRect(0f, 0f, smallW.toFloat(), smallH.toFloat(), gradientPaint)
+        canvas.drawRect(0f, 0f, smallW.toFloat(), smallH.toFloat(), gradientPaint)
 
-        bottomNavContainer.background = BitmapDrawable(bottomNavContainer.resources, blurred).apply {
+        bottomNavContainer.background = BitmapDrawable(bottomNavContainer.resources, bmp).apply {
             isFilterBitmap = true
         }
     }

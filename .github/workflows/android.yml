@@ -34,25 +34,69 @@ jobs:
     - name: Run Unit Tests
       run: ./gradlew testDebugUnitTest --no-daemon
 
-    - name: Assemble Debug APK
+    - name: Assemble Multi-Architecture APKs
       run: ./gradlew assembleDebug --no-daemon
 
-    - name: Compute Checksum & Auto-Sync version.json
+    - name: Package Release Assets & Compute Checksums
       run: |
-        APK_FILE="app/build/outputs/apk/debug/app-debug.apk"
-        HASH=$(sha256sum "$APK_FILE" | awk '{print $1}')
-        echo "$HASH  app-debug.apk" > app/build/outputs/apk/debug/app-debug.apk.sha256
-        echo "Computed SHA-256 Checksum: $HASH"
+        OUT_DIR="app/build/outputs/apk/debug"
+        RELEASE_DIR="release_artifacts"
+        mkdir -p "$RELEASE_DIR"
 
-        # On release tags, auto-commit the computed sha256 to version.json on main
+        # Map AGP outputs to release naming convention matching AnymeX
+        cp "$OUT_DIR/app-arm64-v8a-debug.apk" "$RELEASE_DIR/Animarvle-Android-arm64-v8a.apk" || true
+        cp "$OUT_DIR/app-armeabi-v7a-debug.apk" "$RELEASE_DIR/Animarvle-Android-armeabi-v7a.apk" || true
+        cp "$OUT_DIR/app-x86_64-debug.apk" "$RELEASE_DIR/Animarvle-Android-x86_64.apk" || true
+        cp "$OUT_DIR/app-universal-debug.apk" "$RELEASE_DIR/Animarvle-Android-universal.apk" || true
+
+        # Generate sha256 checksum files for each APK
+        cd "$RELEASE_DIR"
+        for apk in *.apk; do
+          if [ -f "$apk" ]; then
+            sha256sum "$apk" > "${apk}.sha256"
+            echo "Checksum for $apk: $(cat ${apk}.sha256)"
+          fi
+        done
+        cd ..
+
+        # On release tags, auto-commit the computed multi-arch sha256 to version.json on main
         if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+          UNI_HASH=$(awk '{print $1}' "$RELEASE_DIR/Animarvle-Android-universal.apk.sha256")
+          ARM64_HASH=$(awk '{print $1}' "$RELEASE_DIR/Animarvle-Android-arm64-v8a.apk.sha256")
+          ARM7_HASH=$(awk '{print $1}' "$RELEASE_DIR/Animarvle-Android-armeabi-v7a.apk.sha256")
+          X86_HASH=$(awk '{print $1}' "$RELEASE_DIR/Animarvle-Android-x86_64.apk.sha256")
+
           git fetch origin main
           git checkout main
-          python3 -c "import json; d = json.load(open('version.json')); d['sha256'] = '$HASH'; open('version.json', 'w').write(json.dumps(d, indent=2) + '\n')"
+          python3 -c "
+import json
+d = json.load(open('version.json'))
+d['sha256'] = '$UNI_HASH'
+d['apk_url'] = 'https://github.com/nd7hdyt/AniMarvle/releases/download/${{ github.ref_name }}/Animarvle-Android-universal.apk'
+d['architectures'] = {
+    'arm64-v8a': {
+        'apk_url': 'https://github.com/nd7hdyt/AniMarvle/releases/download/${{ github.ref_name }}/Animarvle-Android-arm64-v8a.apk',
+        'sha256': '$ARM64_HASH'
+    },
+    'armeabi-v7a': {
+        'apk_url': 'https://github.com/nd7hdyt/AniMarvle/releases/download/${{ github.ref_name }}/Animarvle-Android-armeabi-v7a.apk',
+        'sha256': '$ARM7_HASH'
+    },
+    'x86_64': {
+        'apk_url': 'https://github.com/nd7hdyt/AniMarvle/releases/download/${{ github.ref_name }}/Animarvle-Android-x86_64.apk',
+        'sha256': '$X86_HASH'
+    },
+    'universal': {
+        'apk_url': 'https://github.com/nd7hdyt/AniMarvle/releases/download/${{ github.ref_name }}/Animarvle-Android-universal.apk',
+        'sha256': '$UNI_HASH'
+    }
+}
+open('version.json', 'w').write(json.dumps(d, indent=2) + '\n')
+"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add version.json
-          git diff-index --quiet HEAD || git commit -m "chore(release): auto-sync version.json sha256 to $HASH [skip ci]"
+          git diff-index --quiet HEAD || git commit -m "chore(release): auto-sync multi-arch version.json for ${{ github.ref_name }} [skip ci]"
           git push origin main
         fi
 
@@ -61,8 +105,8 @@ jobs:
       uses: softprops/action-gh-release@v2
       with:
         files: |
-          app/build/outputs/apk/debug/app-debug.apk
-          app/build/outputs/apk/debug/app-debug.apk.sha256
+          release_artifacts/*.apk
+          release_artifacts/*.sha256
         generate_release_notes: true
 
 

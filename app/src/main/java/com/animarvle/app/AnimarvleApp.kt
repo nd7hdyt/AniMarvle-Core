@@ -36,6 +36,9 @@ import androidx.media3.exoplayer.scheduler.Requirements
 import java.io.File
 import java.util.concurrent.Executors
 
+import coil.ImageLoader
+import coil.ImageLoaderFactory
+
 /**
  * Manual DI container (ARCH §3: built in Application, handed to ViewModel factories).
  * No DI framework in v1 (DECISIONS D7).
@@ -43,10 +46,17 @@ import java.util.concurrent.Executors
  * M3 wires the first source (`FakeSource`) plus the shared resolver and matcher so the
  * Player can run the real resolve pipeline. M5 replaces this list with loaded extensions.
  */
-class AnimarvleApp : Application() {
+class AnimarvleApp : Application(), ImageLoaderFactory {
 
     lateinit var container: AppContainer
         private set
+
+    override fun newImageLoader(): ImageLoader {
+        return ImageLoader.Builder(this)
+            .allowHardware(false)
+            .crossfade(true)
+            .build()
+    }
 
     override fun onCreate() {
         super.onCreate()

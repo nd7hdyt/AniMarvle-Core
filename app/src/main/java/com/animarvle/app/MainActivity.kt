@@ -51,15 +51,11 @@ class MainActivity : AppCompatActivity() {
             insets
         }
 
-        // Borderless frosted-glass blur on Bottom Navigation Container matching AniVortex
-        binding.root.viewTreeObserver.addOnPreDrawListener {
-            if (binding.bottomNavContainer.isVisible) {
-                com.animarvle.app.ui.player.VortexBlurHelper.applyBottomNavBlur(
-                    sourceView = binding.navHost,
-                    bottomNavContainer = binding.bottomNavContainer
-                )
-            }
-            true
+        // Borderless frosted-glass backdrop on Bottom Navigation Container matching AniVortex
+        binding.bottomNavContainer.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            com.animarvle.app.ui.player.VortexBlurHelper.applyBottomNavBlur(
+                bottomNavContainer = binding.bottomNavContainer
+            )
         }
 
         val navHost = supportFragmentManager
