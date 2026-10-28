@@ -299,10 +299,21 @@ class HomeFragment : Fragment() {
         val isMoviesTv = MediaTypeManager.getInstance(requireContext()).currentMode.value == AppMediaMode.MOVIES_TV
         val isTmdb = if (isExplicitAnime) false else (isMoviesTv || effectiveType.equals("MOVIE", ignoreCase = true) || effectiveType.equals("TV", ignoreCase = true))
         val id = item.originalId ?: item.mediaUrl?.toLongOrNull() ?: item.id.toLongOrNull() ?: 0L
+        val app = requireActivity().application as? AnimarvleApp
+        val savedStream = app?.container?.history?.getSavedStream(item.title, item.episodeNumber ?: 1)
         val args = Bundle().apply {
             putLong("sourceId", 0L)
             if (id > 0L) {
                 putLong("mediaId", id)
+            }
+            if (savedStream != null) {
+                putLong("resumePositionMs", savedStream.positionMs)
+                if (!savedStream.streamUrl.isNullOrBlank()) {
+                    putString("savedStreamUrl", savedStream.streamUrl)
+                }
+                if (!savedStream.serverName.isNullOrBlank()) {
+                    putString("savedServerName", savedStream.serverName)
+                }
             }
             val url = item.mediaUrl.orEmpty()
             val isBadDonghuaUrl = isDonghua && !url.contains("anichi", ignoreCase = true)

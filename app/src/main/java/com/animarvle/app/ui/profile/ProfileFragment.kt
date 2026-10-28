@@ -128,13 +128,10 @@ class ProfileFragment : Fragment() {
         }
         binding.switchNotifications.setOnCheckedChangeListener { _, isChecked ->
             prefs.edit().putBoolean(PlayerSettingsFragment.KEY_NOTIFICATIONS, isChecked).apply()
-            if (isChecked && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                if (androidx.core.content.ContextCompat.checkSelfPermission(
-                        requireContext(),
-                        android.Manifest.permission.POST_NOTIFICATIONS,
-                    ) != android.content.pm.PackageManager.PERMISSION_GRANTED
-                ) {
-                    requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 1001)
+            if (isChecked) {
+                val missing = com.animarvle.app.ui.download.DownloadStorageHelper.getMissingPermissions(requireContext())
+                if (missing.isNotEmpty()) {
+                    requestPermissions(missing, com.animarvle.app.ui.download.DownloadStorageHelper.STORAGE_PERMISSION_REQUEST_CODE)
                 }
             }
         }
@@ -278,27 +275,49 @@ class ProfileFragment : Fragment() {
                 ).show()
                 updateSyncStatusText()
             }.onFailure { err ->
-                if (err is com.google.android.gms.auth.UserRecoverableAuthException) {
-                    googleDrivePermLauncher.launch(err.intent)
-                } else if (err.message?.contains("Google Drive API is disabled", ignoreCase = true) == true) {
-                    com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext(), com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog)
-                        .setTitle("Enable Google Drive API")
-                        .setMessage("Google Drive sync requires the Google Drive API to be enabled in your Google Cloud Console project (547903414124).\n\nTap below to open the console and click 'Enable'.")
-                        .setPositiveButton("Open Console") { _, _ ->
-                            val intent = android.content.Intent(
-                                android.content.Intent.ACTION_VIEW,
-                                android.net.Uri.parse("https://console.cloud.google.com/apis/library/drive.googleapis.com?project=547903414124")
+                when {
+                    err is com.google.android.gms.auth.UserRecoverableAuthException -> {
+                        googleDrivePermLauncher.launch(err.intent)
+                    }
+                    err?.message?.contains("Google Drive API is disabled", ignoreCase = true) == true -> {
+                        com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext(), com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog)
+                            .setTitle("Enable Google Drive API")
+                            .setMessage("Google Drive sync requires the Google Drive API to be enabled in your Google Cloud Console project (547903414124).\n\nTap below to open the console and click 'Enable'.")
+                            .setPositiveButton("Open Console") { _, _ ->
+                                val intent = android.content.Intent(
+                                    android.content.Intent.ACTION_VIEW,
+                                    android.net.Uri.parse("https://console.cloud.google.com/apis/library/drive.googleapis.com?project=547903414124")
+                                )
+                                startActivity(intent)
+                            }
+                            .setNegativeButton("Close", null)
+                            .show()
+                    }
+                    err?.message?.startsWith("DRIVE_ACCESS_DENIED") == true -> {
+                        com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext(), com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog)
+                            .setTitle("Google Sign-In Required")
+                            .setMessage(
+                                "Google Drive sync is unavailable:\n\n" +
+                                "Animarvle is in Testing mode — only approved accounts can sync.\n\n" +
+                                "Fix options:\n" +
+                                "1. Ask the developer to add your email as a test user in Google Cloud Console.\n" +
+                                "2. Sign out and sign in again — Google will now ask for Drive access during sign-in."
                             )
-                            startActivity(intent)
-                        }
-                        .setNegativeButton("Close", null)
-                        .show()
-                } else {
-                    android.widget.Toast.makeText(
-                        requireContext(),
-                        "Sync failed: ${err.localizedMessage ?: err.message}",
-                        android.widget.Toast.LENGTH_LONG
-                    ).show()
+                            .setPositiveButton("Sign Out & Retry") { _, _ ->
+                                val accountRepo = (requireActivity().application as com.animarvle.app.AnimarvleApp).container.account
+                                accountRepo.signOut(requireContext())
+                                findNavController().navigate(R.id.loginFragment)
+                            }
+                            .setNegativeButton("Dismiss", null)
+                            .show()
+                    }
+                    else -> {
+                        android.widget.Toast.makeText(
+                            requireContext(),
+                            "Sync failed: ${err?.localizedMessage ?: err?.message}",
+                            android.widget.Toast.LENGTH_LONG
+                        ).show()
+                    }
                 }
             }
         }

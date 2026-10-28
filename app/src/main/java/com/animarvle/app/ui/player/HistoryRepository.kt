@@ -22,6 +22,9 @@ data class HistoryItem(
     val updatedAtMs: Long,
     val mediaType: String = "ANIME",
     val seasonNumber: Int = 1,
+    val streamUrl: String? = null,
+    val streamHeaders: Map<String, String> = emptyMap(),
+    val serverName: String? = null,
 ) {
     val progressPercent: Int
         get() = if (durationMs > 0) ((positionMs.toDouble() / durationMs) * 100).toInt() else 0
@@ -55,6 +58,19 @@ class HistoryRepository(context: Context) {
                 if (sanitizedType != rawMediaType) {
                     modified = true
                 }
+                val streamUrl = if (o.has("streamUrl") && !o.isNull("streamUrl")) o.getString("streamUrl") else null
+                val serverName = if (o.has("serverName") && !o.isNull("serverName")) o.getString("serverName") else null
+                val streamHeaders = mutableMapOf<String, String>()
+                if (o.has("streamHeaders") && !o.isNull("streamHeaders")) {
+                    val hObj = o.optJSONObject("streamHeaders")
+                    if (hObj != null) {
+                        val it = hObj.keys()
+                        while (it.hasNext()) {
+                            val k = it.next()
+                            streamHeaders[k] = hObj.optString(k, "")
+                        }
+                    }
+                }
                 HistoryItem(
                     mediaUrl = mediaUrl,
                     title = title,
@@ -66,6 +82,9 @@ class HistoryRepository(context: Context) {
                     updatedAtMs = o.optLong("updatedAtMs", System.currentTimeMillis()),
                     mediaType = sanitizedType,
                     seasonNumber = o.optInt("seasonNumber", 1),
+                    streamUrl = streamUrl,
+                    streamHeaders = streamHeaders,
+                    serverName = serverName,
                 )
             }
             // Deduplicate existing entries by title (keep the most recently updated one)
@@ -97,6 +116,18 @@ class HistoryRepository(context: Context) {
         }
     }
 
+    fun getSavedStream(title: String, episodeNumber: Int = 1): HistoryItem? {
+        val clean = title.trim()
+        return _historyFlow.value.firstOrNull {
+            it.title.trim().equals(clean, ignoreCase = true) &&
+                it.episodeNumber == episodeNumber &&
+                !it.streamUrl.isNullOrBlank()
+        } ?: _historyFlow.value.firstOrNull {
+            it.title.trim().equals(clean, ignoreCase = true) &&
+                !it.streamUrl.isNullOrBlank()
+        }
+    }
+
     suspend fun saveProgress(
         mediaUrl: String,
         title: String,
@@ -107,10 +138,19 @@ class HistoryRepository(context: Context) {
         audio: String,
         mediaType: String = "ANIME",
         seasonNumber: Int = 1,
+        streamUrl: String? = null,
+        streamHeaders: Map<String, String> = emptyMap(),
+        serverName: String? = null,
     ) = withContext(Dispatchers.IO) {
         if (durationMs <= 0 || positionMs <= 0) return@withContext
         val sanitizedType = sanitizeMediaType(mediaType, title, mediaUrl, durationMs, posterUrl)
         val current = _historyFlow.value.toMutableList()
+        val existing = current.firstOrNull {
+            it.mediaUrl == mediaUrl || it.title.trim().equals(title.trim(), ignoreCase = true)
+        }
+        val effectiveStreamUrl = streamUrl ?: existing?.streamUrl
+        val effectiveHeaders = if (streamHeaders.isNotEmpty()) streamHeaders else (existing?.streamHeaders ?: emptyMap())
+        val effectiveServerName = serverName ?: existing?.serverName
         // Deduplicate and update in-place: if title matches (or mediaUrl matches), remove previous entry
         current.removeAll {
             it.mediaUrl == mediaUrl || it.title.trim().equals(title.trim(), ignoreCase = true)
@@ -128,6 +168,9 @@ class HistoryRepository(context: Context) {
                 updatedAtMs = System.currentTimeMillis(),
                 mediaType = sanitizedType,
                 seasonNumber = seasonNumber,
+                streamUrl = effectiveStreamUrl,
+                streamHeaders = effectiveHeaders,
+                serverName = effectiveServerName,
             ),
         )
         val trimmed = current.take(MAX_HISTORY_ENTRIES)
@@ -145,6 +188,17 @@ class HistoryRepository(context: Context) {
                     put("updatedAtMs", item.updatedAtMs)
                     put("mediaType", item.mediaType)
                     put("seasonNumber", item.seasonNumber)
+                    if (!item.streamUrl.isNullOrBlank()) {
+                        put("streamUrl", item.streamUrl)
+                    }
+                    if (!item.serverName.isNullOrBlank()) {
+                        put("serverName", item.serverName)
+                    }
+                    if (item.streamHeaders.isNotEmpty()) {
+                        val hObj = JSONObject()
+                        item.streamHeaders.forEach { (k, v) -> hObj.put(k, v) }
+                        put("streamHeaders", hObj)
+                    }
                 },
             )
         }

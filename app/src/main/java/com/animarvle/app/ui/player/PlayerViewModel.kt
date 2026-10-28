@@ -111,6 +111,9 @@ class PlayerViewModel(
     val isOffline: Boolean = false,
     private val metadata: com.animarvle.app.data.MetadataRepository? = null,
     private val isMovieParam: Boolean? = null,
+    private val savedStream: HistoryItem? = null,
+    private val httpClient: okhttp3.OkHttpClient? = null,
+    private val initialPositionMs: Long = 0L,
 ) : ViewModel() {
 
     private var currentSeasonNumber: Int = initialSeasonNumber
@@ -272,7 +275,11 @@ class PlayerViewModel(
         }
         setEpisodeServers(initialItems)
         if (!isOffline) {
-            loadAndResolve()
+            if (savedStream != null && !savedStream.streamUrl.isNullOrBlank()) {
+                probeAndPlaySavedStream(savedStream, initialPositionMs)
+            } else {
+                loadAndResolve(resumeAt = initialPositionMs)
+            }
         } else {
             _state.update {
                 it.copy(
@@ -1207,6 +1214,117 @@ class PlayerViewModel(
         )
     }
 
+    /**
+     * Fast-path stream validation for Continue Watching & raw playback.
+     * Directly validates the saved stream URL via a lightweight range probe.
+     * If still valid, plays immediately without scraping/matching sources from scratch!
+     */
+    private fun probeAndPlaySavedStream(saved: HistoryItem, resumeAtMs: Long) {
+        val streamUrl = saved.streamUrl ?: run {
+            loadAndResolve(resumeAt = resumeAtMs)
+            return
+        }
+        val targetResumePos = if (resumeAtMs > 0L) resumeAtMs else saved.positionMs
+        pendingResumeAtMs = targetResumePos
+        job?.cancel()
+        job = viewModelScope.launch {
+            _state.update {
+                it.copy(
+                    phase = PlayerPhase.RESOLVING,
+                    sourceName = saved.serverName ?: "Saved Stream",
+                    message = "Checking saved stream URL...",
+                )
+            }
+
+            val isValid = withContext(Dispatchers.IO) {
+                validateStreamUrl(streamUrl, saved.streamHeaders)
+            }
+
+            if (isValid && isActive) {
+                val streamKind = when {
+                    streamUrl.contains(".mpd", ignoreCase = true) -> StreamKind.DASH
+                    streamUrl.contains(".mp4", ignoreCase = true) || streamUrl.contains(".mkv", ignoreCase = true) -> StreamKind.PROGRESSIVE
+                    else -> StreamKind.HLS
+                }
+                val streams = listOf(Stream(streamUrl, streamKind))
+                val serverOpt = ServerOption(key = "saved", label = saved.serverName ?: "Fast Stream")
+                resolved = ResolvedMedia(
+                    streams = streams,
+                    subtitles = emptyList(),
+                    headers = saved.streamHeaders,
+                )
+                _state.update {
+                    it.copy(
+                        phase = PlayerPhase.READY,
+                        sourceName = saved.serverName ?: "Fast Stream",
+                        selectedServer = "saved",
+                        servers = listOf(serverOpt),
+                        message = null,
+                    )
+                }
+                _commands.trySend(
+                    PlayerCommand.Prepare(
+                        streams = streams,
+                        startPositionMs = targetResumePos,
+                        subtitles = emptyList(),
+                        selectedSubtitle = null,
+                        headers = saved.streamHeaders,
+                    )
+                )
+            } else if (isActive) {
+                // Saved stream expired or unreachable -> fallback seamlessly to resolver
+                _state.update { it.copy(message = null) }
+                loadAndResolve(resumeAt = pendingResumeAtMs)
+            }
+        }
+    }
+
+    private fun validateStreamUrl(url: String, headers: Map<String, String>): Boolean {
+        return runCatching {
+            val client = (httpClient ?: okhttp3.OkHttpClient()).newBuilder()
+                .callTimeout(java.time.Duration.ofMillis(3500))
+                .connectTimeout(java.time.Duration.ofMillis(3000))
+                .readTimeout(java.time.Duration.ofMillis(3000))
+                .build()
+
+            val reqBuilder = okhttp3.Request.Builder().url(url)
+            headers.forEach { (k, v) -> reqBuilder.addHeader(k, v) }
+            reqBuilder.addHeader("Range", "bytes=0-1024")
+            val req = reqBuilder.build()
+
+            client.newCall(req).execute().use { response ->
+                if (response.isSuccessful || response.code == 206 || response.code == 200) {
+                    if (url.contains(".m3u8", ignoreCase = true)) {
+                        val bodyPrefix = response.body?.string()?.take(500).orEmpty()
+                        bodyPrefix.contains("#EXTM3U", ignoreCase = true)
+                    } else {
+                        true
+                    }
+                } else {
+                    false
+                }
+            }
+        }.getOrDefault(false)
+    }
+
+    /** Re-prepares the current resolved stream (e.g. returning from Subtitle Settings). */
+    fun rePrepareCurrentIfReady(resumePositionMs: Long = -1L) {
+        val media = resolved ?: return
+        val streams = streamsForQuality(_state.value.selectedQualityId, media)
+        if (streams.isNotEmpty()) {
+            val startMs = if (resumePositionMs >= 0L) resumePositionMs else pendingResumeAtMs
+            _commands.trySend(
+                PlayerCommand.Prepare(
+                    streams = streams,
+                    startPositionMs = startMs,
+                    subtitles = media.subtitles,
+                    selectedSubtitle = _state.value.selectedSubtitle,
+                    headers = media.headers,
+                )
+            )
+        }
+    }
+
     private fun streamsForQuality(id: String, media: ResolvedMedia): List<Stream> {
         val all = media.streams.sortedByDescending { it.height ?: 0 }
         if (id == DerivedUi.AUTO_ID) return all
@@ -1307,6 +1425,9 @@ class PlayerViewModel(
         private val isOffline: Boolean = false,
         private val metadata: com.animarvle.app.data.MetadataRepository? = null,
         private val isMovie: Boolean? = null,
+        private val savedStream: HistoryItem? = null,
+        private val httpClient: okhttp3.OkHttpClient? = null,
+        private val initialPositionMs: Long = 0L,
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T =
@@ -1327,6 +1448,9 @@ class PlayerViewModel(
                 isOffline,
                 metadata,
                 isMovie,
+                savedStream,
+                httpClient,
+                initialPositionMs,
             ) as T
     }
 

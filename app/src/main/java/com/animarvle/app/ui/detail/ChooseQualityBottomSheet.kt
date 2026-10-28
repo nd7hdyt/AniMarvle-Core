@@ -630,18 +630,13 @@ class ChooseQualityBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun startDownloadForItem(item: QualityOption, holder: DownloadQualityAdapter.Holder) {
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            val hasPermission = androidx.core.content.ContextCompat.checkSelfPermission(
-                requireContext(),
-                android.Manifest.permission.POST_NOTIFICATIONS,
-            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-            if (!hasPermission) {
-                androidx.core.app.ActivityCompat.requestPermissions(
-                    requireActivity(),
-                    arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),
-                    2002,
-                )
-            }
+        val missingPermissions = com.animarvle.app.ui.download.DownloadStorageHelper.getMissingPermissions(requireContext())
+        if (missingPermissions.isNotEmpty()) {
+            androidx.core.app.ActivityCompat.requestPermissions(
+                requireActivity(),
+                missingPermissions,
+                2002,
+            )
         }
 
         if (isDirectStream(item.streamUrl)) {

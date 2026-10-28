@@ -134,18 +134,14 @@ class MainActivity : AppCompatActivity() {
             navHost.navController.navigate(R.id.downloadFragment)
         }
 
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            if (androidx.core.content.ContextCompat.checkSelfPermission(
-                    this,
-                    android.Manifest.permission.POST_NOTIFICATIONS,
-                ) != android.content.pm.PackageManager.PERMISSION_GRANTED
-            ) {
-                androidx.core.app.ActivityCompat.requestPermissions(
-                    this,
-                    arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),
-                    1001,
-                )
-            }
+        // Request notification & storage permissions for video downloads (.mkv, .mp4)
+        val missingPermissions = com.animarvle.app.ui.download.DownloadStorageHelper.getMissingPermissions(this)
+        if (missingPermissions.isNotEmpty()) {
+            androidx.core.app.ActivityCompat.requestPermissions(
+                this,
+                missingPermissions,
+                com.animarvle.app.ui.download.DownloadStorageHelper.STORAGE_PERMISSION_REQUEST_CODE,
+            )
         }
 
         if (savedInstanceState == null) {

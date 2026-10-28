@@ -177,10 +177,17 @@ class GoogleDriveSyncRepository(
         val response = client.newCall(request).execute()
         if (!response.isSuccessful) {
             val errorBody = response.body?.string() ?: ""
-            if (response.code == 403 && errorBody.contains("disabled", ignoreCase = true)) {
-                throw IllegalStateException("Google Drive API is disabled. Please enable it in Google Cloud Console.")
+            when {
+                response.code == 403 && errorBody.contains("disabled", ignoreCase = true) ->
+                    throw IllegalStateException("Google Drive API is disabled. Please enable it in Google Cloud Console.")
+                response.code == 403 && (errorBody.contains("access_denied", ignoreCase = true) || errorBody.contains("accessNotConfigured", ignoreCase = true)) ->
+                    throw IllegalStateException(
+                        "DRIVE_ACCESS_DENIED: Animarvle has not completed Google verification. " +
+                        "The app is in Testing mode — only approved test accounts can use Drive sync. " +
+                        "Contact the developer to be added as a test user, or sign in from the registered developer account."
+                    )
+                else -> throw IllegalStateException("Google Drive query failed (${response.code}): $errorBody")
             }
-            throw IllegalStateException("Google Drive query failed (${response.code}): $errorBody")
         }
 
         val json = JSONObject(response.body?.string() ?: "{}")

@@ -7,7 +7,9 @@ import com.animarvle.app.R
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
+import com.animarvle.app.data.sync.GoogleDriveSyncRepository
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.common.api.Scope
 import com.google.android.gms.tasks.Task
 
 object GoogleAuthHelper {
@@ -24,6 +26,9 @@ object GoogleAuthHelper {
         val builder = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
             .requestEmail()
             .requestProfile()
+            // Request drive.appdata scope at sign-in so the OAuth consent screen covers
+            // Google Drive sync without requiring a separate permission grant later.
+            .requestScopes(Scope(GoogleDriveSyncRepository.DRIVE_APPDATA_SCOPE))
 
         if (serverClientId.isNotEmpty()) {
             builder.requestIdToken(serverClientId)

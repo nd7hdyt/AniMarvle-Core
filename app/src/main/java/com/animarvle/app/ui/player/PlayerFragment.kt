@@ -106,6 +106,8 @@ class PlayerFragment : Fragment() {
     private var sleepTimerEndOnEpisode = false
     private var subtitleDelayOffsetMs: Long = 0L
     private var currentStreamUrl: String? = null
+    private var currentStreamHeaders: Map<String, String> = emptyMap()
+    private var savedPlaybackPositionMs: Long = 0L
     private fun preparePlayerForDialog() {
         hideControlsHandler.removeCallbacks(hideControlsRunnable)
         showControls(animated = false)
@@ -250,6 +252,12 @@ class PlayerFragment : Fragment() {
             args.getSerializable("seasons") as? ArrayList<com.animarvle.app.domain.SeasonUi>
         } ?: emptyList()
 
+        val savedStream = container.history.getSavedStream(mediaTitle, initialEpNum)
+        val resumePos = args.getLong("resumePositionMs", savedStream?.positionMs ?: 0L)
+        if (resumePos > 0L) {
+            savedPlaybackPositionMs = resumePos
+        }
+
         viewModel = ViewModelProvider(
             this,
             PlayerViewModel.Factory(
@@ -271,6 +279,9 @@ class PlayerFragment : Fragment() {
                 isOffline = isOfflineDownload,
                 metadata = container.metadata,
                 isMovie = if (args.containsKey("isMovie")) args.getBoolean("isMovie") else null,
+                savedStream = savedStream,
+                httpClient = container.http,
+                initialPositionMs = resumePos,
             ),
         )[PlayerViewModel::class.java]
 
@@ -905,6 +916,7 @@ class PlayerFragment : Fragment() {
             is PlayerCommand.Prepare -> {
                 val primaryStream = command.streams.firstOrNull() ?: return
                 currentStreamUrl = primaryStream.url
+                currentStreamHeaders = command.headers
                 okFactory?.setDefaultRequestProperties(command.headers)
                 val startPos = command.startPositionMs.coerceAtLeast(0L)
                 p.setMediaItem(toMediaItem(primaryStream, command.subtitles), startPos)
@@ -1025,7 +1037,13 @@ class PlayerFragment : Fragment() {
                     binding.streamUnavailableLayout.isVisible = false
                     binding.videoBand.isVisible = true
                     binding.playerScrollView.isVisible = !isFullscreen
-                    binding.statusBlock.isVisible = false
+                    if (!state.message.isNullOrBlank()) {
+                        binding.statusBlock.isVisible = true
+                        binding.statusText.text = state.message
+                        binding.statusSpinner.isVisible = true
+                    } else {
+                        binding.statusBlock.isVisible = false
+                    }
                     updateBufferingUi(true)
                 }
 
@@ -2415,7 +2433,11 @@ class PlayerFragment : Fragment() {
         } else false
 
         player?.let { p ->
-            saveCurrentProgress(p.currentPosition, p.duration)
+            val pos = p.currentPosition
+            if (pos > 0L) {
+                savedPlaybackPositionMs = pos
+            }
+            saveCurrentProgress(pos, p.duration)
             if (!allowBackground && !isInPip) {
                 p.pause()
             }
@@ -2450,6 +2472,9 @@ class PlayerFragment : Fragment() {
             rawTypeArg?.equals("MOVIE", ignoreCase = true) == true -> "MOVIE"
             else -> if (state.isMovie) "MOVIE" else "TV"
         }
+        val streamToSave = currentStreamUrl
+        val headersToSave = currentStreamHeaders
+        val serverToSave = viewModel.state.value.selectedServer
         viewLifecycleOwner.lifecycleScope.launch {
             app.container.history.saveProgress(
                 mediaUrl = mediaUrl,
@@ -2461,6 +2486,9 @@ class PlayerFragment : Fragment() {
                 audio = state.audio.name,
                 mediaType = mediaType,
                 seasonNumber = state.seasonNumber,
+                streamUrl = streamToSave,
+                streamHeaders = headersToSave,
+                serverName = serverToSave,
             )
         }
     }
@@ -2687,6 +2715,14 @@ class PlayerFragment : Fragment() {
     override fun onResume() {
         super.onResume()
         applySubtitleAppearance()
+        player?.let { p ->
+            if (p.playbackState == androidx.media3.common.Player.STATE_IDLE && viewModel.state.value.phase == PlayerPhase.READY) {
+                val resumePos = if (savedPlaybackPositionMs > 0L) savedPlaybackPositionMs else p.currentPosition
+                viewModel.rePrepareCurrentIfReady(resumePos)
+            } else if (p.playbackState == androidx.media3.common.Player.STATE_READY && !p.isPlaying) {
+                p.playWhenReady = true
+            }
+        }
     }
 
     private fun applySubtitleAppearance() {
@@ -2738,6 +2774,12 @@ class PlayerFragment : Fragment() {
         activity?.let { act ->
             act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
             WindowInsetsControllerCompat(act.window, act.window.decorView).show(WindowInsetsCompat.Type.systemBars())
+        }
+        player?.let { p ->
+            val pos = p.currentPosition
+            if (pos > 0L) {
+                savedPlaybackPositionMs = pos
+            }
         }
         hideControlsHandler.removeCallbacksAndMessages(null)
         binding.playerView.player = null

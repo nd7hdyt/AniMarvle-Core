@@ -184,12 +184,7 @@ class PlayerSettingsFragment : Fragment() {
         // Download Folder Location (SAF)
         fun updateDownloadFolderDisplay() {
             val uriStr = prefs.getString(KEY_DOWNLOAD_DIR_URI, null)
-            if (uriStr.isNullOrBlank()) {
-                binding.tvDownloadFolderDesc.setText(R.string.settings_download_folder_internal)
-            } else {
-                val decoded = android.net.Uri.decode(uriStr)
-                binding.tvDownloadFolderDesc.text = decoded
-            }
+            binding.tvDownloadFolderDesc.text = com.animarvle.app.ui.download.DownloadStorageHelper.getFriendlyFolderPath(requireContext(), uriStr)
         }
         updateDownloadFolderDisplay()
 
@@ -214,6 +209,14 @@ class PlayerSettingsFragment : Fragment() {
         }
 
         binding.cardDownloadFolder.setOnClickListener {
+            val missing = com.animarvle.app.ui.download.DownloadStorageHelper.getMissingPermissions(requireContext())
+            if (missing.isNotEmpty()) {
+                androidx.core.app.ActivityCompat.requestPermissions(
+                    requireActivity(),
+                    missing,
+                    com.animarvle.app.ui.download.DownloadStorageHelper.STORAGE_PERMISSION_REQUEST_CODE,
+                )
+            }
             pickFolderLauncher.launch(null)
         }
 
