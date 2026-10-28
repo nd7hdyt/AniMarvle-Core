@@ -1,163 +1,140 @@
-# Animarvle
+<p align="center">
+  <img src="assets/icon.png" alt="Animarvle App Icon" width="112" />
+</p>
 
-[![Android CI](https://github.com/nd7hdyt/AniMarvle/actions/workflows/android.yml/badge.svg)](https://github.com/nd7hdyt/AniMarvle/actions/workflows/android.yml)
-[![Latest Release](https://img.shields.io/github/v/release/nd7hdyt/AniMarvle?color=00D4B2&label=version)](https://github.com/nd7hdyt/AniMarvle/releases)
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+<h1 align="center">Animarvle</h1>
 
-An Android application for streaming Anime, Movies, and TV series, built with native Kotlin, AndroidX Media3 / ExoPlayer, Jetpack Architecture Components, Room, and a refined obsidian frosted-glass UI with pure OLED black theming.
+<p align="center">
+  A high-performance Android streaming client for Anime, Movies, and TV series with an obsidian OLED black interface. Built with native Kotlin, AndroidX Media3 / ExoPlayer, and Google Drive cloud sync.
+</p>
 
----
+<p align="center">
+  <a href="https://github.com/nd7hdyt/AniMarvle/releases/latest"><strong>Download APK</strong></a>
+</p>
 
-## ✨ Features & Architecture Highlights
+<p align="center">
+  <a href="https://github.com/nd7hdyt/AniMarvle/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/nd7hdyt/AniMarvle?style=for-the-badge&logo=github&label=latest&color=00D4B2"></a>
+  <a href="https://github.com/nd7hdyt/AniMarvle/releases"><img alt="Total downloads" src="https://img.shields.io/github/downloads/nd7hdyt/AniMarvle/total?style=for-the-badge&logo=github&label=downloads&color=107C41"></a>
+  <a href="LICENSE"><img alt="GPLv3 license" src="https://img.shields.io/badge/License-GPLv3-blue?style=for-the-badge"></a>
+</p>
 
-### 🌌 1. Pure OLED Black (#000000) & Obsidian Glass Design System
-- **Pure `#000000` OLED Black Foundation**: Every background is locked to pitch black so poster art and typography pop with zero grey/navy wash.
-- **Obsidian Glass Surfaces**:
-  - Primary surfaces: `#0F0F14` / `#121217` / `#181818`
-  - Floating dialogs and bottom sheets: Translucent obsidian frosted glass (`#B814151A`) with subtle 1dp specular borders (`#282830`).
-- **Live Frosted-Glass Backdrop Blur (`VortexBlurHelper`)**:
-  - Real-time stack blur capturing content behind the top header and bottom navigation bar.
-  - Subtle glowing specular edge highlights (`topGlowBorder` and `bottomGlowBorder`) for true glassmorphism.
+<p align="center">
+  <a href="https://developer.android.com/"><img alt="Android 8.0+" src="https://img.shields.io/badge/Android-8.0%2B-3DDC84?style=for-the-badge&logo=android&logoColor=white"></a>
+  <a href="https://kotlinlang.org/"><img alt="Kotlin" src="https://img.shields.io/badge/Kotlin-2.0%2B-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white"></a>
+  <a href="https://developer.android.com/media/media3"><img alt="Media3 ExoPlayer" src="https://img.shields.io/badge/Media3-ExoPlayer-E50914?style=for-the-badge&logo=google&logoColor=white"></a>
+  <a href="https://m3.material.io/"><img alt="Material 3 Design" src="https://img.shields.io/badge/Material%203-Expressive-6750A4?style=for-the-badge&logo=materialdesign&logoColor=white"></a>
+</p>
 
-### 🎬 2. Dual Media Hubs
-- **Anime Mode**:
-  - Powered by AniList with curated vertical rails (Trending, Airing Now, Popular this Season, Top Rated, Donghua, All-Time Popular, Anime Movies).
-  - Clean layout focused entirely on anime without live-action provider clutter.
-  - Category headers leading directly to searchable catalog feeds.
-- **Movies & TV Mode**:
-  - Powered by TMDB (Trending Movies, Trending TV Series, TMDB Top Rated, Now Playing in Theaters, Popular Movies, Popular TV Shows, Animation & Family, K-Drama, C-Drama).
-  - Interactive streaming provider bubbles (Netflix, Prime Video, Disney+, Apple TV+, Crunchyroll, Sony LIV, Hotstar, Max) leading to dedicated `ProviderCatalogFragment` with sorting and filtering.
+## About
 
-### 🌟 3. Hero Carousel Banner & Reactive My List
-- **500dp Immersive Banner**:
-  - Top dark scrim ensuring logo, segmented capsule, and search icons remain razor-sharp over any artwork.
-  - Deep 310dp bottom gradient scrim for high-contrast title and metadata readability.
-- **Auto-Scroll Engine**:
-  - 4.5-second automatic sliding with gesture-drag pausing and idle resume.
-- **Action Controls & Reactive Indicator**:
-  - Solid crisp white `▶ Play` button with dark icon/text.
-  - Reactive `My List` button with real-time `itemsFlow` synchronization: dynamically displays filled accent bookmark with `"In List"` when saved, or outline bookmark with `"My List"` when unsaved.
-  - Refined available-options bottom sheet (Pending, Watching, Completed, Remove from My List).
-  - Clean pagination indicator (`01 ━━━ 08`).
-- **Cross-Device Cloud Sync**:
-  - Automatically synchronizes watchlist mutations to Google Drive AppData (`my_list_sync.json`) in the background.
-  - Seamless two-way merging across multiple devices linked to the same Google account.
+Animarvle is a free, modern Android streaming client built from the ground up for smooth, high-speed playback of Anime, Movies, and TV series. It combines a pure OLED black (`#000000`) obsidian glass design with low-latency edge resolution, adaptive HLS video streaming, rich franchise metadata, and cross-device cloud watchlist synchronization.
 
-### ⏱️ 4. Vertical Continue Watching Rail & Domain Isolation
-- **2:3 Cover Poster Geometry**:
-  - Compact vertical cards (118dp × 170dp) showcasing official series/movie cover art instead of stretched horizontal thumbnails.
-  - Overlaid frosted play badge, bottom gradient scrim, clean "Ep X • Ym left" badge, and pure white progress bar.
-- **Strict Media Domain Partitioning**:
-  - Anime mode Continue Watching rail strictly displays genuine anime and donghua.
-  - Live-action movies and TV series appear exclusively in the Movies & TV hub.
-  - Dynamic history auto-sanitizer (`HistoryRepository`) cleans legacy entries on startup.
+⭐ **Please give the repo a star if you like the project. It helps more people find it!** 🌟
 
-### 🔄 5. Multi-Screen 1:1 Real-UI Skeletons & Morph Loader
-- **1:1 Structural Skeleton Loaders**:
-  - Pre-media loading states on Details, Home, and Provider Catalog screens mirror the exact layout hierarchy of the loaded content (hero banner, wide cards, action capsules, and grids).
-  - Smooth alpha pulse animation (1.0f ↔ 0.42f, 850ms reverse repeat) for fluid, zero-jank content transitions.
-- **VortexMorphLoadingView**: Custom procedural polygon-morphing loading indicator for swipe-to-refresh.
+## Highlights
 
-### 🎭 6. Details Screen, Franchise Seasons & Cinematic Parallax
-- **35% Parallax Backdrop**: Hero poster translates upward at ~35% of content scroll velocity (`parallaxFactor = 0.35f`), delivering rich visual depth without detaching from the top viewport edge.
-- **Progressive Hardware Dimming**: Smooth dark overlay (`heroDimOverlay`) dynamically scales from 0% to 75% opacity as foreground content glides up into pure OLED black shadows.
-- **Chronological Franchise Relations & One-Shot Filter**: Traverses prequel/sequel relation chains backward and forward to build strictly chronological season orders ($1, 2, 3\dots$), filtering out standalone 1-episode ONAs/OVAs/specials from hijacking main series.
-- **Continuous Anime TMDB Saga Enrichment**: Continuous single-entry anime (e.g. *One Piece*, *Bleach*, *Naruto*, *Detective Conan*) are enriched with all canonical story sagas from TMDB TV (e.g. all 23 seasons for *One Piece*), calculating `startEpisodeNumber` offsets and arc titles.
-- **In-Place Season Selection**: Switching seasons in the dropdown updates episodes in-place without page reload or mutating franchise relation chains.
+- **Pure OLED Black & Obsidian Glass UI:** Pitch-black `#000000` dark mode foundation with live real-time frosted glass backdrop blur and glowing specular edges.
+- **Dual Media Hubs:** Dedicated Anime hub powered by AniList (Trending, Airing Now, Seasonal, Donghua) and Movies & TV hub powered by TMDB with direct streaming provider rails (Netflix, Prime Video, Disney+, Apple TV+, Hotstar, Max).
+- **Obsidian Glass Player Engine:** AndroidX Media3 / ExoPlayer with adaptive HLS bitrate streaming, multi-audio track routing (SUB, DUB, RAW), manual quality selector (4K down to 360p), and styled SSA/ASS subtitles.
+- **Smart Auto-Rotate Fullscreen:** Portrait-locked browsing interface that smoothly expands into an immersive edge-to-edge landscape player when rotated.
+- **Cross-Device Cloud Watchlist:** Automatic background watchlist (`My List`) synchronization with Google Drive AppData using deterministic conflict resolution.
+- **Franchise Relations & TMDB Saga Enrichment:** Chronological prequel/sequel series order and canonical saga breakdown for continuous anime like *One Piece* and *Bleach*.
+- **In-App Auto-Updater:** Seamless in-app update checks with direct package installation and SHA-256 integrity verification.
+- **Multi-Architecture Builds:** Optimized native APK packages for `arm64-v8a`, `armeabi-v7a`, `x86_64`, and `universal`.
 
-### 🍿 7. Obsidian Glass Player & Smart Auto-Rotate
-- **Smart Auto-Rotate Fullscreen**:
-  - App-wide orientation is strictly locked to portrait across Home, Details, My List, Profile, and Search.
-  - On the player screen, device auto-rotate dynamically expands the player into 100% immersive fullscreen landscape (completely hiding the title, server chips, and episode list below).
-  - Returning the phone vertically seamlessly restores the portrait layout with title, server chips, and system bars.
-- **Localized Glass Submenus**:
-  - Floating 4-corner geometry (`26dp` rounded corners, `12dp` bottom float margin).
-  - Single-window submenu swapping (Playback Settings -> Speed, Quality, Audio, Subtitles) without window recreation or flicker.
-- **Advanced Playback Engine**:
-  - AndroidX Media3 / ExoPlayer with HLS adaptive bitrate streaming, manual resolution selection (4K down to 144p), and multi-audio track selection.
-  - Dual-mode episode layout (2-column 16:9 thumbnail cards vs. 6-column anime number tiles).
-  - Custom subtitle engine with ASS/SSA styling, delay adjustments, and web subtitle support.
-  - Full background & Picture-in-Picture (PiP) support, hardware resize modes (Fit, Fill, Zoom), and sleep timer.
+<details>
+<summary><strong>Features</strong></summary>
 
-### ⚡ 8. Stream Resolution Gateway (`AnimarvleStreamSource`)
-- **Unified Resolution Engine**:
-  - Native stream resolution gateway supporting multiple high-speed endpoints (Spiral, Turbo, FastX) out of the box.
-  - Automatic fallback between audio profiles (SUB, DUB, RAW) ensuring seamless playback.
+### 🎬 Playback & Player
+- Adaptive HLS bitrate playback powered by AndroidX Media3 / ExoPlayer.
+- Localized glass submenus for Speed (0.25x – 2.0x), Quality, Audio language, and Subtitles without UI recreation or flicker.
+- Dual-mode episode layout: 2-column 16:9 thumbnail cards with episode titles vs. 6-column anime number tiles.
+- Custom subtitle engine supporting SRT, VTT, and styled ASS/SSA tracks with delay adjustments.
+- Picture-in-Picture (PiP) and background audio playback support.
+- Configurable double-tap seek duration (5s to 90s) and hardware aspect-ratio resize modes (Fit, Fill, Zoom).
 
-### 🔄 9. In-App Update Engine & Launch Reminders
-- **Dual-Source Update Resolution**:
-  - Automatically queries raw repository `version.json` with fallback to GitHub Releases API.
-  - Compares semantic versioning and build codes against `BuildConfig.VERSION_CODE`.
-- **Modern Obsidian Update Modal**:
-  - 28dp rounded obsidian sheet with cyan squircle badge, version details, and release notes.
-  - Streaming in-app APK download with real-time progress bar and automatic `FileProvider` package installation.
-- **Settings & Profile Integration**:
-  - Dedicated "Check for updates on launch" toggle switch.
-  - Interactive "Check for updates" row with version badges and instant live check.
+### 🌌 Interface & Theming
+- Pure OLED `#000000` surface hierarchy ensuring zero grey wash and vibrant contrast.
+- Real-time stack blur capturing content behind the top header and bottom navigation bar.
+- 1:1 structural skeleton loaders and procedural polygon-morph loading animation (`VortexMorphLoadingView`).
+- 35% velocity parallax backdrop with dynamic progressive dimming on Details screen.
 
-### 👤 10. User Account, Preferences & Profile System
-- **Google Play Services Authentication & Cloud Watchlist Sync**:
-  - One-tap sign in via Google Play Services with profile metadata and avatar display.
-  - **Serverless Cloud Sync**: Zero-cost, privacy-first watchlist sync using Google Drive's hidden `appDataFolder` (`my_list_sync.json`).
-  - **Two-Way Conflict Resolution**: Automatic timestamp-based merging (`updatedAtMs`) ensures list integrity when syncing across multiple devices.
-  - **Profile Sync Card**: Real-time sync status indicator ("Last synced: X ago"), manual "Sync" trigger, and one-tap Google Cloud Console activation dialog.
-  - Migration to Android Credential Manager (`androidx.credentials`) is queued on the technical roadmap.
-- **Isolated & Reproducible Build Signing**:
-  - Development builds use a committed `signing/debug.keystore` for reproducible local and debug CI runs, matching development Google OAuth credentials.
-  - Production release builds are strictly isolated in `app/build.gradle.kts` and dynamically sign using environment variables (`RELEASE_KEYSTORE_PATH`) without exposing private release keys.
-- **OLED Obsidian Preferences Suite**:
-  - **Player & Downloads**: Quality, audio language, download paths, and concurrency.
-  - **Subtitle Settings**: Real-time typography styling, font size, text colors, outline thickness, and subtitle positioning.
-  - **Adult Mode**: Live 18+ content toggle integrated into AniList GraphQL queries.
-  - **Notifications**: System updates and new releases toggle with Android 13+ runtime permissions.
-  - **Double Tap to Skip**: Material choice selector (`5s`, `10s`, `15s`, `20s`, `30s`, `45s`, `60s`, `90s`).
-  - **Anime Skip Button**: Toggle for the in-player 90s intro/outro skip pill.
-- **About & Legal OLED Suite**:
-  - Self-contained in-app Legal Documents modal suite (**Privacy Policy**, **Terms of Service**, **Copyright & Takedown**) with clean in-app summaries and zero external web dependencies.
-  - Prominent non-hosting legal disclaimer card and one-tap Copy Diagnostics utility.
+### 📚 Library & Tracking
+- Reactive `My List` indicator with status categorization (Watching, Completed, Plan to Watch).
+- Vertical Continue Watching rail with 2:3 cover poster geometry and progress tracking.
+- Domain isolation ensuring Anime and Live-Action media remain cleanly partitioned in history and library.
+- Google Play Services authentication with Google Drive AppData watchlist cloud synchronization.
 
----
+### ⚡ Gateway & Sources
+- Built-in edge relay gateway resolving adaptive HLS streams instantly.
+- Multi-server fallback architecture (Spiral, Turbo, FastX) ensuring high stream reliability.
+- In-app Extension Manager supporting external media source plugins.
 
-## 🛠️ Tech Stack & Dependencies
+</details>
 
-- **Language**: Kotlin 2.0+
-- **Architecture**: MVVM + Clean Architecture + Repository Pattern
-- **Media Engine**: AndroidX Media3 / ExoPlayer 1.5+
-- **UI Framework**: Material Design 3, ViewBinding, ConstraintLayout, Custom Views & ItemDecorations
-- **Image Loading**: Coil 2.7+
-- **Networking**: Retrofit 2, OkHttp 4.12+, Kotlinx Serialization, Coroutines & Flows
-- **Local Persistence**: Room Database, AndroidX DataStore / SharedPreferences
-- **Edge Gateway**: Cloudflare Workers (Node / V8 runtime)
+<details>
+<summary><strong>Recent improvements</strong></summary>
 
----
+- **Hardwired Edge Resolver:** Streamlined Cloudflare edge relay resolution directly inside the source engine for sub-second startup times.
+- **Cloud Watchlist Synchronization:** Added Google Drive AppData cloud sync with deterministic last-write-wins conflict resolution.
+- **Franchise Relation Ordering:** Traverses prequel and sequel chains backward and forward to build strictly chronological season orders.
+- **Continuous Anime TMDB Saga Enrichment:** Single-entry continuous anime are enriched with all canonical TV sagas and arc titles.
+- **Smart Orientation Engine:** App-wide portrait lock with automatic full-screen landscape expansion upon physical device rotation during playback.
+- **Multi-Architecture Packaging:** Independent CI builds for `arm64-v8a`, `armeabi-v7a`, `x86_64`, and `universal` with individual SHA-256 checksums.
 
-## 🚀 Building & Running
+</details>
 
-### Prerequisites
-- **Android Studio**: Latest release supporting AGP 9.4+ (or build directly using bundled `./gradlew`)
-- **Gradle**: **9.8.2** (bundled via `./gradlew`) & **AGP 9.4.1**
-- **JDK**: **17** or **21**
-- **Android SDK Platforms**: `compileSdk = 37`, `targetSdk = 37`, `minSdk = 26` (Android 8.0+)
+## Star History
 
-### Clone & Build
-```bash
-# Clone the repository
-git clone https://github.com/nd7hdyt/AniMarvle.git
-cd AniMarvle
+<a href="https://www.star-history.com/?repos=nd7hdyt%2FAniMarvle&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=nd7hdyt/AniMarvle&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=nd7hdyt/AniMarvle&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=nd7hdyt/AniMarvle&type=date&legend=top-left" />
+ </picture>
+</a>
 
-# Verify Kotlin compilation
-./gradlew compileDebugKotlin
+## Install
 
-# Build debug APK
-./gradlew assembleDebug
+1. Open the [latest GitHub release](https://github.com/nd7hdyt/AniMarvle/releases/latest).
+2. Download the APK corresponding to your device architecture:
+   - **`arm64-v8a`** *(Recommended)*: For modern Android phones and tablets (fastest performance, smaller download).
+   - **`universal`**: Compatible with all Android devices.
+   - **`armeabi-v7a`**: For older 32-bit Android devices.
+   - **`x86_64`**: For Android emulators and x86 Chromebooks.
+3. Install the APK on your device.
+4. Launch Animarvle and start streaming.
 
-# Install directly on a connected ADB device
-./gradlew installDebug
-```
+> **Note:** Android may request permission to allow installations from your browser or file manager. This is standard for APKs installed outside the Google Play Store.
 
----
+## FAQ
 
-## 📄 License & Attribution
+### Does Animarvle host or distribute video content?
+> No. Animarvle does not host, upload, or maintain any video files or streams on its servers. The application is an edge client that resolves streams dynamically through third-party services and extensions.
 
-This project is licensed under the terms of the GNU General Public License v3.0 ([LICENSE](LICENSE)).
-Designed and developed for high-fidelity media streaming.
+### Is Animarvle free?
+> Yes. Animarvle is 100% free with no subscription tiers or paywalls.
+
+### How do app updates work?
+> Animarvle includes a built-in in-app updater. When an update is published, you can download and install it directly within the app with one tap. You can also download the latest APK manually from the GitHub Releases page.
+
+### Can I sync my watchlist across multiple devices?
+> Yes. Simply sign in with your Google account in the Profile tab. Your watchlist and bookmarks will automatically synchronize across all devices connected to the same Google account.
+
+## Disclaimer
+
+<div align="left">
+
+The developer(s) of this application have no affiliation with any media providers or video hosting services. Animarvle acts strictly as a media client and indexing tool; it does not host, store, or upload media files. Users are responsible for complying with the terms and copyright regulations in their respective jurisdictions.
+
+</div>
+
+## License
+
+[![GNU GPLv3 Image](https://www.gnu.org/graphics/gplv3-127x51.png)](http://www.gnu.org/licenses/gpl-3.0.en.html)
+
+<div align="left">
+
+Animarvle is licensed under the **GNU General Public License v3.0 (GPLv3)**. You may copy, distribute, and modify the software under the terms of the GPLv3 license.
+
+</div>
