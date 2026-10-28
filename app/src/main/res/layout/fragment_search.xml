@@ -9,7 +9,7 @@
     <!-- Status bar spacer dynamically set from insets -->
     <View
         android:id="@+id/statusBarSpacer"
-        android:layout_width="match_parent"
+        android:layout_width="0dp"
         android:layout_height="0dp"
         android:background="@android:color/transparent"
         app:layout_constraintEnd_toEndOf="parent"
@@ -19,7 +19,7 @@
     <!-- Top Header: Title "Search" · Category Dropdown Pill · Circular Close Button -->
     <LinearLayout
         android:id="@+id/topHeader"
-        android:layout_width="match_parent"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:gravity="center_vertical"
         android:orientation="horizontal"
@@ -90,9 +90,10 @@
     <!-- Search Input Pill Bar -->
     <LinearLayout
         android:id="@+id/searchBarContainer"
-        android:layout_width="match_parent"
+        android:layout_width="0dp"
         android:layout_height="48dp"
-        android:layout_marginHorizontal="16dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
         android:layout_marginTop="10dp"
         android:background="@drawable/bg_search_input_pill"
         android:gravity="center_vertical"
@@ -144,32 +145,32 @@
     <!-- Main Card Container (Obsidian card matching Settings/Profile screen) -->
     <com.google.android.material.card.MaterialCardView
         android:id="@+id/glassCard"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginHorizontal="16dp"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
         android:layout_marginTop="12dp"
-        android:layout_marginBottom="24dp"
+        android:layout_marginBottom="16dp"
         app:cardBackgroundColor="#181818"
         app:cardCornerRadius="16dp"
         app:cardElevation="0dp"
         app:cardPreventCornerOverlap="false"
-        app:layout_constrainedHeight="true"
         app:layout_constraintBottom_toTopOf="@id/navigationBarSpacer"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/searchBarContainer"
-        app:layout_constraintVertical_bias="0.0"
         app:strokeWidth="0dp">
 
         <FrameLayout
             android:layout_width="match_parent"
-            android:layout_height="wrap_content">
+            android:layout_height="match_parent">
 
             <!-- Pre-Search Content (Recent Searches + Everyone Searching Tags) -->
             <androidx.core.widget.NestedScrollView
                 android:id="@+id/preSearchContainer"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
+                android:layout_height="match_parent"
+                android:fillViewport="true"
                 android:scrollbars="none">
 
                 <LinearLayout
@@ -269,7 +270,7 @@
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/resultsList"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
+                android:layout_height="match_parent"
                 android:clipToPadding="false"
                 android:paddingVertical="8dp"
                 android:scrollbars="vertical"
@@ -279,7 +280,7 @@
             <LinearLayout
                 android:id="@+id/searchSkeleton"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
+                android:layout_height="match_parent"
                 android:orientation="vertical"
                 android:paddingHorizontal="14dp"
                 android:paddingVertical="12dp"
@@ -396,7 +397,7 @@
             <LinearLayout
                 android:id="@+id/emptyBlock"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
+                android:layout_height="match_parent"
                 android:gravity="center"
                 android:orientation="vertical"
                 android:padding="24dp"
@@ -452,7 +453,7 @@
     <!-- Navigation bar spacer dynamically set from system navigation insets -->
     <View
         android:id="@+id/navigationBarSpacer"
-        android:layout_width="match_parent"
+        android:layout_width="0dp"
         android:layout_height="0dp"
         android:background="@android:color/transparent"
         app:layout_constraintBottom_toBottomOf="parent"

@@ -7,17 +7,23 @@
 
     <ImageView
         android:id="@+id/heroBackdrop"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
         android:scaleType="centerCrop"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
         tools:src="@tools:sample/backgrounds/scenic" />
 
     <!-- Deep Bottom Gradient Scrim inside each page so text and buttons are always readable -->
     <View
-        android:layout_width="match_parent"
+        android:layout_width="0dp"
         android:layout_height="310dp"
         android:background="@drawable/bg_details_bottom_scrim"
-        app:layout_constraintBottom_toBottomOf="parent" />
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
 
     <!-- Content Container pinned to the bottom left (matches Image 19 One Piece layout) -->
     <LinearLayout
