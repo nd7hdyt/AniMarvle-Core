@@ -120,6 +120,7 @@ jobs:
         cd public_repo
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
+        git branch -M main
         git add README.md version.json assets
         git diff-index --quiet HEAD || git commit -m "chore(release): update README, version.json, and assets for ${{ github.ref_name }} [skip ci]"
-        git push origin main
+        git push -u origin main
