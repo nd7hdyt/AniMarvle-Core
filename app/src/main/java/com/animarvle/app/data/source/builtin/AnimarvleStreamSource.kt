@@ -2,7 +2,6 @@ package com.animarvle.app.data.source.builtin
 
 import android.content.Context
 import android.util.Log
-import com.animarvle.app.ui.profile.PlayerSettingsFragment
 import com.animarvle.sourceapi.Audio
 import com.animarvle.sourceapi.Choice
 import com.animarvle.sourceapi.EpisodeOptions
@@ -52,11 +51,7 @@ class AnimarvleStreamSource(
         downloadable = true,
     )
 
-    private fun getWorkerBaseUrl(): String {
-        val prefs = appContext?.getSharedPreferences(PlayerSettingsFragment.PREFS_NAME, Context.MODE_PRIVATE)
-        val custom = prefs?.getString(KEY_WORKER_URL, null)
-        return custom?.trim()?.trimEnd('/')?.takeIf { it.isNotBlank() } ?: DEFAULT_WORKER_URL
-    }
+    private fun getWorkerBaseUrl(): String = DEFAULT_WORKER_URL
 
     // --- Search ---------------------------------------------------------------------------------
 
@@ -442,7 +437,6 @@ class AnimarvleStreamSource(
 
     companion object {
         private const val TAG = "AnimarvleStreamSource"
-        const val KEY_WORKER_URL = "cloudflare_worker_url"
         const val DEFAULT_WORKER_URL = "https://animarvle-edge.grandfootball21.workers.dev"
         private const val USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
         val subtitlesCache = java.util.concurrent.ConcurrentHashMap<String, List<SubtitleTrack>>()

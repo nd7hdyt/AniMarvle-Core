@@ -243,73 +243,6 @@ class PlayerSettingsFragment : Fragment() {
             }
         }
 
-        // Cloudflare Worker URL
-        fun updateWorkerUrlDisplay() {
-            val savedUrl = prefs.getString(KEY_WORKER_URL, null)
-                ?: com.animarvle.app.data.source.builtin.AnimarvleStreamSource.DEFAULT_WORKER_URL
-            binding.tvWorkerUrlDesc.text = savedUrl
-        }
-        updateWorkerUrlDisplay()
-
-        binding.cardWorkerUrl.setOnClickListener {
-            val currentUrl = prefs.getString(KEY_WORKER_URL, null)
-                ?: com.animarvle.app.data.source.builtin.AnimarvleStreamSource.DEFAULT_WORKER_URL
-
-            val input = android.widget.EditText(requireContext()).apply {
-                setText(currentUrl)
-                setSingleLine()
-                hint = getString(R.string.settings_worker_url_hint)
-                val padding = (16 * resources.displayMetrics.density).toInt()
-                setPadding(padding, padding, padding, padding)
-            }
-
-            androidx.appcompat.app.AlertDialog.Builder(requireContext())
-                .setTitle(R.string.settings_worker_url)
-                .setMessage(R.string.settings_worker_url_desc)
-                .setView(input)
-                .setPositiveButton(android.R.string.ok) { _, _ ->
-                    val newUrl = input.text.toString().trim()
-                    if (newUrl.isNotBlank()) {
-                        prefs.edit().putString(KEY_WORKER_URL, newUrl).apply()
-                        updateWorkerUrlDisplay()
-
-                        // Test connection in background
-                        viewLifecycleOwner.lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                            val ok = runCatching {
-                                val req = okhttp3.Request.Builder()
-                                    .url("$newUrl/health")
-                                    .build()
-                                val client = okhttp3.OkHttpClient.Builder()
-                                    .callTimeout(java.time.Duration.ofSeconds(3))
-                                    .build()
-                                client.newCall(req).execute().use { it.isSuccessful }
-                            }.getOrDefault(false)
-
-                            withContext(kotlinx.coroutines.Dispatchers.Main) {
-                                if (ok) {
-                                    binding.tvWorkerUrlStatus.text = "ONLINE"
-                                    binding.tvWorkerUrlStatus.setTextColor(android.graphics.Color.parseColor("#4CAF50"))
-                                    android.widget.Toast.makeText(
-                                        requireContext(),
-                                        R.string.settings_worker_connected,
-                                        android.widget.Toast.LENGTH_SHORT,
-                                    ).show()
-                                } else {
-                                    binding.tvWorkerUrlStatus.text = "ACTIVE"
-                                    binding.tvWorkerUrlStatus.setTextColor(android.graphics.Color.parseColor("#FF9800"))
-                                }
-                            }
-                        }
-                    }
-                }
-                .setNeutralButton("Reset") { _, _ ->
-                    prefs.edit().remove(KEY_WORKER_URL).apply()
-                    updateWorkerUrlDisplay()
-                }
-                .setNegativeButton(android.R.string.cancel, null)
-                .show()
-        }
-
         // Clear Watch History
         binding.cardClearHistory.setOnClickListener {
             androidx.appcompat.app.AlertDialog.Builder(requireContext())
@@ -362,6 +295,5 @@ class PlayerSettingsFragment : Fragment() {
         const val KEY_BACKGROUND_PLAY = "background_play"
         const val KEY_WIFI_ONLY = "wifi_only_downloads"
         const val KEY_CONCURRENT_DOWNLOADS = "concurrent_downloads_limit"
-        const val KEY_WORKER_URL = com.animarvle.app.data.source.builtin.AnimarvleStreamSource.KEY_WORKER_URL
     }
 }
