@@ -204,16 +204,25 @@ class MetadataRepository(
     }
 
     suspend fun tmdbCartoons(): List<MediaUi> = runCatching {
-        tmdb.popularCartoons().map(TmdbMapper::toMediaUi)
-    }.getOrElse { emptyList() }
+        val res = tmdb.popularCartoons().map(TmdbMapper::toMediaUi)
+        if (res.isNotEmpty()) res else throw IllegalStateException("Empty cartoons")
+    }.getOrElse {
+        runCatching { simkl.popularTv(10) }.getOrDefault(emptyList())
+    }
 
     suspend fun tmdbKDramas(): List<MediaUi> = runCatching {
-        tmdb.popularKDramas().map(TmdbMapper::toMediaUi)
-    }.getOrElse { emptyList() }
+        val res = tmdb.popularKDramas().map(TmdbMapper::toMediaUi)
+        if (res.isNotEmpty()) res else throw IllegalStateException("Empty kdramas")
+    }.getOrElse {
+        runCatching { simkl.popularTv(10) }.getOrDefault(emptyList())
+    }
 
     suspend fun tmdbCDramas(): List<MediaUi> = runCatching {
-        tmdb.popularCDramas().map(TmdbMapper::toMediaUi)
-    }.getOrElse { emptyList() }
+        val res = tmdb.popularCDramas().map(TmdbMapper::toMediaUi)
+        if (res.isNotEmpty()) res else throw IllegalStateException("Empty cdramas")
+    }.getOrElse {
+        runCatching { simkl.popularTv(10) }.getOrDefault(emptyList())
+    }
 
     suspend fun discoverProviderCatalog(
         type: String, // "movie" or "tv"
@@ -260,10 +269,13 @@ class MetadataRepository(
         return runCatching { simkl.searchMulti(query) }.getOrDefault(emptyList())
     }
 
-    suspend fun tmdbSchedule(dateIso: String): Pair<Int, List<ScheduleItem>> {
+    suspend fun tmdbSchedule(dateIso: String): Pair<Int, List<ScheduleItem>> = runCatching {
         val (total, items) = tmdb.scheduleTv(dateIso)
         val epochSec = System.currentTimeMillis() / 1000
-        return total to items.map { TmdbMapper.toScheduleItem(it, epochSec) }
+        total to items.map { TmdbMapper.toScheduleItem(it, epochSec) }
+    }.getOrElse {
+        val airing = runCatching { simkl.scheduleTv(dateIso) }.getOrDefault(emptyList())
+        airing.size to airing
     }
 
     suspend fun search(query: String): List<MediaUi> {
@@ -286,27 +298,36 @@ class MetadataRepository(
         val isMovie = mediaType?.equals("movie", ignoreCase = true) == true
 
         if (preferTmdb) {
-            if (isTv) {
-                val tmdbTv = runCatching { tmdb.tvDetails(id)?.let(TmdbMapper::toMediaUi) }.getOrNull()
-                if (tmdbTv != null) return tmdbTv
-                val tmdbMovie = runCatching { tmdb.movieDetails(id)?.let(TmdbMapper::toMediaUi) }.getOrNull()
-                if (tmdbMovie != null) return tmdbMovie
-            } else if (isMovie) {
-                val tmdbMovie = runCatching { tmdb.movieDetails(id)?.let(TmdbMapper::toMediaUi) }.getOrNull()
-                if (tmdbMovie != null) return tmdbMovie
-                val tmdbTv = runCatching { tmdb.tvDetails(id)?.let(TmdbMapper::toMediaUi) }.getOrNull()
-                if (tmdbTv != null) return tmdbTv
-            } else {
-                val rawMovie = runCatching { tmdb.movieDetails(id) }.getOrNull()
-                val rawTv = runCatching { tmdb.tvDetails(id) }.getOrNull()
-                if (rawTv != null && rawMovie != null) {
-                    val tvPop = rawTv.popularity ?: 0.0
-                    val moviePop = rawMovie.popularity ?: 0.0
-                    return if (tvPop >= moviePop) TmdbMapper.toMediaUi(rawTv) else TmdbMapper.toMediaUi(rawMovie)
+            val tmdbResult = runCatching {
+                if (isTv) {
+                    val tv = tmdb.tvDetails(id)?.let(TmdbMapper::toMediaUi)
+                    if (tv != null) return@runCatching tv
+                    tmdb.movieDetails(id)?.let(TmdbMapper::toMediaUi)
+                } else if (isMovie) {
+                    val movie = tmdb.movieDetails(id)?.let(TmdbMapper::toMediaUi)
+                    if (movie != null) return@runCatching movie
+                    tmdb.tvDetails(id)?.let(TmdbMapper::toMediaUi)
+                } else {
+                    val rawMovie = tmdb.movieDetails(id)
+                    val rawTv = tmdb.tvDetails(id)
+                    if (rawTv != null && rawMovie != null) {
+                        val tvPop = rawTv.popularity ?: 0.0
+                        val moviePop = rawMovie.popularity ?: 0.0
+                        if (tvPop >= moviePop) TmdbMapper.toMediaUi(rawTv) else TmdbMapper.toMediaUi(rawMovie)
+                    } else if (rawMovie != null) {
+                        TmdbMapper.toMediaUi(rawMovie)
+                    } else if (rawTv != null) {
+                        TmdbMapper.toMediaUi(rawTv)
+                    } else null
                 }
-                if (rawMovie != null) return TmdbMapper.toMediaUi(rawMovie)
-                if (rawTv != null) return TmdbMapper.toMediaUi(rawTv)
-            }
+            }.getOrNull()
+
+            if (tmdbResult != null) return tmdbResult
+
+            // Fallback to Simkl details if TMDB fails or is unavailable
+            val simklResult = runCatching { simkl.fetchDetails(id, isTv = isTv) }.getOrNull()
+            if (simklResult != null) return simklResult
+
             return null
         }
 
@@ -362,6 +383,9 @@ class MetadataRepository(
         val malMedia = runCatching { mal.details(id) }.getOrNull()
         if (malMedia != null) return malMedia
 
+        val simklMedia = runCatching { simkl.fetchDetails(id, isTv = false) }.getOrNull()
+        if (simklMedia != null) return simklMedia
+
         return null
     }
 
@@ -381,7 +405,9 @@ class MetadataRepository(
                 val tmdbTv = runCatching { tmdb.tvRecommendations(id).map(TmdbMapper::toMediaUi) }.getOrDefault(emptyList())
                 if (tmdbTv.isNotEmpty()) return tmdbTv
             }
-            return emptyList()
+            // Fallback to Simkl popular items as recommendations
+            val simklRecs = if (isTv) runCatching { simkl.popularTv(10) }.getOrDefault(emptyList()) else runCatching { simkl.popularMovies(10) }.getOrDefault(emptyList())
+            return simklRecs
         }
 
         return runCatching { api.recommendations(id).map(AniListMapper::toMediaUi) }.getOrDefault(emptyList())
@@ -521,6 +547,11 @@ class MetadataRepository(
                         thumbnailUrl = ep.stillPath?.let { "https://image.tmdb.org/t/p/w500$it" },
                     )
                 }.toMap()
+            }
+            // Fallback directly to Simkl by mediaId
+            val simklEpisodesById = runCatching { simkl.fetchEpisodes(tvId, isTv = true, seasonNumber) }.getOrDefault(emptyMap())
+            if (simklEpisodesById.isNotEmpty()) {
+                return simklEpisodesById
             }
         }
 

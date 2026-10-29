@@ -27,11 +27,11 @@ android {
         versionCode = 2
         versionName = "0.1.1"
 
-        val tmdbKey = getSecret("TMDB_API_KEY")
-        val googleClientId = getSecret("GOOGLE_WEB_CLIENT_ID")
-        val malClientId = getSecret("MAL_CLIENT_ID")
-        val malClientSecret = getSecret("MAL_CLIENT_SECRET")
-        val simklClientId = getSecret("SIMKL_CLIENT_ID")
+        val tmdbKey = getSecret("TMDB_API_KEY", "db4ff5546d1b35981cc4715cdd5f27f7")
+        val googleClientId = getSecret("GOOGLE_WEB_CLIENT_ID", "547903414124-6sl6utfrls85ajguhhf2v6kqgg00hq09.apps.googleusercontent.com")
+        val malClientId = getSecret("MAL_CLIENT_ID", "939d2b9ffa1aa647222b8ed1f8a9be92")
+        val malClientSecret = getSecret("MAL_CLIENT_SECRET", "72dd8b422fe2c6811757817fb7df981227696ab0262b937210c652b6a51c9f39")
+        val simklClientId = getSecret("SIMKL_CLIENT_ID", "eb808b74d884b9578db1039a07314e471940e10045ba86e07dc6aad79649b49e")
 
         buildConfigField("String", "TMDB_API_KEY", "\"$tmdbKey\"")
         buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"$googleClientId\"")

@@ -17,7 +17,7 @@ import java.util.concurrent.TimeUnit
  */
 class MyAnimeListApi(
     private val client: OkHttpClient = defaultClient(),
-    private val clientId: String = BuildConfig.MAL_CLIENT_ID,
+    private val clientId: String = DEFAULT_CLIENT_ID,
 ) {
 
     suspend fun search(query: String, limit: Int = 20): List<MediaUi> = withContext(Dispatchers.IO) {
@@ -175,6 +175,9 @@ class MyAnimeListApi(
 
     companion object {
         const val BASE_URL = "https://api.myanimelist.net/v2"
+        val DEFAULT_CLIENT_ID: String = com.animarvle.app.BuildConfig.MAL_CLIENT_ID.ifBlank {
+            "939d2b9ffa1aa647222b8ed1f8a9be92"
+        }
 
         fun defaultClient(): OkHttpClient = OkHttpClient.Builder()
             .connectTimeout(12, TimeUnit.SECONDS)

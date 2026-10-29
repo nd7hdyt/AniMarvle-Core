@@ -158,7 +158,9 @@ class TmdbApi(
 
     companion object {
         const val BASE_URL = "https://api.themoviedb.org/3"
-        val DEFAULT_API_KEY: String = com.animarvle.app.BuildConfig.TMDB_API_KEY
+        val DEFAULT_API_KEY: String = com.animarvle.app.BuildConfig.TMDB_API_KEY.ifBlank {
+            "db4ff5546d1b35981cc4715cdd5f27f7"
+        }
 
         fun defaultClient(): OkHttpClient = OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)

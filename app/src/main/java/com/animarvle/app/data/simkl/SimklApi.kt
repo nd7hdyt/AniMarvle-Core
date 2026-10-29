@@ -4,6 +4,8 @@ import com.animarvle.app.BuildConfig
 import com.animarvle.app.domain.AiringStatus
 import com.animarvle.app.domain.EpisodeMetadata
 import com.animarvle.app.domain.MediaUi
+import com.animarvle.app.domain.ScheduleItem
+import com.animarvle.app.domain.SeasonUi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -29,7 +31,7 @@ data class SimklIds(
  */
 class SimklApi(
     private val client: OkHttpClient = defaultClient(),
-    private val clientId: String = BuildConfig.SIMKL_CLIENT_ID,
+    private val clientId: String = DEFAULT_CLIENT_ID,
 ) {
 
     suspend fun searchAnime(query: String, limit: Int = 20): List<MediaUi> = withContext(Dispatchers.IO) {
@@ -169,6 +171,203 @@ class SimklApi(
         }.getOrDefault(emptyMap())
     }
 
+    suspend fun scheduleTv(dateIso: String): List<ScheduleItem> = withContext(Dispatchers.IO) {
+        if (clientId.isBlank()) return@withContext emptyList()
+        val url = "$BASE_URL/tv/airing"
+        val req = Request.Builder()
+            .url(url)
+            .header("simkl-api-key", clientId)
+            .header("User-Agent", "Animarvle/1.0")
+            .header("Accept", "application/json")
+            .build()
+
+        runCatching {
+            client.newCall(req).execute().use { response ->
+                if (!response.isSuccessful) return@runCatching emptyList()
+                val body = response.body.string()
+                val arr = JSONArray(body)
+                val results = mutableListOf<ScheduleItem>()
+                val targetPrefix = dateIso.trim()
+
+                for (i in 0 until arr.length()) {
+                    val obj = arr.getJSONObject(i)
+                    val date = obj.optString("date")
+                    if (targetPrefix.isNotBlank() && date.isNotBlank() && !date.startsWith(targetPrefix)) {
+                        continue
+                    }
+                    val ids = obj.optJSONObject("ids")
+                    val simklId = ids?.optLong("simkl_id", 0L)?.takeIf { it > 0 }
+                        ?: ids?.optLong("simkl", 0L)?.takeIf { it > 0 }
+                        ?: obj.optLong("simkl_id", 0L)
+                    val tmdbId = ids?.optString("tmdb")?.toLongOrNull()
+                    val id = tmdbId ?: (if (simklId > 0) simklId else continue)
+
+                    val title = obj.optString("title").takeIf { it.isNotBlank() } ?: continue
+                    val poster = obj.optString("poster").takeIf { it.isNotBlank() }
+                    val coverUrl = poster?.let { "https://simkl.in/posters/${it}_m.jpg" }
+                    val epObj = obj.optJSONObject("episode")
+                    val epNum = epObj?.optInt("episode", 0)?.takeIf { it > 0 }
+
+                    val epochSec = parseIsoToEpochSec(date) ?: (System.currentTimeMillis() / 1000)
+
+                    results.add(
+                        ScheduleItem(
+                            mediaId = id,
+                            title = title,
+                            coverUrl = coverUrl,
+                            episode = epNum,
+                            airingAtEpochSec = epochSec,
+                            format = "Series",
+                            totalEpisodes = null,
+                        )
+                    )
+                }
+
+                if (results.isEmpty() && arr.length() > 0) {
+                    for (i in 0 until minOf(arr.length(), 25)) {
+                        val obj = arr.getJSONObject(i)
+                        val ids = obj.optJSONObject("ids")
+                        val simklId = ids?.optLong("simkl_id", 0L)?.takeIf { it > 0 }
+                            ?: ids?.optLong("simkl", 0L)?.takeIf { it > 0 }
+                            ?: obj.optLong("simkl_id", 0L)
+                        val tmdbId = ids?.optString("tmdb")?.toLongOrNull()
+                        val id = tmdbId ?: (if (simklId > 0) simklId else continue)
+                        val title = obj.optString("title").takeIf { it.isNotBlank() } ?: continue
+                        val poster = obj.optString("poster").takeIf { it.isNotBlank() }
+                        val coverUrl = poster?.let { "https://simkl.in/posters/${it}_m.jpg" }
+                        val epObj = obj.optJSONObject("episode")
+                        val epNum = epObj?.optInt("episode", 0)?.takeIf { it > 0 }
+                        val date = obj.optString("date")
+                        val epochSec = parseIsoToEpochSec(date) ?: (System.currentTimeMillis() / 1000)
+
+                        results.add(
+                            ScheduleItem(
+                                mediaId = id,
+                                title = title,
+                                coverUrl = coverUrl,
+                                episode = epNum,
+                                airingAtEpochSec = epochSec,
+                                format = "Series",
+                                totalEpisodes = null,
+                            )
+                        )
+                    }
+                }
+                results
+            }
+        }.getOrDefault(emptyList())
+    }
+
+    suspend fun fetchSeasons(simklId: Long, fallbackPoster: String?, mediaId: Long): List<SeasonUi> = withContext(Dispatchers.IO) {
+        if (clientId.isBlank() || simklId <= 0) return@withContext emptyList()
+        val url = "$BASE_URL/tv/episodes/$simklId"
+        val req = Request.Builder()
+            .url(url)
+            .header("simkl-api-key", clientId)
+            .header("User-Agent", "Animarvle/1.0")
+            .build()
+        runCatching {
+            client.newCall(req).execute().use { response ->
+                if (!response.isSuccessful) return@runCatching emptyList()
+                val body = response.body.string()
+                val arr = JSONArray(body)
+                val seasonCounts = mutableMapOf<Int, Int>()
+                for (i in 0 until arr.length()) {
+                    val ep = arr.getJSONObject(i)
+                    val s = ep.optInt("season", ep.optJSONObject("tvdb")?.optInt("season", 1) ?: 1)
+                    if (s > 0) {
+                        seasonCounts[s] = (seasonCounts[s] ?: 0) + 1
+                    }
+                }
+                var runningStart = 1
+                seasonCounts.entries.sortedBy { it.key }.map { (sNum, count) ->
+                    val start = runningStart
+                    runningStart += count
+                    SeasonUi(
+                        id = mediaId,
+                        title = "Season $sNum",
+                        posterUrl = fallbackPoster,
+                        isCurrent = (sNum == 1),
+                        seasonNumber = sNum,
+                        episodeCount = count,
+                        startEpisodeNumber = start,
+                    )
+                }
+            }
+        }.getOrDefault(emptyList())
+    }
+
+    suspend fun fetchDetails(mediaId: Long, isTv: Boolean): MediaUi? = withContext(Dispatchers.IO) {
+        if (clientId.isBlank() || mediaId <= 0) return@withContext null
+
+        var simklId: Long? = null
+        var endpoint = if (isTv) "tv" else "movies"
+
+        runCatching {
+            val searchUrl = "$BASE_URL/search/id?tmdb=$mediaId&type=${if (isTv) "tv" else "movie"}"
+            val req = Request.Builder()
+                .url(searchUrl)
+                .header("simkl-api-key", clientId)
+                .header("User-Agent", "Animarvle/1.0")
+                .header("Accept", "application/json")
+                .build()
+            client.newCall(req).execute().use { response ->
+                if (response.isSuccessful) {
+                    val arr = JSONArray(response.body.string())
+                    if (arr.length() > 0) {
+                        val first = arr.getJSONObject(0)
+                        val foundSimkl = first.optJSONObject("ids")?.optLong("simkl_id", 0L)?.takeIf { it > 0 }
+                            ?: first.optJSONObject("ids")?.optLong("simkl", 0L)?.takeIf { it > 0 }
+                        if (foundSimkl != null && foundSimkl > 0) {
+                            simklId = foundSimkl
+                        }
+                        val foundType = first.optString("type")
+                        if (foundType.equals("movie", ignoreCase = true)) {
+                            endpoint = "movies"
+                        } else if (foundType.equals("tv", ignoreCase = true)) {
+                            endpoint = "tv"
+                        }
+                    }
+                }
+            }
+        }
+
+        val targetId = simklId ?: mediaId
+        val detailUrl = "$BASE_URL/$endpoint/$targetId?extended=full"
+        val req = Request.Builder()
+            .url(detailUrl)
+            .header("simkl-api-key", clientId)
+            .header("User-Agent", "Animarvle/1.0")
+            .header("Accept", "application/json")
+            .build()
+
+        runCatching {
+            client.newCall(req).execute().use { response ->
+                if (!response.isSuccessful) return@runCatching null
+                val body = response.body.string()
+                val obj = JSONObject(body)
+                val base = parseItemToMediaUi(obj, isAnime = false) ?: return@runCatching null
+
+                val seasons = if (endpoint == "tv") {
+                    fetchSeasons(targetId, base.coverUrl, mediaId)
+                } else emptyList()
+
+                base.copy(id = mediaId, seasons = seasons, isTmdb = true)
+            }
+        }.getOrNull()
+    }
+
+    private fun parseIsoToEpochSec(dateIso: String?): Long? {
+        if (dateIso.isNullOrBlank()) return null
+        return runCatching {
+            if (dateIso.length >= 10) {
+                val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                sdf.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                sdf.parse(dateIso.substring(0, 10))?.time?.div(1000)
+            } else null
+        }.getOrNull()
+    }
+
     suspend fun fetchEpisodesByTitle(
         title: String,
         isTv: Boolean,
@@ -271,6 +470,9 @@ class SimklApi(
 
     companion object {
         const val BASE_URL = "https://api.simkl.com"
+        val DEFAULT_CLIENT_ID: String = com.animarvle.app.BuildConfig.SIMKL_CLIENT_ID.ifBlank {
+            "eb808b74d884b9578db1039a07314e471940e10045ba86e07dc6aad79649b49e"
+        }
 
         fun defaultClient(): OkHttpClient = OkHttpClient.Builder()
             .connectTimeout(12, TimeUnit.SECONDS)

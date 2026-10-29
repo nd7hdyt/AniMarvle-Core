@@ -13,7 +13,9 @@ import com.google.android.gms.common.api.Scope
 import com.google.android.gms.tasks.Task
 
 object GoogleAuthHelper {
-    val WEB_CLIENT_ID: String = com.animarvle.app.BuildConfig.GOOGLE_WEB_CLIENT_ID
+    val WEB_CLIENT_ID: String = com.animarvle.app.BuildConfig.GOOGLE_WEB_CLIENT_ID.ifBlank {
+        "547903414124-6sl6utfrls85ajguhhf2v6kqgg00hq09.apps.googleusercontent.com"
+    }
 
     fun getGoogleSignInOptions(context: Context): GoogleSignInOptions {
         val serverClientId = try {
