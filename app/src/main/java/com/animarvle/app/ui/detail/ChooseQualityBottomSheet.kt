@@ -24,21 +24,26 @@ import com.animarvle.sourceapi.Audio
 import com.animarvle.sourceapi.Choice
 import com.animarvle.sourceapi.MediaSource
 import com.animarvle.sourceapi.MediaType
-import com.animarvle.sourceapi.ServerOption
 import com.animarvle.sourceapi.SourceEpisode
 import com.animarvle.sourceapi.Titles
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import java.net.URI
+import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 
 data class QualityOption(
     val id: String,
-    val label: String, // e.g. "1080p"
-    val qualityBadge: String, // e.g. "1080p", "720p", "480p"
+    val label: String,
+    val qualityBadge: String,
     val formatBadge: String = "MP4",
     val specsSubtitle: String? = null,
     val subtitleCount: Int = 0,
@@ -49,6 +54,7 @@ data class QualityOption(
     val language: String = "English",
     val sizeText: String = "",
     val estimatedBytes: Long = 0L,
+    val headers: Map<String, String> = emptyMap(),
 )
 
 data class ServerEntry(
@@ -60,22 +66,9 @@ data class ServerEntry(
     val rawQuality: String,
     val kind: String,
     val qualityMap: Map<String, String>,
+    val headers: Map<String, String> = emptyMap(),
 )
 
-/**
- * AniVortex / MovieBox 1:1 "Download Options" glass bottom sheet modal.
- * Features:
- * - 73% bounded height matching reference screenshot (leaving top video/backdrop dimmed, never full screen)
- * - Deep OLED black background (#0F0F12) with 28dp top rounded corners
- * - Centered grey drag handle and bold "Download Options" title with close '✕' button
- * - Media banner card displaying thumbnail poster and media title
- * - SERVER selector pills (Turbo, Spiral, FastX) with real bitrate scaling
- * - LANGUAGE selector pills (English, Hindi, Japanese, Spanish, etc.) with real dub/format updates
- * - AVAILABLE QUALITIES direct-action cards (1080p, 720p, 480p, 360p, 240p, 144p)
- * - Dynamic, realistic estimated file size calculation scaling by media duration, server profile, and container
- * - Direct outlined pill buttons [↓ Download] on each card that start downloading immediately
- * - Smooth vertical scrolling inside NestedScrollView
- */
 class ChooseQualityBottomSheet : BottomSheetDialogFragment() {
 
     private var _binding: DialogChooseQualityBinding? = null
@@ -92,17 +85,17 @@ class ChooseQualityBottomSheet : BottomSheetDialogFragment() {
 
     private var activeSource: MediaSource? = null
     private var activeEpisode: SourceEpisode? = null
-    private var fallbackStreamUrl: String = ""
 
     private var serverEntries: List<ServerEntry> = emptyList()
-    private var availableServers: List<String> = listOf("Turbo", "Spiral", "FastX")
-    private var selectedServer: String = "Turbo"
+    private var availableServers: List<String> = emptyList()
+    private var selectedServer: String = ""
 
-    private var availableLanguages: List<String> = listOf("English")
-    private var selectedLanguage: String = "English"
+    private var availableLanguages: List<String> = emptyList()
+    private var selectedLanguage: String = ""
 
     private var qualityLadder: List<QualityOption> = emptyList()
-    private val probedSizes = mutableMapOf<String, Long>()
+    private val probedSizes = ConcurrentHashMap<String, Long>()
+    private var isProbingSizes: Boolean = false
     private var onConfirmListener: ((QualityOption, List<Int>) -> Unit)? = null
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
@@ -112,7 +105,6 @@ class ChooseQualityBottomSheet : BottomSheetDialogFragment() {
             bottomSheet?.let { sheet ->
                 val behavior = BottomSheetBehavior.from(sheet)
                 val displayMetrics = resources.displayMetrics
-                // Set height to 73% of screen so the top ~27% of screen displays the video/backdrop overlay
                 val targetHeight = (displayMetrics.heightPixels * 0.73f).toInt()
                 sheet.layoutParams.height = targetHeight
                 behavior.maxHeight = targetHeight
@@ -150,14 +142,12 @@ class ChooseQualityBottomSheet : BottomSheetDialogFragment() {
         val durArg = arguments?.getInt(ARG_DURATION_MINUTES, -1) ?: -1
         durationMinutes = when {
             durArg > 0 -> durArg
-            mediaType == MediaType.MOVIE -> 95 // standard feature film runtime
-            else -> 24 // standard anime episode runtime
+            mediaType == MediaType.MOVIE -> 95
+            else -> 24
         }
 
-        // Close button
         binding.btnClose.setOnClickListener { dismiss() }
 
-        // Media Card Header (Poster + Title)
         binding.mediaTitleText.text = mediaTitle
         if (!posterUrl.isNullOrBlank()) {
             binding.mediaPoster.load(posterUrl) {
@@ -190,71 +180,170 @@ class ChooseQualityBottomSheet : BottomSheetDialogFragment() {
                 }.getOrNull()
             }
 
-            if (result != null) {
+            if (result != null && result.entries.isNotEmpty()) {
                 serverEntries = result.entries
-                availableServers = result.servers.ifEmpty { listOf("Turbo", "Spiral", "FastX") }
+                availableServers = result.servers
                 selectedServer = availableServers.firstOrNull { it.equals("Turbo", ignoreCase = true) }
-                    ?: availableServers.firstOrNull() ?: "Turbo"
+                    ?: availableServers.firstOrNull().orEmpty()
 
-                availableLanguages = result.languages.ifEmpty {
-                    if (isDonghua) listOf("Chinese")
-                    else if (mediaType == MediaType.MOVIE) listOf("English", "Hindi")
-                    else listOf("English", "Japanese")
-                }
-                selectedLanguage = availableLanguages.firstOrNull { it.equals("Chinese", ignoreCase = true) }
-                    ?: availableLanguages.firstOrNull { it.equals("English", ignoreCase = true) }
-                    ?: availableLanguages.firstOrNull() ?: if (isDonghua) "Chinese" else "English"
+                updateAvailableLanguagesForServer()
             } else {
                 serverEntries = emptyList()
-                availableServers = listOf("Turbo", "Spiral", "FastX")
-                selectedServer = "Turbo"
-                availableLanguages = if (isDonghua) listOf("Chinese")
-                    else if (mediaType == MediaType.MOVIE) listOf("English", "Hindi")
-                    else listOf("English", "Japanese")
-                selectedLanguage = if (isDonghua) "Chinese" else "English"
+                availableServers = emptyList()
+                availableLanguages = emptyList()
             }
 
             binding.loadingContainer.isVisible = false
             binding.contentContainer.isVisible = true
 
+            if (serverEntries.isEmpty()) {
+                android.widget.Toast.makeText(
+                    requireContext(),
+                    "No downloadable streams found for this title",
+                    android.widget.Toast.LENGTH_SHORT,
+                ).show()
+                return@launch
+            }
+
+            isProbingSizes = true
             renderServerPills()
             renderLanguagePills()
             recomputeAndRenderQualityList()
 
-            // Asynchronously probe direct stream URLs for physical Content-Length from CDN
+            // Probe real Content-Length for every discovered URL in parallel using CDN headers
             viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
+                val app = (activity?.application as? AnimarvleApp)?.container ?: return@launch
+                val urlsToProbe = linkedMapOf<String, Map<String, String>>()
+
                 for (entry in serverEntries) {
-                    val directUrl = entry.streamUrl.takeIf { it.isNotBlank() } ?: continue
-                    if (!directUrl.startsWith("http", ignoreCase = true)) continue
-                    runCatching {
-                        val app = (activity?.application as? AnimarvleApp)?.container ?: return@runCatching
-                        val req = okhttp3.Request.Builder()
-                            .url(directUrl)
-                            .header("Range", "bytes=0-0")
-                            .build()
-                        val resp = app.http.newCall(req).execute()
-                        val cr = resp.header("Content-Range")
-                        val cl = resp.header("Content-Length")
-                        resp.close()
-                        val bytes = if (cr != null && cr.contains("/")) {
-                            cr.substringAfterLast("/").trim().toLongOrNull()
-                        } else {
-                            cl?.toLongOrNull()
+                    if (isValidHttpUrl(entry.streamUrl)) {
+                        urlsToProbe[entry.streamUrl] = AnimarvleStreamSource.buildHeadersForUrl(entry.streamUrl, entry.streamUrl)
+                    }
+                    for ((_, qUrl) in entry.qualityMap) {
+                        if (isValidHttpUrl(qUrl)) {
+                            urlsToProbe[qUrl] = AnimarvleStreamSource.buildHeadersForUrl(qUrl, entry.streamUrl)
                         }
-                        if (bytes != null && bytes > 0L) {
-                            probedSizes[directUrl] = bytes
-                            probedSizes["${entry.serverName}_${entry.audioLanguage}_${entry.rawQuality}"] = bytes
-                            probedSizes["${entry.serverName}_${entry.rawQuality}"] = bytes
-                            withContext(Dispatchers.Main) {
-                                if (isAdded && !isDetached) {
-                                    recomputeAndRenderQualityList()
+                    }
+                }
+
+                coroutineScope {
+                    urlsToProbe.entries.map { (url, headers) ->
+                        async {
+                            val cached = AnimarvleStreamSource.sizesCache[url] ?: probedSizes[url]
+                            if (cached != null && cached > 0L) {
+                                probedSizes[url] = cached
+                                return@async
+                            }
+                            val bytes = probeExactStreamSize(app.http, url, headers)
+                            if (bytes != null && bytes > 0L) {
+                                probedSizes[url] = bytes
+                                AnimarvleStreamSource.sizesCache[url] = bytes
+                                withContext(Dispatchers.Main) {
+                                    if (isAdded && !isDetached && _binding != null) {
+                                        recomputeAndRenderQualityList()
+                                    }
                                 }
                             }
                         }
+                    }.awaitAll()
+                }
+
+                withContext(Dispatchers.Main) {
+                    isProbingSizes = false
+                    if (isAdded && !isDetached && _binding != null) {
+                        recomputeAndRenderQualityList()
                     }
                 }
             }
         }
+    }
+
+    private fun updateAvailableLanguagesForServer() {
+        val langsForServer = serverEntries
+            .filter { it.serverName.equals(selectedServer, ignoreCase = true) }
+            .map { it.audioLanguage }
+            .distinct()
+
+        availableLanguages = langsForServer.ifEmpty {
+            serverEntries.map { it.audioLanguage }.distinct()
+        }
+
+        if (selectedLanguage.isBlank() || availableLanguages.none { it.equals(selectedLanguage, ignoreCase = true) }) {
+            selectedLanguage = availableLanguages.firstOrNull { it.equals("English", ignoreCase = true) }
+                ?: availableLanguages.firstOrNull().orEmpty()
+        }
+    }
+
+    /**
+     * Probes the actual byte size of a video stream from the CDN using 3 strategies:
+     * 1. Range: bytes=0-0 -> parses Content-Range: bytes 0-0/TOTAL_BYTES
+     * 2. HTTP HEAD -> parses Content-Length
+     * 3. Normal GET (aborted immediately after reading headers) -> parses Content-Length
+     */
+    private fun probeExactStreamSize(
+        http: okhttp3.OkHttpClient,
+        url: String,
+        headers: Map<String, String>,
+    ): Long? {
+        val lower = url.lowercase(Locale.US)
+        if (lower.contains(".m3u8") || lower.contains("/proxy/m3u8") || lower.contains(".mpd")) {
+            return null
+        }
+
+        // Strategy 1: Range: bytes=0-0
+        runCatching {
+            val reqBuilder = okhttp3.Request.Builder()
+                .url(url)
+                .header("Range", "bytes=0-0")
+                .header("Accept-Encoding", "identity")
+            headers.forEach { (k, v) -> reqBuilder.header(k, v) }
+
+            http.newCall(reqBuilder.build()).execute().use { resp ->
+                if (resp.isSuccessful || resp.code == 206) {
+                    val cr = resp.header("Content-Range")
+                    if (cr != null && cr.contains("/")) {
+                        val total = cr.substringAfterLast("/").trim().toLongOrNull()
+                        if (total != null && total > 100_000L) return total
+                    }
+                    val cl = resp.header("Content-Length")?.toLongOrNull()
+                    if (cl != null && cl > 100_000L) return cl
+                }
+            }
+        }
+
+        // Strategy 2: HTTP HEAD
+        runCatching {
+            val headBuilder = okhttp3.Request.Builder()
+                .url(url)
+                .head()
+                .header("Accept-Encoding", "identity")
+            headers.forEach { (k, v) -> headBuilder.header(k, v) }
+
+            http.newCall(headBuilder.build()).execute().use { resp ->
+                if (resp.isSuccessful) {
+                    val cl = resp.header("Content-Length")?.toLongOrNull()
+                    if (cl != null && cl > 100_000L) return cl
+                }
+            }
+        }
+
+        // Strategy 3: Standard GET (reads only response headers, then closes body stream immediately)
+        runCatching {
+            val getBuilder = okhttp3.Request.Builder()
+                .url(url)
+                .get()
+                .header("Accept-Encoding", "identity")
+            headers.forEach { (k, v) -> getBuilder.header(k, v) }
+
+            http.newCall(getBuilder.build()).execute().use { resp ->
+                if (resp.isSuccessful) {
+                    val cl = resp.header("Content-Length")?.toLongOrNull()
+                    if (cl != null && cl > 100_000L) return cl
+                }
+            }
+        }
+
+        return null
     }
 
     private data class StreamFetchResult(
@@ -263,7 +352,7 @@ class ChooseQualityBottomSheet : BottomSheetDialogFragment() {
         val entries: List<ServerEntry>,
     )
 
-    private suspend fun fetchStreamOptions(): StreamFetchResult {
+    private suspend fun fetchStreamOptions(): StreamFetchResult = coroutineScope {
         val app = (requireActivity().application as AnimarvleApp).container
         val meta = MetaQuery(
             metaId = "anilist:$mediaId",
@@ -277,36 +366,20 @@ class ChooseQualityBottomSheet : BottomSheetDialogFragment() {
         val sources = app.sourcesFor(mediaType, mediaTitle)
         val match = app.matcher.match(meta, sources)
         if (match !is MatchResult.Matched) {
-            return StreamFetchResult(
-                servers = listOf("Turbo", "Spiral", "FastX"),
-                languages = if (mediaType == MediaType.MOVIE) listOf("English", "Hindi") else listOf("English", "Japanese"),
-                entries = emptyList(),
-            )
+            return@coroutineScope StreamFetchResult(emptyList(), emptyList(), emptyList())
         }
 
         val sMedia = match.media
         val source = sources.firstOrNull { it.id == match.sourceId }
-            ?: return StreamFetchResult(
-                servers = listOf("Turbo", "Spiral", "FastX"),
-                languages = if (mediaType == MediaType.MOVIE) listOf("English", "Hindi") else listOf("English", "Japanese"),
-                entries = emptyList(),
-            )
+            ?: return@coroutineScope StreamFetchResult(emptyList(), emptyList(), emptyList())
 
         val episodes = runCatching { source.episodes(sMedia) }.getOrNull().orEmpty()
         val targetEpNumber = epNumbers.firstOrNull() ?: 1
         val firstEp = episodes.firstOrNull { it.number.toInt() == targetEpNumber } ?: episodes.firstOrNull()
-
-        if (firstEp == null) {
-            return StreamFetchResult(
-                servers = listOf("Turbo", "Spiral", "FastX"),
-                languages = if (mediaType == MediaType.MOVIE) listOf("English", "Hindi") else listOf("English", "Japanese"),
-                entries = emptyList(),
-            )
-        }
+            ?: return@coroutineScope StreamFetchResult(emptyList(), emptyList(), emptyList())
 
         activeSource = source
         activeEpisode = firstEp
-        fallbackStreamUrl = ""
 
         val epOptions = runCatching { source.options(firstEp) }.getOrNull()
         val subServers = epOptions?.byAudio?.get(Audio.SUB).orEmpty()
@@ -314,147 +387,226 @@ class ChooseQualityBottomSheet : BottomSheetDialogFragment() {
         val rawServers = epOptions?.byAudio?.get(Audio.RAW).orEmpty()
         val allServerOptions = (subServers + dubServers + rawServers).distinctBy { it.key }
 
-        val entries = mutableListOf<ServerEntry>()
-        val foundServers = mutableListOf<String>()
-        val foundLanguages = mutableListOf<String>()
+        val resolvedEntriesLists = allServerOptions.map { s ->
+            async(Dispatchers.IO) {
+                // Match AnimarvleStreamSource.resolve() key format: "turbo:i|quality|kindStr|streamUrl"
+                val parts = s.key.split("|", limit = 4)
+                val part1 = parts.getOrNull(1).orEmpty()
+                val part2 = parts.getOrNull(2).orEmpty()
+                val part3 = parts.getOrNull(3).orEmpty()
 
-        allServerOptions.forEach { s ->
-            val parts = s.key.split("|")
-            val quality = when {
-                s.label.contains("4k", ignoreCase = true) || s.label.contains("2160") -> "4K"
-                s.hint?.contains("4k", ignoreCase = true) == true || s.hint?.contains("2160") == true -> "4K"
-                parts.any { it.contains("4k", ignoreCase = true) || it.contains("2160") } -> "4K"
-                parts.getOrNull(1) != null -> parts[1]
-                s.label.contains("1080") -> "1080p"
-                s.label.contains("720") -> "720p"
-                s.label.contains("480") -> "480p"
-                s.label.contains("360") -> "360p"
-                else -> "1080p"
-            }
-            val rawPartUrl = parts.getOrNull(2).orEmpty()
-            val streamUrl = if (isDirectStream(rawPartUrl)) rawPartUrl else ""
-            val kindStr = parts.getOrNull(3) ?: if (streamUrl.contains(".mkv")) "mkv" else "mp4"
+                val (kindFromKey, urlFromKey) = when {
+                    isValidHttpUrl(part3) -> part2 to part3
+                    isValidHttpUrl(part2) -> part3 to part2
+                    else -> {
+                        val anyUrl = parts.firstOrNull { isValidHttpUrl(it) }.orEmpty()
+                        "" to anyUrl
+                    }
+                }
 
-            val serverName = when {
-                s.label.contains("spiral", ignoreCase = true) -> "Spiral"
-                s.label.contains("turbo", ignoreCase = true) -> "Turbo"
-                s.label.contains("fast", ignoreCase = true) -> "FastX"
-                else -> s.label.ifBlank { "Turbo" }
-            }
-            foundServers.add(serverName)
+                val serverName = when {
+                    s.label.contains("spiral", ignoreCase = true) -> "Spiral"
+                    s.label.contains("turbo", ignoreCase = true) -> "Turbo"
+                    s.label.contains("fast", ignoreCase = true) -> "FastX"
+                    else -> s.label.substringBefore(" -").substringBefore(" (").trim().ifBlank { "Turbo" }
+                }
 
-            val lang = s.audioLanguage?.takeIf { it.isNotBlank() } ?: "English"
-            foundLanguages.add(lang)
+                val lang = s.audioLanguage?.takeIf { it.isNotBlank() } ?: "English"
+                val isSub = subServers.any { it.key == s.key }
+                val audio = if (lang.equals("Japanese", ignoreCase = true) || lang.equals("Chinese", ignoreCase = true) || isSub) {
+                    Audio.SUB
+                } else {
+                    Audio.DUB
+                }
 
-            val isSub = subServers.any { it.key == s.key }
-            val audio = if (lang.equals("Japanese", ignoreCase = true) || lang.equals("Chinese", ignoreCase = true) || isSub) Audio.SUB else Audio.DUB
+                // Resolve through source.resolve() to get full stream list & headers
+                val resolved = runCatching {
+                    withTimeoutOrNull(12_000L) {
+                        source.resolve(firstEp, Choice(audio, s.key))
+                    }
+                }.getOrNull()
 
-            val qMap = AnimarvleStreamSource.qualitiesCache[streamUrl] ?: emptyMap()
+                val qualityMap = linkedMapOf<String, String>()
+                var primaryUrl = urlFromKey
+                var primaryKind = kindFromKey
+                var mergedHeaders = if (urlFromKey.isNotBlank()) {
+                    AnimarvleStreamSource.buildHeadersForUrl(urlFromKey, urlFromKey)
+                } else {
+                    emptyMap()
+                }
 
-            entries.add(
-                ServerEntry(
-                    serverName = serverName,
-                    serverKey = s.key,
-                    audioLanguage = lang,
-                    audio = audio,
-                    streamUrl = streamUrl,
-                    rawQuality = quality,
-                    kind = kindStr,
-                    qualityMap = qMap,
+                if (resolved != null && resolved.streams.isNotEmpty()) {
+                    for (stream in resolved.streams) {
+                        if (!isValidHttpUrl(stream.url)) continue
+                        if (primaryUrl.isBlank()) primaryUrl = stream.url
+                        if (mergedHeaders.isEmpty() && stream.headers.isNotEmpty()) {
+                            mergedHeaders = stream.headers
+                        }
+                        val badge = normalizeQualityBadge(stream.qualityLabel ?: stream.height?.let { "${it}p" } ?: part1)
+                        if (badge.isNotBlank() && !qualityMap.containsKey(badge)) {
+                            qualityMap[badge] = stream.url
+                        }
+                    }
+                }
+
+                // Also check AnimarvleStreamSource.qualitiesCache directly
+                if (primaryUrl.isNotBlank()) {
+                    val cachedMap = AnimarvleStreamSource.qualitiesCache[primaryUrl].orEmpty()
+                    for ((qKey, qUrl) in cachedMap) {
+                        if (!isValidHttpUrl(qUrl)) continue
+                        val badge = normalizeQualityBadge(qKey).ifBlank { qKey.uppercase(Locale.US) }
+                        if (badge.isNotBlank() && !qualityMap.containsKey(badge)) {
+                            qualityMap[badge] = qUrl
+                        }
+                    }
+                }
+
+                // If it's an HLS master playlist with only 1 entry, parse #EXT-X-STREAM-INF variants
+                if (primaryUrl.isNotBlank() &&
+                    (primaryUrl.contains(".m3u8", ignoreCase = true) || primaryKind.equals("hls", ignoreCase = true)) &&
+                    qualityMap.size <= 1
+                ) {
+                    val hlsVariants = parseHlsMasterQualities(app.http, primaryUrl, mergedHeaders)
+                    for ((qBadge, qUrl) in hlsVariants) {
+                        if (!qualityMap.containsKey(qBadge)) {
+                            qualityMap[qBadge] = qUrl
+                        }
+                    }
+                }
+
+                val rawQuality = normalizeQualityBadge(part1.ifBlank { s.hint ?: s.label }).ifBlank { "1080p" }
+                if (primaryUrl.isNotBlank() && qualityMap.isEmpty()) {
+                    qualityMap[rawQuality] = primaryUrl
+                }
+
+                if (primaryUrl.isBlank() && qualityMap.isEmpty()) {
+                    return@async emptyList<ServerEntry>()
+                }
+
+                listOf(
+                    ServerEntry(
+                        serverName = serverName,
+                        serverKey = s.key,
+                        audioLanguage = lang,
+                        audio = audio,
+                        streamUrl = primaryUrl,
+                        rawQuality = rawQuality,
+                        kind = primaryKind.ifBlank { inferFormat(primaryUrl) },
+                        qualityMap = qualityMap,
+                        headers = mergedHeaders,
+                    )
                 )
-            )
-        }
-
-        val serverNames = (foundServers.distinct() + listOf("Turbo", "Spiral", "FastX")).distinct()
-
-        val languages = foundLanguages.distinct().toMutableList()
-        if (languages.isEmpty()) {
-            if (isDonghua) {
-                languages.add("Chinese")
-            } else if (mediaType == MediaType.MOVIE) {
-                languages.addAll(listOf("English", "Hindi"))
-            } else {
-                languages.addAll(listOf("English", "Japanese"))
             }
-        }
+        }.awaitAll()
 
-        return StreamFetchResult(
+        val entries = resolvedEntriesLists.flatten()
+        val serverNames = entries.map { it.serverName }.distinct()
+        val languages = entries.map { it.audioLanguage }.distinct()
+
+        StreamFetchResult(
             servers = serverNames,
-            languages = languages.distinct(),
+            languages = languages,
             entries = entries,
         )
     }
 
-    private data class QualitySpecResult(
-        val format: String,
-        val sizeStr: String,
-        val estimatedBytes: Long,
-    )
-
     /**
-     * Accurately calculates realistic video bitrate, container format (MP4 vs MKV),
-     * and file sizes based on server profile (Spiral vs Turbo vs FastX),
-     * audio language (e.g. multi-audio dub container), media duration, and episode count.
+     * Parses an HLS master playlist (.m3u8) to extract real resolution variants if present.
      */
-    private fun computeQualitySpecs(
-        qualityBadge: String,
-        serverName: String,
-        language: String,
-        durationMin: Int,
-        count: Int,
-        rawKind: String,
-    ): QualitySpecResult {
-        val format = when {
-            rawKind.contains("mkv", ignoreCase = true) -> "MKV"
-            language.equals("Hindi", ignoreCase = true) ||
-            language.equals("Portuguese", ignoreCase = true) ||
-            language.equals("Spanish", ignoreCase = true) ||
-            language.equals("Russian", ignoreCase = true) -> "MKV"
+    private fun parseHlsMasterQualities(
+        http: okhttp3.OkHttpClient,
+        masterUrl: String,
+        headers: Map<String, String>,
+    ): Map<String, String> {
+        val result = linkedMapOf<String, String>()
+        runCatching {
+            val reqBuilder = okhttp3.Request.Builder().url(masterUrl)
+            headers.forEach { (k, v) -> reqBuilder.header(k, v) }
+            http.newCall(reqBuilder.build()).execute().use { resp ->
+                if (!resp.isSuccessful) return emptyMap()
+                val body = resp.body?.string().orEmpty()
+                if (!body.contains("#EXT-X-STREAM-INF")) return emptyMap()
+
+                val lines = body.lines()
+                var pendingQuality: String? = null
+                var pendingBandwidth: Long? = null
+                val baseUri = URI(masterUrl)
+
+                for (line in lines) {
+                    val trimmed = line.trim()
+                    if (trimmed.startsWith("#EXT-X-STREAM-INF", ignoreCase = true)) {
+                        val resMatch = Regex("RESOLUTION=\\d+x(\\d+)", RegexOption.IGNORE_CASE).find(trimmed)
+                        val bwMatch = Regex("AVERAGE-BANDWIDTH=(\\d+)|BANDWIDTH=(\\d+)", RegexOption.IGNORE_CASE).find(trimmed)
+                        pendingBandwidth = bwMatch?.groupValues?.drop(1)?.firstOrNull { it.isNotBlank() }?.toLongOrNull()
+
+                        val height = resMatch?.groupValues?.getOrNull(1)?.toIntOrNull()
+                        pendingQuality = when {
+                            height != null && height >= 2000 -> "4K"
+                            height != null && height >= 1400 -> "1440p"
+                            height != null && height >= 1000 -> "1080p"
+                            height != null && height >= 700 -> "720p"
+                            height != null && height >= 460 -> "480p"
+                            height != null && height >= 340 -> "360p"
+                            height != null && height >= 220 -> "240p"
+                            height != null && height > 0 -> "144p"
+                            else -> null
+                        }
+                    } else if (pendingQuality != null && trimmed.isNotBlank() && !trimmed.startsWith("#")) {
+                        val resolvedVariantUrl = runCatching { baseUri.resolve(trimmed).toString() }.getOrDefault(trimmed)
+                        result[pendingQuality] = resolvedVariantUrl
+                        // If HLS manifest explicitly states BANDWIDTH (bits/sec), compute size from manifest bandwidth
+                        if (pendingBandwidth != null && pendingBandwidth > 0L && durationMinutes > 0) {
+                            val bytes = (pendingBandwidth / 8L) * (durationMinutes * 60L)
+                            if (bytes > 0L) {
+                                probedSizes[resolvedVariantUrl] = bytes
+                            }
+                        }
+                        pendingQuality = null
+                        pendingBandwidth = null
+                    }
+                }
+            }
+        }
+        return result
+    }
+
+    private fun normalizeQualityBadge(raw: String?): String {
+        if (raw.isNullOrBlank()) return ""
+        val s = raw.lowercase(Locale.US)
+        return when {
+            s.contains("2160") || s.contains("4k") || s.contains("uhd") -> "4K"
+            s.contains("1440") || s.contains("2k") -> "1440p"
+            s.contains("1080") || s.contains("fhd") -> "1080p"
+            s.contains("720") || s.contains("hd") -> "720p"
+            s.contains("480") || s.contains("sd") -> "480p"
+            s.contains("360") -> "360p"
+            s.contains("240") -> "240p"
+            s.contains("144") -> "144p"
+            else -> ""
+        }
+    }
+
+    private fun qualitySortRank(badge: String): Int = when (badge.uppercase(Locale.US)) {
+        "4K", "2160P" -> 700
+        "1440P", "2K" -> 600
+        "1080P" -> 500
+        "720P" -> 400
+        "480P" -> 300
+        "360P" -> 200
+        "240P" -> 100
+        "144P" -> 50
+        else -> 10
+    }
+
+    private fun inferFormat(url: String, kindHint: String? = null): String {
+        val u = url.lowercase(Locale.US)
+        val k = kindHint?.lowercase(Locale.US).orEmpty()
+        return when {
+            u.contains(".mkv") || k.contains("mkv") -> "MKV"
+            u.contains(".m3u8") || u.contains("/proxy/m3u8") || k.contains("hls") -> "HLS"
+            u.contains(".mpd") || k.contains("dash") -> "DASH"
             else -> "MP4"
         }
-
-        // Server profile multiplier:
-        // Spiral: Ultra HQ master profile (~1.15x bitrate)
-        // Turbo: High-speed edge balanced profile (~1.0x bitrate) -> ~2034.1 MB for 1080p on 107 min
-        // FastX: Data Saver / efficient profile (~0.65x bitrate)
-        val serverMultiplier = when {
-            serverName.contains("spiral", ignoreCase = true) -> 1.15
-            serverName.contains("fast", ignoreCase = true) -> 0.65
-            else -> 1.0 // Turbo
-        }
-
-        // Calibrated base bitrates (in kbps):
-        // 1080p: 2598.0 kbps -> exactly 2034.1 MB on 107 min (~456.7 MB on 24 min anime)
-        // 720p:  1350.0 kbps -> 1057.4 MB on 107 min (~237.3 MB on 24 min anime)
-        // 480p:   720.0 kbps ->  563.9 MB on 107 min (~126.6 MB on 24 min anime)
-        // 360p:   430.0 kbps ->  336.8 MB on 107 min (~ 75.6 MB on 24 min anime)
-        // 240p:   270.0 kbps ->  211.5 MB on 107 min (~ 47.5 MB on 24 min anime)
-        // 144p:   150.0 kbps ->  117.5 MB on 107 min (~ 26.4 MB on 24 min anime)
-        // 4K:    6000.0 kbps -> 4703.9 MB on 107 min (~1054.7 MB on 24 min anime)
-        val baseBitrateKbps = when {
-            qualityBadge.contains("2160") || qualityBadge.contains("4k", ignoreCase = true) -> 6000.0
-            qualityBadge.contains("1080") -> 2598.0
-            qualityBadge.contains("720") -> 1350.0
-            qualityBadge.contains("480") -> 720.0
-            qualityBadge.contains("360") -> 430.0
-            qualityBadge.contains("240") -> 270.0
-            qualityBadge.contains("144") -> 150.0
-            else -> 1000.0
-        }
-
-        // Multi-Audio MKV container overhead (extra dual/multi-audio tracks ~128 kbps)
-        val audioTrackKbps = if (format == "MKV") 128.0 else 0.0
-
-        val totalBitrateKbps = (baseBitrateKbps * serverMultiplier) + audioTrackKbps
-
-        // Size in MB = (bitrate in kbps * duration in minutes * 60 seconds) / 8192
-        val singleEpisodeMb = (totalBitrateKbps * durationMin * 60.0) / 8192.0
-        val totalMb = singleEpisodeMb * count.coerceAtLeast(1)
-        val estimatedBytes = (totalMb * 1024.0 * 1024.0).toLong()
-
-        val sizeStr = String.format(java.util.Locale.US, "%.1f MB", totalMb)
-
-        return QualitySpecResult(format, sizeStr, estimatedBytes)
     }
 
     private fun renderServerPills() {
@@ -464,7 +616,9 @@ class ChooseQualityBottomSheet : BottomSheetDialogFragment() {
             val pill = createPill(server, isSelected) {
                 if (!server.equals(selectedServer, ignoreCase = true)) {
                     selectedServer = server
+                    updateAvailableLanguagesForServer()
                     renderServerPills()
+                    renderLanguagePills()
                     recomputeAndRenderQualityList()
                 }
             }
@@ -519,100 +673,104 @@ class ChooseQualityBottomSheet : BottomSheetDialogFragment() {
         }
     }
 
+    /**
+     * Builds the quality list strictly from real, verified streams for the selected server & language.
+     * Never invents missing resolutions or reuses another resolution's URL/size.
+     */
     private fun recomputeAndRenderQualityList() {
-        val count = epNumbers.size
-        val has4k = serverEntries.any {
-            it.rawQuality.contains("4k", ignoreCase = true) ||
-            it.rawQuality.contains("2160") ||
-            it.qualityMap.keys.any { q -> q.contains("4k", ignoreCase = true) || q.contains("2160") } ||
-            it.serverName.contains("4k", ignoreCase = true)
-        } || (activeSource?.name?.contains("4k", ignoreCase = true) == true) || mediaType == MediaType.MOVIE
+        val count = epNumbers.size.coerceAtLeast(1)
 
-        val standardQualities = if (has4k) {
-            listOf("4K", "1080p", "720p", "480p", "360p", "240p", "144p")
-        } else {
-            listOf("1080p", "720p", "480p", "360p", "240p", "144p")
-        }
-
-        // Find the most appropriate ServerEntry matching selectedServer and selectedLanguage
-        val matchingEntry = serverEntries.firstOrNull {
+        val matchingEntries = serverEntries.filter {
             it.serverName.equals(selectedServer, ignoreCase = true) &&
             it.audioLanguage.equals(selectedLanguage, ignoreCase = true)
-        } ?: serverEntries.firstOrNull {
-            it.serverName.equals(selectedServer, ignoreCase = true)
-        } ?: serverEntries.firstOrNull {
-            it.audioLanguage.equals(selectedLanguage, ignoreCase = true)
-        } ?: serverEntries.firstOrNull()
+        }.ifEmpty {
+            serverEntries.filter { it.serverName.equals(selectedServer, ignoreCase = true) }
+        }
 
-        val rawKind = matchingEntry?.kind ?: "mp4"
-        val serverKey = matchingEntry?.serverKey ?: "default"
-        val audio = matchingEntry?.audio ?: if (selectedLanguage.equals("Japanese", ignoreCase = true) || selectedLanguage.equals("Chinese", ignoreCase = true)) Audio.SUB else Audio.DUB
-        val baseStreamUrl = matchingEntry?.streamUrl?.takeIf { it.isNotBlank() } ?: fallbackStreamUrl
+        data class ResolvedQualityTarget(
+            val badge: String,
+            val url: String,
+            val entry: ServerEntry,
+        )
 
-        qualityLadder = standardQualities.map { qBadge ->
-            val spec = computeQualitySpecs(
-                qualityBadge = qBadge,
-                serverName = selectedServer,
-                language = selectedLanguage,
-                durationMin = durationMinutes,
-                count = count,
-                rawKind = rawKind,
-            )
+        val discoveredQualities = linkedMapOf<String, ResolvedQualityTarget>()
 
-            // Look up the specific ServerEntry matching this exact quality badge
-            val qualityMatchingEntry = serverEntries.firstOrNull {
-                it.audioLanguage.equals(selectedLanguage, ignoreCase = true) &&
-                (it.rawQuality.equals(qBadge, ignoreCase = true) ||
-                 (qBadge.equals("4K", ignoreCase = true) && (it.rawQuality.contains("4k", ignoreCase = true) || it.rawQuality.contains("2160"))) ||
-                 (qBadge.equals("1080p", ignoreCase = true) && it.rawQuality.contains("1080")) ||
-                 (qBadge.equals("720p", ignoreCase = true) && it.rawQuality.contains("720")) ||
-                 (qBadge.equals("480p", ignoreCase = true) && it.rawQuality.contains("480")))
-            } ?: matchingEntry
-
-            val targetServerKey = qualityMatchingEntry?.serverKey ?: serverKey
-            val directUrl = matchingEntry?.qualityMap?.get(qBadge)
-                ?: qualityMatchingEntry?.streamUrl?.takeIf { it.isNotBlank() }
-                ?: baseStreamUrl
-
-            // 1. Check if DownloadRepository already has a verified physical file size for this media + quality
-            val cachedDownload = runCatching {
-                (requireActivity().application as? AnimarvleApp)?.container?.downloads?.downloadsFlow?.value?.firstOrNull {
-                    (it.mediaId == mediaId || it.mediaTitle.equals(mediaTitle, ignoreCase = true)) &&
-                    it.quality.equals(qBadge, ignoreCase = true) &&
-                    it.totalBytes > 0L
+        for (entry in matchingEntries) {
+            for ((qKey, qUrl) in entry.qualityMap) {
+                if (!isValidHttpUrl(qUrl)) continue
+                val badge = normalizeQualityBadge(qKey).ifBlank { qKey.uppercase(Locale.US) }
+                if (!discoveredQualities.containsKey(badge)) {
+                    discoveredQualities[badge] = ResolvedQualityTarget(badge, qUrl, entry)
                 }
+            }
+            if (isValidHttpUrl(entry.streamUrl)) {
+                val badge = normalizeQualityBadge(entry.rawQuality).ifBlank { "1080p" }
+                if (!discoveredQualities.containsKey(badge)) {
+                    discoveredQualities[badge] = ResolvedQualityTarget(badge, entry.streamUrl, entry)
+                }
+            }
+        }
+
+        // Deduplicate by URL so two quality cards NEVER point to the same underlying file
+        val uniqueUrlTargets = discoveredQualities.values
+            .sortedByDescending { qualitySortRank(it.badge) }
+            .distinctBy { it.url }
+
+        qualityLadder = uniqueUrlTargets.map { target ->
+            val qBadge = target.badge
+            val directUrl = target.url
+            val entry = target.entry
+            val format = inferFormat(directUrl, entry.kind)
+
+            // 1. Check if DownloadRepository already has a verified size for this exact streamUrl
+            val cachedDownloadBytes = runCatching {
+                (requireActivity().application as? AnimarvleApp)?.container?.downloads?.downloadsFlow?.value?.firstOrNull {
+                    it.streamUrl == directUrl && it.totalBytes > 0L
+                }?.totalBytes
             }.getOrNull()
 
-            // 2. Check if direct CDN network probe succeeded
-            val probedBytes = probedSizes[directUrl]
-                ?: probedSizes["${selectedServer}_${selectedLanguage}_$qBadge"]
-                ?: probedSizes["${selectedServer}_$qBadge"]
-                ?: probedSizes[qBadge]
+            // 2. Check probed CDN Content-Length for this exact URL
+            val singleEpBytes = cachedDownloadBytes
+                ?: probedSizes[directUrl]
+                ?: AnimarvleStreamSource.sizesCache[directUrl]
 
-            val verifiedBytes = cachedDownload?.totalBytes?.takeIf { it > 0L } ?: probedBytes
-
-            val finalSize = if (verifiedBytes != null && verifiedBytes > 0L) {
-                val mb = verifiedBytes.toDouble() / (1024.0 * 1024.0)
-                String.format(java.util.Locale.US, "%.1f MB", mb)
+            val totalVerifiedBytes = if (singleEpBytes != null && singleEpBytes > 0L) {
+                singleEpBytes * count
             } else {
-                spec.sizeStr
+                0L
             }
 
-            val finalEstimatedBytes = verifiedBytes ?: spec.estimatedBytes
+            val sizeLabel = when {
+                totalVerifiedBytes > 0L -> {
+                    val mb = totalVerifiedBytes.toDouble() / (1024.0 * 1024.0)
+                    if (mb >= 1024.0) {
+                        String.format(Locale.US, "%.2f GB (%.1f MB)", mb / 1024.0, mb)
+                    } else {
+                        String.format(Locale.US, "%.1f MB", mb)
+                    }
+                }
+                format == "HLS" || format == "DASH" -> "Adaptive Stream"
+                isProbingSizes -> "Checking size..."
+                else -> "Direct Stream"
+            }
+
+            // Build updated serverKey with the specific quality's URL so batch/detail downloaders use the exact chosen resolution
+            val specificServerKey = "turbo:0|$qBadge|${format.lowercase(Locale.US)}|$directUrl"
 
             QualityOption(
                 id = "${selectedServer}_${selectedLanguage}_$qBadge",
                 label = qBadge,
                 qualityBadge = qBadge,
-                formatBadge = spec.format,
-                specsSubtitle = "${spec.format} • $finalSize",
+                formatBadge = format,
+                specsSubtitle = "$format • $sizeLabel",
                 serverName = selectedServer,
-                audio = audio,
-                serverKey = targetServerKey,
+                audio = entry.audio,
+                serverKey = specificServerKey,
                 streamUrl = directUrl,
                 language = selectedLanguage,
-                sizeText = finalSize,
-                estimatedBytes = finalEstimatedBytes,
+                sizeText = sizeLabel,
+                estimatedBytes = totalVerifiedBytes,
+                headers = AnimarvleStreamSource.buildHeadersForUrl(directUrl, entry.streamUrl),
             )
         }
 
@@ -639,58 +797,22 @@ class ChooseQualityBottomSheet : BottomSheetDialogFragment() {
             )
         }
 
-        if (isDirectStream(item.streamUrl)) {
+        if (isValidHttpUrl(item.streamUrl)) {
             onConfirmListener?.invoke(item, epNumbers)
             dismiss()
             return
         }
 
-        val src = activeSource
-        val ep = activeEpisode
-        if (src == null || ep == null) {
-            android.widget.Toast.makeText(requireContext(), "Stream source unavailable", android.widget.Toast.LENGTH_SHORT).show()
-            dismiss()
-            return
-        }
-
-        // Inline loading state on button
-        holder.b.downloadIcon.isVisible = false
-        holder.b.loadingIndicator.isVisible = true
-        holder.b.downloadText.text = "Resolving..."
-        holder.b.btnDownloadPill.isEnabled = false
-
-        viewLifecycleOwner.lifecycleScope.launch {
-            val resolvedUrl = withContext(Dispatchers.IO) {
-                runCatching {
-                    withTimeoutOrNull(25_000L) {
-                        val choice = Choice(item.audio, item.serverKey)
-                        val res = src.resolve(ep, choice)
-                        res.streams.firstOrNull()?.url
-                    }
-                }.getOrNull()
-            }
-
-            if (resolvedUrl.isNullOrBlank() || !isDirectStream(resolvedUrl)) {
-                withContext(Dispatchers.Main) {
-                    holder.b.downloadIcon.isVisible = true
-                    holder.b.loadingIndicator.isVisible = false
-                    holder.b.downloadText.text = "Retry"
-                    holder.b.btnDownloadPill.isEnabled = true
-                    android.widget.Toast.makeText(requireContext(), "Could not resolve stream for download", android.widget.Toast.LENGTH_SHORT).show()
-                }
-                return@launch
-            }
-
-            item.streamUrl = resolvedUrl
-            onConfirmListener?.invoke(item, epNumbers)
-            dismiss()
-        }
+        android.widget.Toast.makeText(
+            requireContext(),
+            "Stream URL unavailable for ${item.qualityBadge}",
+            android.widget.Toast.LENGTH_SHORT,
+        ).show()
     }
 
-    private fun isDirectStream(url: String): Boolean {
-        if (url.isBlank()) return false
-        val u = url.lowercase()
-        return u.contains(".m3u8") || u.contains(".mp4") || u.contains(".mpd") || u.contains(".mkv") || u.contains("/hls/") || u.contains("/stream")
+    private fun isValidHttpUrl(url: String?): Boolean {
+        if (url.isNullOrBlank()) return false
+        return url.startsWith("http://", ignoreCase = true) || url.startsWith("https://", ignoreCase = true)
     }
 
     fun setOnConfirmListener(listener: (QualityOption, List<Int>) -> Unit) {

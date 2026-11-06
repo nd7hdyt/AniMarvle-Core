@@ -35,7 +35,11 @@ object AniListMapper {
             synopsis = m.description?.let { clean(it) },
             coverUrl = m.coverImage?.extraLarge ?: m.coverImage?.large,
             bannerUrl = m.bannerImage,
-            genres = m.genres.orEmpty(),
+            genres = if (m.isAdult == true && !m.genres.orEmpty().any { it.equals("Hentai", ignoreCase = true) }) {
+                m.genres.orEmpty() + "Hentai"
+            } else {
+                m.genres.orEmpty()
+            },
             score = m.averageScore?.let { it / 10.0 },
             year = m.seasonYear ?: m.startDate?.year,
             startDateIso = m.startDate?.let { iso(it) },

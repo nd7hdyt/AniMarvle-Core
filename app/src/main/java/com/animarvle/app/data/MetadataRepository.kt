@@ -8,6 +8,9 @@ import com.animarvle.app.domain.MediaUi
 import com.animarvle.app.domain.ScheduleItem
 import com.animarvle.app.data.source.builtin.AniZipHelper
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -32,6 +35,16 @@ class MetadataRepository(
     val mal: MyAnimeListApi = MyAnimeListApi(),
     val simkl: SimklApi = SimklApi(),
 ) {
+    private val httpClient = OkHttpClient.Builder()
+        .connectTimeout(6, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
+        .build()
+
+    val customMediaCache = ConcurrentHashMap<Long, MediaUi>()
+
+    fun cacheCustomMedia(media: MediaUi) {
+        customMediaCache[media.id] = media
+    }
 
     suspend fun trending(): List<MediaUi> = runCatching {
         val res = api.trending().map(AniListMapper::toMediaUi)
@@ -152,25 +165,34 @@ class MetadataRepository(
     }.getOrElse { emptyList() }
 
     // --- TMDB (Movies & TV) with Simkl Fallback ---
-    suspend fun tmdbTrending(): List<MediaUi> = runCatching {
-        val res = tmdb.trendingAll().map(TmdbMapper::toMediaUi)
-        if (res.isNotEmpty()) res else throw IllegalStateException("Empty TMDB trendingAll")
+    suspend fun tmdbTrending(pages: Int = 3, startPage: Int = 1): List<MediaUi> = runCatching {
+        coroutineScope {
+            (startPage until (startPage + pages)).map { p ->
+                async { tmdb.trendingAll(page = p).map(TmdbMapper::toMediaUi) }
+            }.awaitAll().flatten().distinctBy { "${it.id}:${it.format}" }
+        }.takeIf { it.isNotEmpty() } ?: throw IllegalStateException("Empty TMDB trendingAll")
     }.getOrElse {
-        val tv = runCatching { simkl.popularTv(10) }.getOrDefault(emptyList())
-        val movies = runCatching { simkl.popularMovies(10) }.getOrDefault(emptyList())
+        val tv = runCatching { simkl.popularTv(20) }.getOrDefault(emptyList())
+        val movies = runCatching { simkl.popularMovies(20) }.getOrDefault(emptyList())
         (tv + movies).sortedByDescending { it.score ?: 0.0 }
     }
 
-    suspend fun tmdbTrendingMovies(): List<MediaUi> = runCatching {
-        val res = tmdb.trendingMovies().map(TmdbMapper::toMediaUi)
-        if (res.isNotEmpty()) res else throw IllegalStateException("Empty TMDB trendingMovies")
+    suspend fun tmdbTrendingMovies(pages: Int = 3, startPage: Int = 1): List<MediaUi> = runCatching {
+        coroutineScope {
+            (startPage until (startPage + pages)).map { p ->
+                async { tmdb.trendingMovies(page = p).map(TmdbMapper::toMediaUi) }
+            }.awaitAll().flatten().distinctBy { it.id }
+        }.takeIf { it.isNotEmpty() } ?: throw IllegalStateException("Empty TMDB trendingMovies")
     }.getOrElse {
         simkl.popularMovies()
     }
 
-    suspend fun tmdbTrendingTv(): List<MediaUi> = runCatching {
-        val res = tmdb.trendingTv().map(TmdbMapper::toMediaUi)
-        if (res.isNotEmpty()) res else throw IllegalStateException("Empty TMDB trendingTv")
+    suspend fun tmdbTrendingTv(pages: Int = 3, startPage: Int = 1): List<MediaUi> = runCatching {
+        coroutineScope {
+            (startPage until (startPage + pages)).map { p ->
+                async { tmdb.trendingTv(page = p).map(TmdbMapper::toMediaUi) }
+            }.awaitAll().flatten().distinctBy { it.id }
+        }.takeIf { it.isNotEmpty() } ?: throw IllegalStateException("Empty TMDB trendingTv")
     }.getOrElse {
         simkl.popularTv()
     }
@@ -210,11 +232,15 @@ class MetadataRepository(
         runCatching { simkl.popularTv(10) }.getOrDefault(emptyList())
     }
 
-    suspend fun tmdbKDramas(): List<MediaUi> = runCatching {
-        val res = tmdb.popularKDramas().map(TmdbMapper::toMediaUi)
+    suspend fun tmdbKDramas(pages: Int = 3, startPage: Int = 1): List<MediaUi> = runCatching {
+        val res = coroutineScope {
+            (startPage until (startPage + pages)).map { p ->
+                async { tmdb.popularKDramas(page = p).map(TmdbMapper::toMediaUi) }
+            }.awaitAll().flatten().distinctBy { it.id }
+        }
         if (res.isNotEmpty()) res else throw IllegalStateException("Empty kdramas")
     }.getOrElse {
-        runCatching { simkl.popularTv(10) }.getOrDefault(emptyList())
+        runCatching { simkl.popularTv(20) }.getOrDefault(emptyList())
     }
 
     suspend fun tmdbCDramas(): List<MediaUi> = runCatching {
@@ -244,10 +270,16 @@ class MetadataRepository(
         ).map(TmdbMapper::toMediaUi)
     }.getOrElse { emptyList() }
 
-    suspend fun tmdbSearch(query: String): List<MediaUi> {
+    suspend fun tmdbSearch(query: String, pages: Int = 3, startPage: Int = 1): List<MediaUi> {
         val raw = runCatching {
-            tmdb.searchMulti(query)
-                .filter { it.mediaType != "person" && (!it.posterPath.isNullOrBlank() || !it.backdropPath.isNullOrBlank()) }
+            coroutineScope {
+                (startPage until (startPage + pages)).map { p ->
+                    async {
+                        tmdb.searchMulti(query, page = p)
+                            .filter { it.mediaType != "person" && (!it.posterPath.isNullOrBlank() || !it.backdropPath.isNullOrBlank()) }
+                    }
+                }.awaitAll().flatten().distinctBy { "${it.id}:${it.mediaType}" }
+            }
         }.getOrDefault(emptyList())
 
         if (raw.isNotEmpty()) {
@@ -278,14 +310,24 @@ class MetadataRepository(
         airing.size to airing
     }
 
-    suspend fun search(query: String): List<MediaUi> {
+    suspend fun search(query: String, page: Int = 1): List<MediaUi> {
         val anilistResults = runCatching {
-            api.search(query)
+            api.search(query, page = page, includeAdult = false)
                 .filter { it.coverImage?.extraLarge != null || it.coverImage?.large != null || it.bannerImage != null }
                 .map(AniListMapper::toMediaUi)
         }.getOrDefault(emptyList())
 
         if (anilistResults.isNotEmpty()) return anilistResults
+
+        val anilistAdultResults = runCatching {
+            api.search(query, page = page, includeAdult = true)
+                .filter { it.coverImage?.extraLarge != null || it.coverImage?.large != null || it.bannerImage != null }
+                .map(AniListMapper::toMediaUi)
+        }.getOrDefault(emptyList())
+
+        if (anilistAdultResults.isNotEmpty()) return anilistAdultResults
+
+        if (page > 1) return emptyList()
 
         val malResults = runCatching { mal.search(query) }.getOrDefault(emptyList())
         if (malResults.isNotEmpty()) return malResults
@@ -294,6 +336,7 @@ class MetadataRepository(
     }
 
     suspend fun details(id: Long, preferTmdb: Boolean = false, mediaType: String? = null): MediaUi? {
+        customMediaCache[id]?.let { return it }
         val isTv = mediaType?.equals("tv", ignoreCase = true) == true || mediaType?.equals("series", ignoreCase = true) == true
         val isMovie = mediaType?.equals("movie", ignoreCase = true) == true
 
@@ -391,6 +434,35 @@ class MetadataRepository(
 
     /** "More like this" (PROMPT §7.6). AniList or TMDB recommendations, rated best-first. */
     suspend fun recommendations(id: Long, preferTmdb: Boolean = false, mediaType: String? = null): List<MediaUi> {
+        // 1. Custom / Asian cinema recommendations
+        if (id >= 800000000L || customMediaCache.containsKey(id)) {
+            val cached = customMediaCache[id]
+            val title = cached?.title.orEmpty()
+            val recs = mutableListOf<MediaUi>()
+
+            if (title.isNotBlank()) {
+                val codeMatch = Regex("""\b([A-Za-z]{2,6})[-_]?(\d{2,5})\b""").find(title)
+                if (codeMatch != null) {
+                    val prefix = codeMatch.groupValues[1]
+                    val studioRecs = runCatching { searchAsianCinema(prefix) }.getOrDefault(emptyList()).filter { it.id != id }
+                    recs.addAll(studioRecs.take(12))
+                } else {
+                    val cleanT = title.replace(Regex("""\[[^\]]+\]"""), "").split("|").firstOrNull()?.trim() ?: title
+                    val words = cleanT.split(Regex("""[\s\-_:]+""")).filter { it.length >= 3 }
+                    val query = if (words.size >= 2) "${words[0]} ${words[1]}" else words.firstOrNull() ?: cleanT
+                    val related = runCatching { searchAsianCinema(query) }.getOrDefault(emptyList()).filter { it.id != id }
+                    recs.addAll(related.take(12))
+                }
+            }
+
+            if (recs.size < 6) {
+                val cachedOthers = customMediaCache.values.filter { it.id != id && !recs.any { r -> r.id == it.id } }
+                recs.addAll(cachedOthers.take(12 - recs.size))
+            }
+
+            if (recs.isNotEmpty()) return recs
+        }
+
         val isTv = mediaType?.equals("tv", ignoreCase = true) == true || mediaType?.equals("series", ignoreCase = true) == true
 
         if (preferTmdb) {
@@ -779,9 +851,11 @@ class MetadataRepository(
             "araiya", "adam's sweet agony", "kimi omou koi", "what she fell on",
             "bikini warriors", "seven mortal sins", "tsunpure", "fault", "rance",
             "disciplina", "night shift nurses", "discipline", "bible black",
-            "itadaki seieki", "kuroinu", "shoujo ramune", "ane wa yanmama",
+            "itadaki", "seieki", "itadaki seieki", "vampire vixen",
+            "kuroinu", "shoujo ramune", "ane wa yanmama",
             "dropout", "kyonyuu", "tamashii insert", "dokidoki little",
-            "onichichi", "succubus stayed", "shoujo kyouiku", "harem camp"
+            "onichichi", "succubus stayed", "shoujo kyouiku", "harem camp",
+            "hentai"
         )
 
         fun isAdultTitle(title: String?): Boolean {
@@ -821,6 +895,601 @@ class MetadataRepository(
             }
             return false
         }
+    }
+
+
+    suspend fun tmdbDiscoverFiltered(
+        type: String, // "movie" or "tv"
+        pages: Int = 3,
+        startPage: Int = 1,
+        withGenres: String? = null,
+        withOriginalLanguage: String? = null,
+        sortBy: String = "popularity.desc",
+        withCast: String? = null,
+        withCrew: String? = null,
+        withCompanies: String? = null,
+        withKeywords: String? = null,
+        voteAverageGte: Double? = null,
+        primaryReleaseYear: String? = null,
+        includeAdult: Boolean = false,
+    ): List<MediaUi> = runCatching {
+        coroutineScope {
+            (startPage until (startPage + pages)).map { p ->
+                async {
+                    tmdb.discover(
+                        type = type,
+                        page = p,
+                        withGenres = withGenres,
+                        withOriginalLanguage = withOriginalLanguage,
+                        sortBy = sortBy,
+                        withCast = withCast,
+                        withCrew = withCrew,
+                        withCompanies = withCompanies,
+                        withKeywords = withKeywords,
+                        voteAverageGte = voteAverageGte,
+                        primaryReleaseYear = primaryReleaseYear,
+                        includeAdult = includeAdult,
+                    ).map(TmdbMapper::toMediaUi)
+                }
+            }.awaitAll().flatten().distinctBy { it.id }
+        }
+    }.getOrDefault(emptyList())
+
+    suspend fun tmdbAdultRealMovies(pages: Int = 3, startPage: Int = 1): List<MediaUi> = runCatching {
+        tmdbDiscoverFiltered(
+            type = "movie",
+            pages = pages,
+            startPage = startPage,
+            withKeywords = "207767|256466|298666",
+            includeAdult = true,
+        ).map { media ->
+            if (!media.genres.contains("Adult")) {
+                media.copy(genres = media.genres + "Adult")
+            } else {
+                media
+            }
+        }
+    }.getOrDefault(emptyList())
+
+    suspend fun anilistDiscoverFiltered(
+        genre: String? = null,
+        tag: String? = null,
+        format: String? = null,
+        year: Int? = null,
+        sortBy: String = "POPULARITY_DESC",
+        pages: Int = 2,
+        startPage: Int = 1,
+    ): List<MediaUi> = runCatching {
+        val isHentai = genre.equals("Hentai", ignoreCase = true) || tag.equals("Hentai", ignoreCase = true)
+        coroutineScope {
+            (startPage until (startPage + pages)).map { p ->
+                async {
+                    api.discoverAnime(
+                        page = p,
+                        perPage = 50,
+                        genre = genre,
+                        format = format,
+                        year = year,
+                        sort = sortBy,
+                        isAdultOnly = isHentai,
+                        includeAdult = isHentai,
+                    ).map { aniMedia ->
+                        val ui = AniListMapper.toMediaUi(aniMedia)
+                        if (isHentai && !ui.genres.any { it.equals("Hentai", ignoreCase = true) }) {
+                            ui.copy(genres = ui.genres + "Hentai")
+                        } else {
+                            ui
+                        }
+                    }
+                }
+            }.awaitAll().flatten().distinctBy { it.id }
+        }
+    }.getOrDefault(emptyList())
+
+    suspend fun studioAnime(studioName: String): List<MediaUi> = runCatching {
+        api.studioAnime(studioName).map(AniListMapper::toMediaUi)
+    }.getOrDefault(emptyList())
+
+    suspend fun tasteRecommendations(watchedIds: List<Long>, isAnime: Boolean = true): List<MediaUi> = runCatching {
+        if (watchedIds.isEmpty()) return@runCatching emptyList()
+        val seed = watchedIds.takeLast(3)
+        coroutineScope {
+            seed.map { id ->
+                async { recommendations(id, preferTmdb = !isAnime) }
+            }.awaitAll().flatten().distinctBy { it.id }
+        }
+    }.getOrDefault(emptyList())
+
+    private fun cleanCat3Title(raw: String): String {
+        val t = raw.replace(Regex("<[^>]+>"), "")
+            .replace("&#8217;", "'")
+            .replace("&hellip;", "...")
+            .replace("&amp;", "&")
+            .replace("&#8211;", "-")
+            .trim()
+        val parts = t.split("|").map { it.trim() }.filter { it.isNotBlank() }
+        val candidate = if (parts.size >= 2) {
+            val first = parts[0].uppercase(Locale.ROOT)
+            if (first in setOf("VIVAMAX", "TBONX", "ATIKCHUCHU", "PCH", "HOTSHOT", "TBON")) {
+                parts[1]
+            } else {
+                parts[0]
+            }
+        } else {
+            parts.firstOrNull() ?: t
+        }
+        return candidate
+            .replace(Regex("""\s*-\s*Full (?:PHILIPINE|CHINA|KOREAN|JAPAN|THAI|VIVAMAX|TBONX).*""", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("""\s*Watch Movie Online.*""", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("""\s*Free Sexy Movies.*""", RegexOption.IGNORE_CASE), "")
+            .trim()
+    }
+
+    private fun scrapeCat3Articles(
+        url: String,
+        defaultGenre: String,
+        score: Double,
+        seen: MutableSet<String>,
+    ): List<MediaUi> {
+        val req = Request.Builder()
+            .url(url)
+            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+            .header("Referer", "https://www.cat3movie.club/")
+            .build()
+        val html = runCatching {
+            httpClient.newCall(req).execute().use { if (it.isSuccessful) it.body?.string() else null }
+        }.getOrNull() ?: return emptyList()
+
+        val list = mutableListOf<MediaUi>()
+        val articleRegex = Regex("""<article[^>]*>([\s\S]*?)</article\s*>""", RegexOption.IGNORE_CASE)
+        val titleRegex = Regex("""<h2 class="title">\s*<a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)</a>""", RegexOption.IGNORE_CASE)
+        val backupLinkRegex = Regex("""<a\s+[^>]*href=["'](https?://(?:www\.)?cat3movie\.club/[^"']+)["'][^>]*title=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
+        val imgRegex = Regex("""(?:data-src|data-original|data-bsrjs|src)=["'](https?://[^"']+\.(?:jpg|jpeg|png|webp)[^"']*)["']""", RegexOption.IGNORE_CASE)
+
+        for (match in articleRegex.findAll(html)) {
+            val block = match.groupValues[1]
+            val tMatch = titleRegex.find(block)
+            val (link, rawTitle) = if (tMatch != null) {
+                tMatch.groupValues[1].trim() to tMatch.groupValues[2].trim()
+            } else {
+                val bMatch = backupLinkRegex.find(block) ?: continue
+                bMatch.groupValues[1].trim() to bMatch.groupValues[2].trim()
+            }
+
+            if (!seen.add(link) || link.contains("/category/") || link.contains("/tag/")) continue
+
+            val poster = imgRegex.find(block)?.groupValues?.get(1)?.trim()
+            val cleanTitle = cleanCat3Title(rawTitle)
+            if (cleanTitle.isBlank()) continue
+
+            val year = Regex("""\b(?:19|20)\d{2}\b""").find(rawTitle)?.value?.toIntOrNull()
+                ?: Regex("""\b(?:19|20)\d{2}\b""").find(cleanTitle)?.value?.toIntOrNull()
+            val id = (link.hashCode().toLong() and 0x7FFFFFFF) + 800000000L
+
+            val isVivamax = defaultGenre.equals("Vivamax", ignoreCase = true) || rawTitle.contains("VIVAMAX", ignoreCase = true)
+            val genres = if (isVivamax) {
+                listOf("Adult (18+)", "Vivamax", "Pinoy", "Asian Cinema")
+            } else {
+                listOf("Adult (18+)", defaultGenre, "Erotic", "Asian Cinema")
+            }
+
+            val media = MediaUi(
+                id = id,
+                title = cleanTitle,
+                romajiTitle = null,
+                synopsis = "Cat3Movie $defaultGenre: $cleanTitle",
+                coverUrl = poster?.takeIf { it.isNotBlank() },
+                bannerUrl = poster?.takeIf { it.isNotBlank() },
+                genres = genres,
+                score = score,
+                year = year,
+                startDateIso = year?.let { "$it-01-01" },
+                format = "MOVIE",
+                episodes = 1,
+                durationMinutes = 105,
+                status = com.animarvle.app.domain.AiringStatus.FINISHED,
+                nextAiringEpisode = null,
+                nextAiringAtEpochSec = null,
+                isTmdb = false,
+            )
+            customMediaCache[id] = media
+            if (isVivamax) {
+                com.animarvle.app.AnimarvleApp.registerPinoy(cleanTitle, rawTitle)
+            } else {
+                com.animarvle.app.AnimarvleApp.registerAsianAdult(cleanTitle, rawTitle)
+            }
+            list.add(media)
+        }
+        return list
+    }
+
+    private fun scrapePinoyArticles(
+        url: String,
+        seen: MutableSet<String>,
+    ): List<MediaUi> {
+        val req = Request.Builder()
+            .url(url)
+            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+            .header("Referer", "https://pinoymoviepedia.ru/")
+            .build()
+        val html = runCatching {
+            httpClient.newCall(req).execute().use { if (it.isSuccessful) it.body?.string() else null }
+        }.getOrNull() ?: return emptyList()
+
+        val list = mutableListOf<MediaUi>()
+        val articleRegex = Regex("""<article[^>]*>([\s\S]*?)</article>""", RegexOption.IGNORE_CASE)
+        val linkRegex = Regex("""href=["'](https?://pinoymoviepedia\.ru/movies/[^"']+)["']""", RegexOption.IGNORE_CASE)
+        val titleRegex = Regex("""(?:class="title"[^>]*>\s*<[ah\d]+[^>]*>|<h3>\s*<a[^>]*>)\s*([\s\S]*?)</[ah\d]+>""", RegexOption.IGNORE_CASE)
+        val altRegex = Regex("""alt=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
+        val imgRegex = Regex("""(?:data-src|src)=["'](https?://[^"']+\.(?:jpg|jpeg|png|webp)[^"']*)["']""", RegexOption.IGNORE_CASE)
+        val yearRegex = Regex("""(?:class=["']year["']>|<span>)(\d{4})<""", RegexOption.IGNORE_CASE)
+
+        for (match in articleRegex.findAll(html)) {
+            val block = match.groupValues[1]
+            val tMatch = titleRegex.find(block)
+            val (link, rawTitle) = if (tMatch != null) {
+                val l = linkRegex.find(block)?.groupValues?.get(1)?.trim() ?: continue
+                l to tMatch.groupValues[1].trim()
+            } else {
+                val l = linkRegex.find(block)?.groupValues?.get(1)?.trim() ?: continue
+                val a = altRegex.find(block)?.groupValues?.get(1)?.trim() ?: ""
+                l to a
+            }
+
+            if (link.isBlank() || rawTitle.isBlank() || !seen.add(link)) continue
+
+            val poster = imgRegex.find(block)?.groupValues?.get(1)?.trim()
+            val cleanTitle = rawTitle.replace(Regex("<[^>]+>"), "")
+                .replace(Regex("""\s*\(\d{4}\)"""), "")
+                .replace("&#8217;", "'")
+                .replace("&hellip;", "...")
+                .replace("&amp;", "&")
+                .trim()
+            if (cleanTitle.isBlank()) continue
+
+            val year = Regex("""\b(?:19|20)\d{2}\b""").find(rawTitle)?.value?.toIntOrNull()
+                ?: Regex("""\b(?:19|20)\d{2}\b""").find(link)?.value?.toIntOrNull()
+                ?: yearRegex.find(block)?.groupValues?.get(1)?.toIntOrNull()
+            val id = (link.hashCode().toLong() and 0x7FFFFFFF) + 800000000L
+
+            val media = MediaUi(
+                id = id,
+                title = cleanTitle,
+                romajiTitle = null,
+                synopsis = "Pinoy / Vivamax Adult (18+) Cinema: $cleanTitle",
+                coverUrl = poster?.takeIf { it.isNotBlank() },
+                bannerUrl = poster?.takeIf { it.isNotBlank() },
+                genres = listOf("Adult (18+)", "Vivamax", "Pinoy", "Asian Cinema"),
+                score = 8.6,
+                year = year,
+                startDateIso = year?.let { "$it-01-01" },
+                format = "MOVIE",
+                episodes = 1,
+                durationMinutes = 95,
+                status = com.animarvle.app.domain.AiringStatus.FINISHED,
+                nextAiringEpisode = null,
+                nextAiringAtEpochSec = null,
+                isTmdb = false,
+            )
+            customMediaCache[id] = media
+            com.animarvle.app.AnimarvleApp.registerPinoy(cleanTitle, rawTitle)
+            list.add(media)
+        }
+        return list
+    }
+
+    suspend fun searchAsianCinema(query: String = "", pages: Int = 3, startPage: Int = 1): List<MediaUi> = withContext(Dispatchers.IO) {
+        val q = query.trim()
+        val results = mutableListOf<MediaUi>()
+        val seen = mutableSetOf<String>()
+
+        if (q.isBlank()) {
+            // === DISCOVERY MODE ===
+            // Front-load Vivamax & Pinoy erotic cinema, Korean 18+ cinema, and Asian Cat 3 cinema.
+            // NO fake JAV queries. Zero dummy "NOW PRINTING" placeholders!
+
+            val vivamaxList = mutableListOf<MediaUi>()
+            val koreanList = mutableListOf<MediaUi>()
+            val cat3List = mutableListOf<MediaUi>()
+
+            coroutineScope {
+                // 1. PinoyMoviePedia (Pinay Sexy / Vivamax Movies)
+                val pinoyDef = async {
+                    val list = mutableListOf<MediaUi>()
+                    for (pageIdx in startPage until (startPage + pages)) {
+                        val url = if (pageIdx == 1) "https://pinoymoviepedia.ru/genre/pinay-sexy-movi/"
+                            else "https://pinoymoviepedia.ru/genre/pinay-sexy-movi/page/$pageIdx/"
+                        list.addAll(scrapePinoyArticles(url, seen))
+                    }
+                    list
+                }
+
+                // 2. Cat3Movie Philippine Category (Vivamax / T-Bonx / Pinoy Erotic)
+                val cat3PhilDef = async {
+                    val list = mutableListOf<MediaUi>()
+                    for (pageIdx in startPage until (startPage + pages)) {
+                        val url = if (pageIdx == 1) "https://www.cat3movie.club/category/philipine/"
+                            else "https://www.cat3movie.club/category/philipine/page/$pageIdx/"
+                        list.addAll(scrapeCat3Articles(url, defaultGenre = "Vivamax", score = 8.5, seen = seen))
+                    }
+                    list
+                }
+
+                // 3. Cat3Movie Korean Category (Korean 18+ Cinema)
+                val cat3KoreanDef = async {
+                    val list = mutableListOf<MediaUi>()
+                    for (pageIdx in startPage until (startPage + pages)) {
+                        val url = if (pageIdx == 1) "https://www.cat3movie.club/category/korean/"
+                            else "https://www.cat3movie.club/category/korean/page/$pageIdx/"
+                        list.addAll(scrapeCat3Articles(url, defaultGenre = "Korean 18+", score = 8.2, seen = seen))
+                    }
+                    list
+                }
+
+                // 4. Cat3Movie China Category (Hong Kong / Chinese Category 3 Cinema)
+                val cat3ChinaDef = async {
+                    val list = mutableListOf<MediaUi>()
+                    for (pageIdx in startPage until (startPage + pages)) {
+                        val url = if (pageIdx == 1) "https://www.cat3movie.club/category/china/"
+                            else "https://www.cat3movie.club/category/china/page/$pageIdx/"
+                        list.addAll(scrapeCat3Articles(url, defaultGenre = "Category 3", score = 8.0, seen = seen))
+                    }
+                    list
+                }
+
+                vivamaxList.addAll(pinoyDef.await())
+                vivamaxList.addAll(cat3PhilDef.await())
+                koreanList.addAll(cat3KoreanDef.await())
+                cat3List.addAll(cat3ChinaDef.await())
+            }
+
+            // Interleave Vivamax, Korean 18+, and Cat 3 for a rich, balanced catalog
+            var vIdx = 0
+            var kIdx = 0
+            var cIdx = 0
+            while (vIdx < vivamaxList.size || kIdx < koreanList.size || cIdx < cat3List.size) {
+                // Add 1 Vivamax
+                if (vIdx < vivamaxList.size) results.add(vivamaxList[vIdx++])
+                // Add 1 Korean 18+
+                if (kIdx < koreanList.size) results.add(koreanList[kIdx++])
+                // Add 1 Vivamax
+                if (vIdx < vivamaxList.size) results.add(vivamaxList[vIdx++])
+                // Add 1 Cat 3
+                if (cIdx < cat3List.size) results.add(cat3List[cIdx++])
+            }
+            return@withContext results
+        }
+
+        // === SEARCH MODE ===
+        val isJavCode = Regex("""\b[A-Za-z]{2,6}[-_]?\d{2,5}\b""").containsMatchIn(q)
+        val isExplicitJavQuery = isJavCode || listOf("jav", "uncensored", "fc2", "dori", "nanx", "ipx", "ssis", "mide", "jul", "sone", "stars").any { q.contains(it, ignoreCase = true) }
+        val isPinoySearch = listOf("vivamax", "pinoy", "tagalog", "alindog", "sukdulan", "dutdot", "angeli", "raval", "tbonx").any { q.contains(it, ignoreCase = true) }
+
+        if (isExplicitJavQuery) {
+            // 1. JavMost instant JSON search
+            for (pageIdx in startPage until (startPage + pages)) {
+                runCatching {
+                    val encoded = java.net.URLEncoder.encode(q, "UTF-8")
+                    val url = "https://www.javmost.ws/showlist2/$encoded/$pageIdx/search/"
+                    val req = Request.Builder()
+                        .url(url)
+                        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+                        .header("X-Requested-With", "XMLHttpRequest")
+                        .header("Referer", "https://www.javmost.ws/")
+                        .build()
+                    val body = httpClient.newCall(req).execute().use { if (it.isSuccessful) it.body?.string() else null }
+                    if (body != null) {
+                        val root = JSONObject(body)
+                        val arr = root.optJSONArray("result")
+                        if (arr != null) {
+                            for (i in 0 until arr.length()) {
+                                val obj = arr.getJSONObject(i)
+                                val fullUrl = obj.optString("url")
+                                if (fullUrl.isBlank() || !seen.add(fullUrl)) continue
+                                val cover = obj.optString("cover").takeIf { it.isNotBlank() }
+                                if (cover == null || cover.contains("now-printing", ignoreCase = true) || cover.contains("now_printing", ignoreCase = true)) {
+                                    continue
+                                }
+                                val name = obj.optString("name").replace(Regex("<[^>]+>"), "").trim()
+                                val fullName = obj.optString("full_name").replace(Regex("<[^>]+>"), "").trim()
+                                val isUncensored = fullUrl.contains("uncensored", ignoreCase = true) ||
+                                    name.contains("uncensored", ignoreCase = true) ||
+                                    fullName.contains("uncensored", ignoreCase = true)
+                                val badge = if (isUncensored) "[Uncensored] " else ""
+                                val title = when {
+                                    name.isNotBlank() && fullName.isNotBlank() && !fullName.startsWith(name, ignoreCase = true) -> "$badge$name $fullName"
+                                    fullName.isNotBlank() -> "$badge$fullName"
+                                    else -> "$badge$name"
+                                }.trim()
+                                val year = Regex("""\b(?:19|20)\d{2}\b""").find(obj.optString("release"))?.value?.toIntOrNull()
+                                    ?: Regex("""\b(?:19|20)\d{2}\b""").find(title)?.value?.toIntOrNull()
+                                val id = (fullUrl.hashCode().toLong() and 0x7FFFFFFF) + 800000000L
+
+                                val media = MediaUi(
+                                    id = id,
+                                    title = title,
+                                    romajiTitle = name.ifBlank { null },
+                                    synopsis = "Asian Cinema (18+) / JAV Stream: $name",
+                                    coverUrl = cover,
+                                    bannerUrl = cover,
+                                    genres = listOf("Adult (18+)", "JAV", "Asian Cinema"),
+                                    score = 8.5,
+                                    year = year,
+                                    startDateIso = year?.let { "$it-01-01" },
+                                    format = "MOVIE",
+                                    episodes = 1,
+                                    durationMinutes = 120,
+                                    status = com.animarvle.app.domain.AiringStatus.FINISHED,
+                                    nextAiringEpisode = null,
+                                    nextAiringAtEpochSec = null,
+                                    isTmdb = false,
+                                )
+                                customMediaCache[id] = media
+                                com.animarvle.app.AnimarvleApp.registerAsianAdult(title, name, fullName)
+                                results.add(media)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 2. Jav.com.co search
+            runCatching {
+                val encoded = java.net.URLEncoder.encode(q, "UTF-8")
+                val url = "https://jav.com.co/?s=$encoded"
+                val req = Request.Builder()
+                    .url(url)
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                    .header("Referer", "https://jav.com.co/")
+                    .build()
+                val html = httpClient.newCall(req).execute().use { if (it.isSuccessful) it.body?.string() else null }
+                if (html != null) {
+                    val articleRegex = Regex("""<article[^>]*>([\s\S]*?)</article\s*>""", RegexOption.IGNORE_CASE)
+                    val titleRegex = Regex("""<a[^>]*href=["'](https://jav\.com\.co/[^"']+)["'][^>]*title=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
+                    val imgRegex = Regex("""(?:data-src|src)=["'](https?://[^"']+\.(?:jpg|jpeg|png|webp)[^"']*)["']""", RegexOption.IGNORE_CASE)
+
+                    for (match in articleRegex.findAll(html)) {
+                        val block = match.groupValues[1]
+                        val tMatch = titleRegex.find(block) ?: continue
+                        val link = tMatch.groupValues[1].trim()
+                        val rawTitle = tMatch.groupValues[2].trim()
+
+                        if (!seen.add(link) || link.contains("/category/") || link.contains("/tag/")) continue
+
+                        val poster = imgRegex.find(block)?.groupValues?.get(1)?.trim()
+                        val cleanText = rawTitle.replace(Regex("<[^>]+>"), "")
+                            .replace("&#8217;", "'")
+                            .replace("&hellip;", "...")
+                            .replace("&amp;", "&")
+                            .trim()
+                        val id = (link.hashCode().toLong() and 0x7FFFFFFF) + 800000000L
+
+                        val isUncensored = link.contains("uncensored", ignoreCase = true) || cleanText.contains("uncensored", ignoreCase = true)
+                        val badge = if (isUncensored) "[Uncensored] " else ""
+
+                        val media = MediaUi(
+                            id = id,
+                            title = "$badge$cleanText",
+                            romajiTitle = null,
+                            synopsis = "Jav.com.co HD Stream: $cleanText",
+                            coverUrl = poster?.takeIf { it.isNotBlank() },
+                            bannerUrl = poster?.takeIf { it.isNotBlank() },
+                            genres = listOf("Adult (18+)", "JAV", "Asian Cinema"),
+                            score = 8.2,
+                            year = Regex("""\b(?:19|20)\d{2}\b""").find(cleanText)?.value?.toIntOrNull(),
+                            startDateIso = null,
+                            format = "MOVIE",
+                            episodes = 1,
+                            durationMinutes = 120,
+                            status = com.animarvle.app.domain.AiringStatus.FINISHED,
+                            nextAiringEpisode = null,
+                            nextAiringAtEpochSec = null,
+                            isTmdb = false,
+                        )
+                        customMediaCache[id] = media
+                        com.animarvle.app.AnimarvleApp.registerAsianAdult(cleanText)
+                        results.add(media)
+                    }
+                }
+            }
+
+            // 3. Cat3Movie search fallback
+            runCatching {
+                val encoded = java.net.URLEncoder.encode(q, "UTF-8")
+                val url = "https://www.cat3movie.club/?s=$encoded"
+                results.addAll(scrapeCat3Articles(url, defaultGenre = "Asian Cinema", score = 8.0, seen = seen))
+            }
+        } else {
+            // General / Vivamax / Korean movie search
+            coroutineScope {
+                val pinoyDef = async {
+                    val encoded = java.net.URLEncoder.encode(q, "UTF-8")
+                    val url = "https://pinoymoviepedia.ru/?s=$encoded"
+                    scrapePinoyArticles(url, seen)
+                }
+
+                val cat3Def = async {
+                    val encoded = java.net.URLEncoder.encode(q, "UTF-8")
+                    val url = "https://www.cat3movie.club/?s=$encoded"
+                    scrapeCat3Articles(url, defaultGenre = "Adult Cinema", score = 8.4, seen = seen)
+                }
+
+                val javDef = async {
+                    if (isPinoySearch) return@async emptyList<MediaUi>()
+                    val list = mutableListOf<MediaUi>()
+                    runCatching {
+                        val encoded = java.net.URLEncoder.encode(q, "UTF-8")
+                        val url = "https://www.javmost.ws/showlist2/$encoded/1/search/"
+                        val req = Request.Builder()
+                            .url(url)
+                            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+                            .header("X-Requested-With", "XMLHttpRequest")
+                            .header("Referer", "https://www.javmost.ws/")
+                            .build()
+                        val body = httpClient.newCall(req).execute().use { if (it.isSuccessful) it.body?.string() else null }
+                        if (body != null) {
+                            val root = JSONObject(body)
+                            val arr = root.optJSONArray("result")
+                            if (arr != null) {
+                                for (i in 0 until arr.length()) {
+                                    val obj = arr.getJSONObject(i)
+                                    val fullUrl = obj.optString("url")
+                                    if (fullUrl.isBlank() || !seen.add(fullUrl)) continue
+                                    val cover = obj.optString("cover").takeIf { it.isNotBlank() }
+                                    if (cover == null || cover.contains("now-printing", ignoreCase = true) || cover.contains("now_printing", ignoreCase = true)) {
+                                        continue
+                                    }
+                                    val name = obj.optString("name").replace(Regex("<[^>]+>"), "").trim()
+                                    val fullName = obj.optString("full_name").replace(Regex("<[^>]+>"), "").trim()
+                                    val title = when {
+                                        name.isNotBlank() && fullName.isNotBlank() && !fullName.startsWith(name, ignoreCase = true) -> "$name $fullName"
+                                        fullName.isNotBlank() -> fullName
+                                        else -> name
+                                    }.trim()
+                                    val year = Regex("""\b(?:19|20)\d{2}\b""").find(obj.optString("release"))?.value?.toIntOrNull()
+                                        ?: Regex("""\b(?:19|20)\d{2}\b""").find(title)?.value?.toIntOrNull()
+                                    val id = (fullUrl.hashCode().toLong() and 0x7FFFFFFF) + 800000000L
+
+                                    val media = MediaUi(
+                                        id = id,
+                                        title = title,
+                                        romajiTitle = name.ifBlank { null },
+                                        synopsis = "Asian Cinema (18+): $title",
+                                        coverUrl = cover,
+                                        bannerUrl = cover,
+                                        genres = listOf("Adult (18+)", "Asian Cinema"),
+                                        score = 8.0,
+                                        year = year,
+                                        startDateIso = year?.let { "$it-01-01" },
+                                        format = "MOVIE",
+                                        episodes = 1,
+                                        durationMinutes = 110,
+                                        status = com.animarvle.app.domain.AiringStatus.FINISHED,
+                                        nextAiringEpisode = null,
+                                        nextAiringAtEpochSec = null,
+                                        isTmdb = false,
+                                    )
+                                    customMediaCache[id] = media
+                                    list.add(media)
+                                }
+                            }
+                        }
+                    }
+                    list
+                }
+
+                val pinoyRes = pinoyDef.await()
+                val cat3Res = cat3Def.await()
+                val javRes = javDef.await()
+
+                // Movie results (Vivamax, Pinoy, Cat3) first!
+                results.addAll(pinoyRes)
+                results.addAll(cat3Res)
+                results.addAll(javRes)
+            }
+        }
+
+        results
     }
 }
 

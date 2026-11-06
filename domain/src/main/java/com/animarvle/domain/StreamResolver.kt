@@ -67,13 +67,12 @@ class StreamResolver(
         lastUsedServer: String? = null,
         userPriority: List<String> = emptyList(),
         startAfterServer: String? = null,
+        failedServers: Set<String> = emptySet(),
         resumedAtMs: Long = 0L,
     ): Flow<ResolveEvent> = flow {
         val options = withTimeout(timeoutMs) { source.options(episode) }
         val servers = options.byAudio[requested.audio]
-            ?: options.byAudio[if (requested.audio == Audio.DUB) Audio.SUB else Audio.DUB]
-            ?: options.byAudio[Audio.RAW]
-            ?: options.byAudio.values.firstOrNull()
+            ?: (if (requested.audio == Audio.SUB) options.byAudio[Audio.RAW] else null)
         if (servers.isNullOrEmpty()) {
             emit(
                 ResolveEvent.AudioUnavailable(
@@ -85,7 +84,11 @@ class StreamResolver(
             return@flow
         }
 
-        val order = orderServers(servers, lastUsedServer, userPriority, startAfterServer, requested.serverKey)
+        val order = orderServers(servers, lastUsedServer, userPriority, startAfterServer, requested.serverKey, failedServers)
+        if (order.isEmpty()) {
+            emit(ResolveEvent.AllServersFailed(servers.map { it.key }, "All servers failed"))
+            return@flow
+        }
         var previous: String? = null
         var lastCause: String? = null
 
@@ -123,23 +126,31 @@ class StreamResolver(
         userPriority: List<String>,
         startAfterServer: String?,
         manualPick: String?,
+        failedServers: Set<String> = emptySet(),
     ): List<ServerOption> {
         val byKey = servers.associateBy { it.key }
-        val result = LinkedHashMap<String, ServerOption>()
+        val candidateOrder = mutableListOf<ServerOption>()
 
         if (startAfterServer != null) {
             // Mid-playback fallback: continue after the server that just failed.
             val index = servers.indexOfFirst { it.key == startAfterServer }
             if (index >= 0) {
-                servers.drop(index + 1).forEach { result.putIfAbsent(it.key, it) }
-                servers.take(index).forEach { result.putIfAbsent(it.key, it) }
+                candidateOrder.addAll(servers.drop(index + 1))
+                candidateOrder.addAll(servers.take(index))
+            } else {
+                candidateOrder.addAll(servers)
             }
         } else {
-            manualPick?.let { byKey[it] }?.let { result[it.key] = it }
+            manualPick?.let { byKey[it] }?.let { candidateOrder.add(it) }
+            lastUsedServer?.let { byKey[it] }?.let { candidateOrder.add(it) }
+            userPriority.forEach { key -> byKey[key]?.let { candidateOrder.add(it) } }
+            candidateOrder.addAll(servers)
         }
-        lastUsedServer?.let { byKey[it] }?.let { if (it.key != startAfterServer) result.putIfAbsent(it.key, it) }
-        userPriority.forEach { key -> byKey[key]?.let { if (it.key != startAfterServer) result.putIfAbsent(it.key, it) } }
-        servers.forEach { if (it.key != startAfterServer) result.putIfAbsent(it.key, it) }
+
+        val result = LinkedHashMap<String, ServerOption>()
+        candidateOrder
+            .filterNot { it.key in failedServers || it.key == startAfterServer }
+            .forEach { result.putIfAbsent(it.key, it) }
 
         return result.values.toList()
     }

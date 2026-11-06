@@ -26,12 +26,12 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.fragment.findNavController
+import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.animarvle.app.AnimarvleApp
 import com.animarvle.app.R
 import com.animarvle.app.databinding.FragmentSearchBinding
 import com.animarvle.app.databinding.ItemSearchRecentRowBinding
-import com.animarvle.app.databinding.PopupSearchCategoryMenuBinding
 import com.animarvle.app.domain.MediaUi
 import kotlinx.coroutines.launch
 
@@ -50,7 +50,6 @@ class SearchFragment : Fragment() {
     private val binding get() = _binding!!
     private lateinit var viewModel: SearchViewModel
     private var pulseAnimator: ObjectAnimator? = null
-    private var categoryPopup: PopupWindow? = null
 
     private val adapter = SearchAdapter(
         onOpen = { media -> openDetails(media) },
@@ -92,8 +91,12 @@ class SearchFragment : Fragment() {
             findNavController().navigateUp()
         }
 
-        binding.btnCategory.setOnClickListener {
-            showCategoryDropdown()
+        binding.btnFilter.setOnClickListener {
+            val bottomSheet = FilterCatalogBottomSheet.newInstance(viewModel.state.value.filterOptions)
+            bottomSheet.onFilterListener = { newFilters ->
+                viewModel.onFiltersApplied(newFilters)
+            }
+            bottomSheet.show(childFragmentManager, FilterCatalogBottomSheet.TAG)
         }
 
         // Search bar
@@ -124,8 +127,19 @@ class SearchFragment : Fragment() {
         }
 
         // Results list
-        binding.resultsList.layoutManager = LinearLayoutManager(requireContext())
+        val gridLayoutManager = GridLayoutManager(requireContext(), 3)
+        binding.resultsList.layoutManager = gridLayoutManager
         binding.resultsList.adapter = adapter
+        binding.resultsList.addOnScrollListener(object : androidx.recyclerview.widget.RecyclerView.OnScrollListener() {
+            override fun onScrolled(recyclerView: androidx.recyclerview.widget.RecyclerView, dx: Int, dy: Int) {
+                if (dy <= 0) return
+                val totalItemCount = gridLayoutManager.itemCount
+                val lastVisibleItem = gridLayoutManager.findLastVisibleItemPosition()
+                if (totalItemCount > 0 && lastVisibleItem >= totalItemCount - 6) {
+                    viewModel.loadMore()
+                }
+            }
+        })
 
         // Clear all recents
         binding.clearRecentButton.setOnClickListener {
@@ -136,15 +150,38 @@ class SearchFragment : Fragment() {
             viewModel.retry()
         }
 
-        val categoryArg = arguments?.getString("category")
-        if (!categoryArg.isNullOrBlank()) {
-            val matchingType = SearchType.entries.firstOrNull {
-                it.displayName.equals(categoryArg, ignoreCase = true)
+        val args = arguments
+        if (args != null) {
+            val filterType = args.getString("filterType")?.lowercase()
+            val filterValue = args.getString("filterValue") ?: args.getString("filterName")
+            val directorArg = args.getString("director") ?: if (filterType == "director" || filterType == "directors") filterValue else null
+            val maleActorArg = args.getString("maleActor") ?: if (filterType == "male_actor" || filterType == "male actor" || filterType == "male actors") filterValue else null
+            val femaleActressArg = args.getString("femaleActress") ?: if (filterType == "female_actress" || filterType == "female actress" || filterType == "female actresses") filterValue else null
+            val studioArg = args.getString("studio") ?: if (filterType == "studio" || filterType == "studios") filterValue else null
+            val genreArg = args.getString("genre") ?: if (filterType == "genre" || filterType == "genres") filterValue else null
+            val categoryArg = args.getString("category")
+
+            var options = viewModel.state.value.filterOptions
+            if (!directorArg.isNullOrBlank()) options = options.copy(director = directorArg)
+            if (!maleActorArg.isNullOrBlank()) options = options.copy(maleActor = maleActorArg)
+            if (!femaleActressArg.isNullOrBlank()) options = options.copy(femaleActress = femaleActressArg)
+            if (!studioArg.isNullOrBlank()) options = options.copy(studio = studioArg)
+            if (!genreArg.isNullOrBlank()) options = options.copy(genres = setOf(genreArg))
+            if (!categoryArg.isNullOrBlank()) {
+                val matchingType = SearchType.entries.firstOrNull {
+                    it.displayName.equals(categoryArg, ignoreCase = true) ||
+                    (categoryArg.equals("series", ignoreCase = true) && it == SearchType.TV_SHOW) ||
+                    (categoryArg.equals("movies", ignoreCase = true) && it == SearchType.MOVIE)
+                }
+                if (matchingType != null) {
+                    viewModel.onTypeChanged(matchingType)
+                } else {
+                    options = options.copy(category = categoryArg)
+                }
             }
-            if (matchingType != null) {
-                viewModel.onTypeChanged(matchingType)
-            } else {
-                viewModel.onFiltersApplied(SearchFilterOptions(category = categoryArg))
+
+            if (!options.isDefault) {
+                viewModel.onFiltersApplied(options)
             }
         }
 
@@ -155,67 +192,19 @@ class SearchFragment : Fragment() {
         }
     }
 
-    private fun showCategoryDropdown() {
-        val context = requireContext()
-        val popupBinding = PopupSearchCategoryMenuBinding.inflate(layoutInflater)
-        val currentType = viewModel.state.value.type
-
-        fun highlight(item: View, icon: ImageView, text: TextView, isSelected: Boolean) {
-            if (isSelected) {
-                item.setBackgroundResource(R.drawable.bg_search_dropdown_item_selected)
-                val white = ContextCompat.getColor(context, android.R.color.white)
-                icon.imageTintList = ColorStateList.valueOf(white)
-                text.setTextColor(white)
-            } else {
-                item.setBackgroundResource(android.R.color.transparent)
-                val muted = ContextCompat.getColor(context, R.color.on_bg_muted)
-                icon.imageTintList = ColorStateList.valueOf(muted)
-                text.setTextColor(muted)
-            }
-        }
-
-        highlight(popupBinding.menuItemAll, popupBinding.iconAll, popupBinding.textAll, currentType == SearchType.ALL)
-        highlight(popupBinding.menuItemMovie, popupBinding.iconMovie, popupBinding.textMovie, currentType == SearchType.MOVIE)
-        highlight(popupBinding.menuItemTv, popupBinding.iconTv, popupBinding.textTv, currentType == SearchType.TV_SHOW)
-        highlight(popupBinding.menuItemAnime, popupBinding.iconAnime, popupBinding.textAnime, currentType == SearchType.ANIME)
-        highlight(popupBinding.menuItemAsian, popupBinding.iconAsian, popupBinding.textAsian, currentType == SearchType.ASIAN)
-
-        fun select(type: SearchType) {
-            viewModel.onTypeChanged(type)
-            binding.categoryText.text = type.displayName
-            binding.searchField.hint = type.hintText
-            categoryPopup?.dismiss()
-        }
-
-        popupBinding.menuItemAll.setOnClickListener { select(SearchType.ALL) }
-        popupBinding.menuItemMovie.setOnClickListener { select(SearchType.MOVIE) }
-        popupBinding.menuItemTv.setOnClickListener { select(SearchType.TV_SHOW) }
-        popupBinding.menuItemAnime.setOnClickListener { select(SearchType.ANIME) }
-        popupBinding.menuItemAsian.setOnClickListener { select(SearchType.ASIAN) }
-
-        categoryPopup?.dismiss()
-        categoryPopup = PopupWindow(
-            popupBinding.root,
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-            true,
-        ).apply {
-            elevation = dp(12).toFloat()
-            isOutsideTouchable = true
-            showAsDropDown(binding.btnCategory, -dp(60), dp(8))
-        }
-    }
 
     private fun render(state: SearchState) {
-        binding.categoryText.text = state.type.displayName
+        binding.filterActiveBadge.isVisible = state.filterOptions.activeFilterCount > 0
         if (binding.searchField.hint != state.type.hintText && binding.searchField.text.isNullOrBlank()) {
             binding.searchField.hint = state.type.hintText
         }
 
         val hasQuery = state.query.isNotBlank()
+        val showResults = hasQuery || !state.filterOptions.isDefault
 
-        if (hasQuery) {
+        if (showResults) {
             // In search results mode
+            binding.glassCard.setCardBackgroundColor(android.graphics.Color.TRANSPARENT)
             binding.preSearchContainer.isVisible = false
 
             val showSkeleton = state.loading && state.results.isEmpty()
@@ -226,7 +215,7 @@ class SearchFragment : Fragment() {
             }
 
             val showError = state.error != null
-            val showEmpty = !showError && state.searched && state.results.isEmpty()
+            val showEmpty = !showError && !state.loading && state.results.isEmpty()
 
             binding.resultsList.isVisible = !showError && !showEmpty && !showSkeleton
             binding.emptyBlock.isVisible = (showError || showEmpty) && !showSkeleton
@@ -243,13 +232,18 @@ class SearchFragment : Fragment() {
                 binding.retryButton.isVisible = true
             } else if (showEmpty) {
                 binding.emptyTitle.setText(R.string.search_empty_title)
-                binding.emptyBody.text = "No results found for \"${state.query}\""
+                binding.emptyBody.text = if (state.query.isNotBlank()) {
+                    "No results found for \"${state.query}\""
+                } else {
+                    "No titles found matching your active filters"
+                }
                 binding.retryButton.isVisible = false
             } else {
                 adapter.submit(state.results)
             }
         } else {
             // In pre-search mode (Recent searches + Everyone searching)
+            binding.glassCard.setCardBackgroundColor(0xFF181818.toInt())
             stopSkeletonAnimation()
             binding.resultsList.isVisible = false
             binding.emptyBlock.isVisible = false
@@ -381,8 +375,6 @@ class SearchFragment : Fragment() {
 
     override fun onDestroyView() {
         super.onDestroyView()
-        categoryPopup?.dismiss()
-        categoryPopup = null
         stopSkeletonAnimation()
         _binding = null
     }

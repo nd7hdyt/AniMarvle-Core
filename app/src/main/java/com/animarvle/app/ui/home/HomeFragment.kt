@@ -97,6 +97,13 @@ class HomeFragment : Fragment() {
             onMyListClick = { media -> openAddToMyList(media) },
             onSeeAllClick = { category -> openCategoryInSearch(category) },
             onProviderClick = { provider -> openProviderCatalog(provider) },
+            onFilterRailHeaderClick = { row -> openFilterRailInSearch(row) },
+            onFilterRailOptionSelected = { row, chosenOption ->
+                viewModel.onFilterRailOptionChanged(row.railId, chosenOption)
+            },
+            onFilterRailPillSelected = { row, pillIndex ->
+                viewModel.onFilterRailPillChanged(row.railId, pillIndex)
+            },
         )
 
         binding.feedRecyclerView.layoutManager = LinearLayoutManager(requireContext())
@@ -350,6 +357,23 @@ class HomeFragment : Fragment() {
 
     private fun openCategoryInSearch(category: String) {
         val bundle = Bundle().apply {
+            putString("category", category)
+        }
+        findNavController().navigate(R.id.searchFragment, bundle)
+    }
+
+    private fun openFilterRailInSearch(row: FeedRow.FilterableRail) {
+        val bundle = Bundle().apply {
+            putString("filterType", row.filterType)
+            putString("filterValue", row.selectedOption)
+            val domain = viewModel.currentDomain.value
+            val category = if (domain == HomeDomain.ANIME) {
+                "Anime"
+            } else when (row.railId) {
+                "movie_series" -> "TV Show"
+                "asian_drama" -> "Asian"
+                else -> "Movie"
+            }
             putString("category", category)
         }
         findNavController().navigate(R.id.searchFragment, bundle)

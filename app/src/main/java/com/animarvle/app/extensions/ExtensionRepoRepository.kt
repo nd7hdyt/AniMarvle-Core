@@ -60,6 +60,18 @@ class ExtensionRepoRepository(context: Context) {
             save(list)
         }
 
+        val phisherUrl = "https://raw.githubusercontent.com/phisher98/cloudstream-extensions-phisher/refs/heads/builds"
+        if (list.none { it.baseUrl.startsWith(phisherUrl) }) {
+            list.add(
+                ExtensionRepo(
+                    baseUrl = phisherUrl,
+                    name = "Phisher CloudStream Extensions",
+                    website = "https://github.com/phisher98/cloudstream-extensions-phisher",
+                ),
+            )
+            save(list)
+        }
+
         val redowanUrl = "https://raw.githubusercontent.com/redowan99/Redowan-CloudStream/master"
         if (list.none { it.baseUrl.startsWith(redowanUrl) }) {
             list.add(

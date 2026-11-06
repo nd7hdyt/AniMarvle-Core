@@ -120,18 +120,30 @@ class PlayerViewModel(
     private val sourceMediaCache = mutableMapOf<Long, SourceMedia>()
     private var currentCustomQuery: String? = initialCustomQuery
     private var pendingResumeAtMs: Long = 0L
+    private var currentlyPlayingUrl: String? = null
 
     private var selectedSourceId: Long? = initialSource?.id ?: sources.firstOrNull()?.id
     private var selectedHosterKey: String? = null
     private var isManualServerSelection: Boolean = false
     private val attemptedSourceIds = mutableSetOf<Long>()
+    private val failedPlaybackServers = mutableSetOf<String>()
 
     private val activeSource: MediaSource?
         get() = sources.firstOrNull { it.id == selectedSourceId }
             ?: (if (_state.value.audio == Audio.DUB && isAnime) {
-                sources.firstOrNull { it.id != 40004L && (it.capabilities.dub || it.name.contains("dub", ignoreCase = true) || it.name.contains("zoro", ignoreCase = true) || it.name.contains("hianime", ignoreCase = true) || it.name.contains("gogo", ignoreCase = true)) }
+                sources.firstOrNull {
+                    !attemptedSourceIds.contains(it.id) &&
+                        (it.capabilities.dub ||
+                            it.name.contains("dub", ignoreCase = true) ||
+                            it.name.contains("anikoto", ignoreCase = true) ||
+                            it.name.contains("animekai", ignoreCase = true) ||
+                            it.name.contains("zoro", ignoreCase = true) ||
+                            it.name.contains("hianime", ignoreCase = true) ||
+                            it.name.contains("gogo", ignoreCase = true))
+                }
             } else null)
-            ?: initialSource
+            ?: initialSource?.takeIf { !attemptedSourceIds.contains(it.id) }
+            ?: sources.firstOrNull { !attemptedSourceIds.contains(it.id) }
             ?: sources.firstOrNull()
 
     private fun buildServerOptions(activeSrc: MediaSource?, activeHosters: List<ServerOption>): Pair<List<ServerOption>, String?> {
@@ -139,27 +151,35 @@ class PlayerViewModel(
         var selectedKey: String? = null
 
         if (activeHosters.isNotEmpty()) {
-            activeHosters.take(3).forEachIndexed { index, h ->
+            activeHosters.forEachIndexed { index, h ->
                 val srcId = activeSrc?.id ?: 0L
                 val k = "hoster:$srcId:${h.key}"
                 val cleanName = when {
                     h.label.contains("spiral", ignoreCase = true) -> "Spiral"
                     h.label.contains("turbo", ignoreCase = true) -> "Turbo"
                     h.label.contains("fastx", ignoreCase = true) || h.label.contains("fast", ignoreCase = true) -> "FastX"
-                    index == 0 -> "Spiral"
-                    index == 1 -> "Turbo"
-                    else -> "FastX"
+                    h.label.isNotBlank() && !h.label.startsWith("Edge ") && index >= 3 -> h.label
+                    index == 0 -> h.label.ifBlank { "Spiral" }
+                    index == 1 -> h.label.ifBlank { "Turbo" }
+                    index == 2 -> h.label.ifBlank { "FastX" }
+                    else -> h.label.ifBlank { "Server ${index + 1}" }
                 }
                 val detectedLang = SpokenLanguage.fromRawTag(h.audioLanguage)
                     ?: SpokenLanguage.fromRawTag(h.label)
                     ?: SpokenLanguage.fromRawTag(h.hint)
-                list.add(ServerOption(key = k, label = cleanName, hint = h.hint, audioLanguage = detectedLang?.displayName ?: h.audioLanguage))
+                list.add(
+                    ServerOption(
+                        key = k,
+                        label = cleanName,
+                        hint = h.hint,
+                        audioLanguage = detectedLang?.displayName ?: h.audioLanguage,
+                    )
+                )
                 if (selectedHosterKey == h.key || (selectedHosterKey == null && selectedKey == null)) {
                     selectedKey = k
                 }
             }
         } else {
-            // Provide clean unified servers mapped to top candidate sources
             val topSources = sources.take(3)
             topSources.forEachIndexed { index, src ->
                 val k = "source:${src.id}"
@@ -170,7 +190,14 @@ class PlayerViewModel(
                 }
                 val detectedSourceLang = SpokenLanguage.fromRawTag(src.language)
                     ?: SpokenLanguage.fromRawTag(src.name)
-                list.add(ServerOption(key = k, label = cleanName, hint = src.name, audioLanguage = detectedSourceLang?.displayName ?: src.language.takeIf { it != "all" && it != "en" }))
+                list.add(
+                    ServerOption(
+                        key = k,
+                        label = cleanName,
+                        hint = src.name,
+                        audioLanguage = detectedSourceLang?.displayName ?: src.language.takeIf { it != "all" && it != "en" },
+                    )
+                )
                 if (src.id == activeSrc?.id && selectedKey == null) {
                     selectedKey = k
                 }
@@ -199,7 +226,9 @@ class PlayerViewModel(
         if (isDefinitelySeries) false else (metaQuery.type == MediaType.MOVIE)
     }
 
-    private val isAnime: Boolean get() = !metaQuery.metaId.startsWith("tmdb:") && metaQuery.type == MediaType.ANIME
+    private val isAnime: Boolean get() = (metaQuery.type == MediaType.ANIME) ||
+        (metaQuery.titles.romaji?.isNotBlank() == true) ||
+        isDonghua
     private val isDonghua = AnimarvleApp.isDonghua(mediaTitle) || AnimarvleApp.isDonghua(metaQuery.titles.english)
     private val defaultOriginalLanguage = if (isDonghua) "Chinese" else if (isAnime) "Japanese" else "English"
 
@@ -242,8 +271,6 @@ class PlayerViewModel(
     private var allEpisodeServers: List<ServerStreamItem> = emptyList()
     private var lastReportedExoTracks: Tracks? = null
 
-    // Channel, not SharedFlow: a fast source can resolve BEFORE the Fragment starts
-    // collecting, and replay=0 would drop the Prepare command. A Channel buffers it.
     private val _commands = Channel<PlayerCommand>(Channel.BUFFERED)
     val commands: Flow<PlayerCommand> = _commands.receiveAsFlow()
 
@@ -314,10 +341,10 @@ class PlayerViewModel(
         selectEpisode(_state.value.currentEpisodeIndex - 1)
     }
 
-    /** Switches to another episode from the grid and re-resolves (PROMPT §7.7). */
     fun selectEpisode(index: Int) {
         if (index !in _state.value.episodes.indices) return
         if (index == _state.value.currentEpisodeIndex && _state.value.phase == PlayerPhase.READY) return
+        failedPlaybackServers.clear()
         _state.update { it.copy(currentEpisodeIndex = index) }
         if (!isOffline) {
             attemptedSourceIds.clear()
@@ -339,7 +366,6 @@ class PlayerViewModel(
         }
     }
 
-    /** Selects episode by its episode number (1, 2, ...), mapping to correct list index. */
     fun selectEpisodeByNumber(epNumber: Int) {
         val index = _state.value.episodes.indexOfFirst { it.number.toInt() == epNumber }
         if (index >= 0) {
@@ -347,9 +373,9 @@ class PlayerViewModel(
         }
     }
 
-    /** Selects season by season number, clears episode state, and triggers re-resolution. */
     fun selectSeason(seasonNumber: Int, targetEpisode: Int = 1) {
         if (_state.value.seasonNumber == seasonNumber && _state.value.episodes.isNotEmpty()) return
+        failedPlaybackServers.clear()
         currentSeasonNumber = seasonNumber
         _state.update {
             it.copy(
@@ -385,23 +411,17 @@ class PlayerViewModel(
         rebuildAudioOptions(lastReportedExoTracks)
     }
 
-    /**
-     * Aggregates:
-     * 1. Embedded ExoPlayer C.TRACK_TYPE_AUDIO tracks (takes priority for instant switching)
-     * 2. Server-level language groups (for languages hosted on separate URLs)
-     */
     fun rebuildAudioOptions(exoTracks: Tracks?) {
         lastReportedExoTracks = exoTracks
         val mergedByLangCode = linkedMapOf<String, ResolvedAudioOption>()
 
-        // 1. Inspect embedded ExoPlayer audio tracks first (HLS #EXT-X-MEDIA / MKV / MP4 multi-audio)
+        // 1. Inspect embedded ExoPlayer audio tracks first
         if (exoTracks != null) {
             for (group in exoTracks.groups) {
                 if (group.type == C.TRACK_TYPE_AUDIO && group.isSupported) {
                     for (i in 0 until group.length) {
                         if (!group.isTrackSupported(i)) continue
                         val format = group.getTrackFormat(i)
-                        val isUnd = SpokenLanguage.isUntaggedOrUndetermined(format.language) && SpokenLanguage.isUntaggedOrUndetermined(format.label)
 
                         val detected = (if (!SpokenLanguage.isUntaggedOrUndetermined(format.label)) SpokenLanguage.fromRawTag(format.label) else null)
                             ?: (if (!SpokenLanguage.isUntaggedOrUndetermined(format.language)) SpokenLanguage.fromRawTag(format.language) else null)
@@ -415,7 +435,6 @@ class PlayerViewModel(
 
                         val rawCode = detected.code
                         val langName = detected.displayName
-
                         val mapKey = if (mergedByLangCode.containsKey(rawCode)) "${rawCode}_$i" else rawCode
 
                         mergedByLangCode[mapKey] = ResolvedAudioOption.EmbeddedTrack(
@@ -434,7 +453,7 @@ class PlayerViewModel(
             }
         }
 
-        // 2. Merge server-provided languages (e.g., Hindi/Tamil/Telugu/English on separate servers)
+        // 2. Merge server-provided languages
         val serversByLang = allEpisodeServers.groupBy { it.languageCode }
         for ((langCode, serverList) in serversByLang) {
             val alreadyEmbedded = mergedByLangCode.values.any { it.languageCode.equals(langCode, ignoreCase = true) }
@@ -444,28 +463,30 @@ class PlayerViewModel(
                     languageName = first.languageName,
                     languageCode = langCode,
                     defaultServerKey = first.serverKey,
-                    serverUrls = serverList
+                    serverUrls = serverList,
+                    audioCategory = first.audioCategory,
                 )
             }
         }
 
-        // 3. For Anime: ensure both Japanese (Sub) and English (Dub) are accessible in the switcher
+        // 3. For Anime: ensure both Japanese/Chinese (Sub) and English (Dub) are accessible in the switcher
         if (isAnime) {
-            val hasJapanese = mergedByLangCode.values.any { 
-                it.languageCode == "ja" || it.languageCode == "zh" || 
-                it.languageName.contains("Japanese", ignoreCase = true) || 
-                it.languageName.contains("Chinese", ignoreCase = true) 
+            val origCode = if (isDonghua) "zh" else "ja"
+            val hasOrig = mergedByLangCode.values.any {
+                it.languageCode == "ja" || it.languageCode == "zh" ||
+                    it.languageName.contains("Japanese", ignoreCase = true) ||
+                    it.languageName.contains("Chinese", ignoreCase = true)
             }
-            val hasEnglishDub = mergedByLangCode.values.any { 
+            val hasEnglishDub = mergedByLangCode.values.any {
                 (it.languageCode == "en" || it.languageName.contains("English", ignoreCase = true)) &&
-                (it is ResolvedAudioOption.EmbeddedTrack || (it is ResolvedAudioOption.ServerStream && it.audioCategory == Audio.DUB))
+                    (it is ResolvedAudioOption.EmbeddedTrack || (it is ResolvedAudioOption.ServerStream && it.audioCategory == Audio.DUB))
             }
             val currentAudio = _state.value.audio
 
-            if (!hasJapanese) {
-                mergedByLangCode["ja"] = ResolvedAudioOption.ServerStream(
+            if (!hasOrig) {
+                mergedByLangCode[origCode] = ResolvedAudioOption.ServerStream(
                     languageName = if (isDonghua) "Chinese (Sub)" else "Japanese (Sub)",
-                    languageCode = if (isDonghua) "zh" else "ja",
+                    languageCode = origCode,
                     defaultServerKey = if (currentAudio == Audio.SUB) _state.value.selectedServer.orEmpty() else "",
                     serverUrls = emptyList(),
                     audioCategory = Audio.SUB,
@@ -529,7 +550,7 @@ class PlayerViewModel(
         if (targetAudio != _state.value.audio) {
             _state.update { it.copy(audio = targetAudio) }
             selectedHosterKey = null
-            selectedSourceId = null // Reset so matcher re-evaluates all sources for the new audio category!
+            selectedSourceId = null
             attemptedSourceIds.clear()
             sourceMediaCache.clear()
             isManualServerSelection = false
@@ -547,6 +568,7 @@ class PlayerViewModel(
     fun selectServer(key: String, resumeAtMs: Long = 0L) {
         if (isOffline) return
         if (key == _state.value.selectedServer && _state.value.phase == PlayerPhase.READY) return
+        failedPlaybackServers.clear()
         isManualServerSelection = true
 
         val targetSourceId: Long?
@@ -604,11 +626,15 @@ class PlayerViewModel(
 
     fun selectAudio(audio: Audio, resumeAtMs: Long = 0L) {
         if (audio == _state.value.audio && _state.value.phase == PlayerPhase.READY) return
-        _state.update { it.copy(audio = audio) }
+        val newLangCode = if (audio == Audio.DUB) "en" else if (isDonghua) "zh" else if (isAnime) "ja" else "en"
+        val newLangName = if (audio == Audio.DUB) "English" else defaultOriginalLanguage
+        _selectedLanguageCode.value = newLangCode
+        _state.update { it.copy(audio = audio, audioLanguage = newLangName) }
         selectedHosterKey = null
         selectedSourceId = null
         attemptedSourceIds.clear()
         sourceMediaCache.clear()
+        isManualServerSelection = false
         loadAndResolve(resumeAt = resumeAtMs)
     }
 
@@ -621,10 +647,9 @@ class PlayerViewModel(
         val langCode = detected?.code ?: lang.lowercase()
         val langName = detected?.displayName ?: lang
 
-        // Check if already in availableAudioOptions as ServerStream
         val option = _availableAudioOptions.value.firstOrNull {
             it.languageCode.equals(langCode, ignoreCase = true) ||
-            it.languageName.equals(langName, ignoreCase = true)
+                it.languageName.equals(langName, ignoreCase = true)
         }
         if (option is ResolvedAudioOption.ServerStream) {
             selectServerStreamLanguage(option, resumeAtMs = resumeAtMs)
@@ -639,11 +664,7 @@ class PlayerViewModel(
             } else {
                 langCode == "ja" || lang.equals("Japanese", ignoreCase = true) || lang.equals("Sub", ignoreCase = true) || lang.equals("Original", ignoreCase = true)
             }
-            val targetAudio = if (isOriginal) {
-                Audio.SUB
-            } else {
-                Audio.DUB
-            }
+            val targetAudio = if (isOriginal) Audio.SUB else Audio.DUB
             if (targetAudio != current.audio || !current.audioLanguage.equals(langName, ignoreCase = true)) {
                 _state.update { it.copy(audioLanguage = langName, audio = targetAudio) }
                 _selectedLanguageCode.value = langCode
@@ -651,6 +672,7 @@ class PlayerViewModel(
                 selectedSourceId = null
                 attemptedSourceIds.clear()
                 sourceMediaCache.clear()
+                isManualServerSelection = false
                 loadAndResolve(resumeAt = resumeAtMs)
             }
             return
@@ -661,13 +683,12 @@ class PlayerViewModel(
         _state.update { it.copy(audioLanguage = langName) }
         _selectedLanguageCode.value = langCode
 
-        // 1. Try to find a server matching this language
         val matchingServer = current.servers.firstOrNull { s ->
             val al = s.audioLanguage?.lowercase().orEmpty()
             val l = s.label.lowercase()
             val h = s.hint?.lowercase().orEmpty()
             val target = langName.lowercase()
-            al.equals(target) || al.equals(langCode) || l.contains(target) || h.contains(target)
+            al == target || al == langCode || l.contains(target) || h.contains(target)
         }
 
         if (matchingServer != null && matchingServer.key != current.selectedServer) {
@@ -675,7 +696,6 @@ class PlayerViewModel(
             return
         }
 
-        // 2. Try to find a source matching this language (e.g. moviebox, kisskh, etc.)
         val matchingSource = sources.firstOrNull { src ->
             val n = src.name.lowercase()
             val l = src.language.lowercase()
@@ -688,15 +708,8 @@ class PlayerViewModel(
             return
         }
 
-        // 3. Fallback: switch audio category (SUB for Japanese/Chinese/Original, DUB for other dub languages)
-        val targetAudio = if (langCode == "ja" || langCode == "zh" || lang.equals("Original", ignoreCase = true) || lang.equals("Sub", ignoreCase = true)) {
-            Audio.SUB
-        } else {
-            Audio.DUB
-        }
-        if (targetAudio != current.audio) {
-            selectAudio(targetAudio, resumeAtMs = resumeAtMs)
-        }
+        selectedHosterKey = null
+        loadAndResolve(resumeAt = resumeAtMs)
     }
 
     val activeSourceId: Long? get() = selectedSourceId
@@ -707,6 +720,7 @@ class PlayerViewModel(
         selectedHosterKey = null
         isManualServerSelection = true
         attemptedSourceIds.clear()
+        failedPlaybackServers.clear()
         val currentSrc = activeSource
         _state.update {
             it.copy(
@@ -720,7 +734,6 @@ class PlayerViewModel(
     fun updateCustomQuery(customQuery: String?) {
         val trimmed = customQuery?.trim()?.takeIf { it.isNotBlank() }
         currentCustomQuery = trimmed
-        // Invalidate cache for the active source to force re-matching with the custom title
         selectedSourceId?.let { sourceMediaCache.remove(it) }
         attemptedSourceIds.clear()
         loadAndResolve()
@@ -729,6 +742,7 @@ class PlayerViewModel(
     fun retry() {
         if (isOffline) return
         attemptedSourceIds.clear()
+        failedPlaybackServers.clear()
         isManualServerSelection = false
         loadAndResolve()
     }
@@ -761,13 +775,18 @@ class PlayerViewModel(
         if (!isManualServerSelection) {
             val unattempted = sources.filter { !attemptedSourceIds.contains(it.id) }
             val nextSource = if (!isAnime) {
-                // For TMDB movies and series: strictly preserve the movie engine queue
-                // (4K HDHub -> HexaWatch -> KissKH -> ...) and never divert to anime dub scrapers.
                 unattempted.firstOrNull()
             } else if (_state.value.audio == Audio.DUB) {
-                // When Dub is requested for anime, try dub-specialized anime sources first (excluding relay which has no dub)
-                unattempted.firstOrNull { it.id != 40004L && (it.capabilities.dub || it.name.contains("dub", ignoreCase = true) || it.name.contains("wco", ignoreCase = true) || it.name.contains("zoro", ignoreCase = true) || it.name.contains("hianime", ignoreCase = true) || it.name.contains("gogo", ignoreCase = true)) }
-                    ?: unattempted.firstOrNull()
+                unattempted.firstOrNull {
+                    it.capabilities.dub ||
+                        it.name.contains("dub", ignoreCase = true) ||
+                        it.name.contains("anikoto", ignoreCase = true) ||
+                        it.name.contains("animekai", ignoreCase = true) ||
+                        it.name.contains("wco", ignoreCase = true) ||
+                        it.name.contains("zoro", ignoreCase = true) ||
+                        it.name.contains("hianime", ignoreCase = true) ||
+                        it.name.contains("gogo", ignoreCase = true)
+                } ?: unattempted.firstOrNull()
             } else {
                 unattempted.firstOrNull()
             }
@@ -791,9 +810,9 @@ class PlayerViewModel(
         }
     }
 
-    /** Loads the episode's options (audio tabs + servers), then runs the resolver. */
     fun loadAndResolve(resumeAt: Long = 0L) {
         pendingResumeAtMs = resumeAt
+        failedPlaybackServers.clear()
         job?.cancel()
         job = viewModelScope.launch {
             if (sources.isEmpty()) {
@@ -831,7 +850,6 @@ class PlayerViewModel(
                 )
             }
 
-            // 1. Get SourceMedia for this source (with 15s timeout)
             val baseQuery = metaQuery.copy(requestedAudio = _state.value.audio)
             val queryToUse = currentCustomQuery?.let { customQ ->
                 baseQuery.copy(
@@ -842,7 +860,7 @@ class PlayerViewModel(
 
             val targetMedia: SourceMedia? = sourceMediaCache[source.id] ?: run {
                 val match = withContext(Dispatchers.IO) {
-                    withTimeoutOrNull(15000L) {
+                    withTimeoutOrNull(5000L) {
                         matcher.match(queryToUse, listOf(source))
                     }
                 }
@@ -864,7 +882,7 @@ class PlayerViewModel(
 
             _state.update { it.copy(matchedTitle = targetMedia.title) }
 
-            // 2. Fetch episodes list from source (with 25s timeout)
+            val activeLangCode = _selectedLanguageCode.value
             val enrichedExtra = targetMedia.extra.toMutableMap().apply {
                 if (currentSeasonNumber > 1 || !containsKey("season")) {
                     put("season", currentSeasonNumber.toString())
@@ -873,13 +891,32 @@ class PlayerViewModel(
                 if (metaQuery.synonyms.isNotEmpty()) {
                     put("synonyms", metaQuery.synonyms.joinToString("|"))
                 }
-                if (isAnime) {
-                    put("mediaType", "anime")
+                if (metaQuery.year != null && !containsKey("year")) {
+                    put("year", metaQuery.year.toString())
+                }
+                if (metaQuery.metaId.startsWith("tmdb:") && !containsKey("tmdbId")) {
+                    put("tmdbId", metaQuery.metaId.removePrefix("tmdb:"))
+                }
+                if (activeLangCode.isNotBlank()) {
+                    put("lang", activeLangCode)
+                }
+                if (!containsKey("mediaType")) {
+                    put("mediaType", if (_state.value.isMovie) "movie" else if (isAnime) "anime" else "tv")
+                } else if (_state.value.isMovie && get("mediaType") == "anime") {
+                    put("mediaType", "movie")
                 }
             }
-            val mediaWithSeason = targetMedia.copy(extra = enrichedExtra)
+            val curSeason = _state.value.availableSeasons.firstOrNull { it.seasonNumber == currentSeasonNumber }
+                ?: initialSeasons.firstOrNull { it.seasonNumber == currentSeasonNumber }
+            val startEp = curSeason?.startEpisodeNumber ?: 1
+            val seasonEpCount = curSeason?.episodeCount
+            val effectiveEpCount = seasonEpCount?.takeIf { it > 0 } ?: totalEpisodes.takeIf { it > 0 }
+            val mediaWithSeason = targetMedia.copy(
+                episodeCount = effectiveEpCount ?: targetMedia.episodeCount,
+                extra = enrichedExtra,
+            )
             val fetchedEpisodesResult = withContext(Dispatchers.IO) {
-                withTimeoutOrNull(25000L) {
+                withTimeoutOrNull(10000L) {
                     runCatching { source.episodes(mediaWithSeason) }
                 }
             }
@@ -894,17 +931,12 @@ class PlayerViewModel(
                 return@launch
             }
 
-            val fallbackExtra = mapOf(
-                TachiyomiAnimeSource.KEY_ANIME_URL to targetMedia.url,
-                "animeTitle" to targetMedia.title,
-            )
+            val fallbackExtra = enrichedExtra.toMutableMap().apply {
+                put(TachiyomiAnimeSource.KEY_ANIME_URL, targetMedia.url)
+                put("animeTitle", targetMedia.title)
+            }
 
-            // Movies or single episode titles:
             val sortedFetched = fetchedEpisodes.sortedBy { it.number }
-            val curSeason = _state.value.availableSeasons.firstOrNull { it.seasonNumber == currentSeasonNumber }
-                ?: initialSeasons.firstOrNull { it.seasonNumber == currentSeasonNumber }
-            val startEp = curSeason?.startEpisodeNumber ?: 1
-            val seasonEpCount = curSeason?.episodeCount
             val maxSourceEp = sortedFetched.lastOrNull()?.number?.toInt() ?: 1
             val isContinuousSource = startEp > 1 && maxSourceEp >= startEp
 
@@ -920,32 +952,47 @@ class PlayerViewModel(
                     (sortedFetched.firstOrNull() ?: SourceEpisode(url = targetMedia.url, number = 1f, title = "Movie")).let { first ->
                         first.copy(
                             number = 1f,
-                            extra = if (first.extra.isEmpty()) fallbackExtra else first.extra,
+                            extra = fallbackExtra + first.extra + mapOf(
+                                "season" to currentSeasonNumber.toString(),
+                                "episode" to "1",
+                            ),
                         )
                     }
                 )
             } else if (isContinuousSource && seasonEpCount != null && seasonEpCount > 0) {
-                // For continuous anime where source has absolute episode numbering (e.g. One Piece Ep 62..77)
-                // map each episode in the season (1..seasonEpCount) to its corresponding source absolute episode
                 (1..seasonEpCount).map { epInSeason ->
                     val absEp = (startEp - 1) + epInSeason
                     val src = map[absEp] ?: sortedFetched.getOrNull(absEp - 1)
+                    val epUrl = src?.url?.takeIf { it.isNotBlank() } ?: "${targetMedia.url}&season=$currentSeasonNumber&episode=$epInSeason"
                     SourceEpisode(
                         number = epInSeason.toFloat(),
-                        url = src?.url ?: sortedFetched.getOrNull(absEp - 1)?.url ?: "",
+                        url = epUrl,
                         title = src?.title?.takeIf { it.isNotBlank() } ?: "Episode $epInSeason",
-                        extra = src?.extra ?: fallbackExtra,
+                        extra = fallbackExtra + (src?.extra ?: emptyMap()) + mapOf(
+                            "season" to currentSeasonNumber.toString(),
+                            "episode" to epInSeason.toString(),
+                        ),
                     )
                 }
             } else {
-                // Ensure episodes are ALWAYS in strictly ascending order by number (1, 2, 3, ... maxEp)
-                // so the episode list is never in jumbles regardless of what order the extension uses!
                 (1..maxEp).map { epNum ->
-                    map[epNum] ?: SourceEpisode(
+                    val epUrl = map[epNum]?.url?.takeIf { it.isNotBlank() }
+                        ?: sortedFetched.getOrNull(epNum - 1)?.url?.takeIf { it.isNotBlank() }
+                        ?: "${targetMedia.url}&season=$currentSeasonNumber&episode=$epNum"
+                    map[epNum]?.copy(
+                        url = epUrl,
+                        extra = fallbackExtra + map[epNum]!!.extra + mapOf(
+                            "season" to currentSeasonNumber.toString(),
+                            "episode" to epNum.toString(),
+                        ),
+                    ) ?: SourceEpisode(
                         number = epNum.toFloat(),
-                        url = sortedFetched.getOrNull(epNum - 1)?.url ?: "",
+                        url = epUrl,
                         title = "Episode $epNum",
-                        extra = fallbackExtra,
+                        extra = fallbackExtra + mapOf(
+                            "season" to currentSeasonNumber.toString(),
+                            "episode" to epNum.toString(),
+                        ),
                     )
                 }
             }
@@ -973,14 +1020,16 @@ class PlayerViewModel(
                 ?: epList.firstOrNull()
                 ?: SourceEpisode(
                     number = currentEpNumber.toFloat(),
-                    url = targetMedia.url,
+                    url = "${targetMedia.url}&season=$currentSeasonNumber&episode=$currentEpNumber",
                     title = "Episode $currentEpNumber",
-                    extra = fallbackExtra,
+                    extra = fallbackExtra + mapOf(
+                        "season" to currentSeasonNumber.toString(),
+                        "episode" to currentEpNumber.toString(),
+                    ),
                 )
 
-            // 3. Query episode options (with 25s timeout)
             val options = withContext(Dispatchers.IO) {
-                withTimeoutOrNull(25000L) {
+                withTimeoutOrNull(10000L) {
                     runCatching { resolver.options(source, currentEp) }.getOrNull()
                 }
             }
@@ -1054,22 +1103,25 @@ class PlayerViewModel(
         }
     }
 
-    private suspend fun resolveChain(source: MediaSource, episode: SourceEpisode, afterServer: String?, resumeAt: Long) {
-        val rawServerKey = selectedHosterKey ?: _state.value.selectedServer
-        val cleanServerKey = when {
-            rawServerKey == null -> null
-            rawServerKey.startsWith("hoster:") -> {
-                val rest = rawServerKey.removePrefix("hoster:")
-                val colonIdx = rest.indexOf(':')
-                if (colonIdx != -1) rest.substring(colonIdx + 1) else rest
-            }
-            rawServerKey.startsWith("source:") -> {
-                val rest = rawServerKey.removePrefix("source:")
-                val colonIdx = rest.indexOf(':')
-                if (colonIdx != -1) rest.substring(colonIdx + 1).takeIf { it.isNotBlank() } else null
-            }
-            else -> rawServerKey
+    private fun cleanServerKey(raw: String?): String? = when {
+        raw == null -> null
+        raw.startsWith("hoster:") -> {
+            val rest = raw.removePrefix("hoster:")
+            val colonIdx = rest.indexOf(':')
+            if (colonIdx != -1) rest.substring(colonIdx + 1) else rest
         }
+        raw.startsWith("source:") -> {
+            val rest = raw.removePrefix("source:")
+            val colonIdx = rest.indexOf(':')
+            if (colonIdx != -1) rest.substring(colonIdx + 1).takeIf { it.isNotBlank() } else null
+        }
+        else -> raw
+    }
+
+    private suspend fun resolveChain(source: MediaSource, episode: SourceEpisode, afterServer: String?, resumeAt: Long) {
+        val cleanAfter = cleanServerKey(afterServer)
+        val rawServerKey = selectedHosterKey ?: _state.value.selectedServer
+        val cleanServerKey = if (cleanAfter != null) null else cleanServerKey(rawServerKey)
         val selection = PlaybackSelection(
             audio = _state.value.audio,
             serverKey = cleanServerKey,
@@ -1079,7 +1131,8 @@ class PlayerViewModel(
                 source = source,
                 episode = episode,
                 requested = selection,
-                startAfterServer = afterServer,
+                startAfterServer = cleanAfter,
+                failedServers = failedPlaybackServers,
                 resumedAtMs = resumeAt,
             ).collect { event ->
                 when (event) {
@@ -1113,8 +1166,8 @@ class PlayerViewModel(
         val chosenQuality = if (currentQualityId.isNotBlank() && currentQualityId != DerivedUi.AUTO_ID) {
             qualityList?.firstOrNull {
                 it.id == currentQualityId ||
-                it.label.equals(currentQualityId, ignoreCase = true) ||
-                DerivedUi.sanitizeQualityLabel(it.label).equals(sanitizedCurrent, ignoreCase = true)
+                    it.label.equals(currentQualityId, ignoreCase = true) ||
+                    DerivedUi.sanitizeQualityLabel(it.label).equals(sanitizedCurrent, ignoreCase = true)
             }?.id ?: currentQualityId
         } else {
             qualityList?.firstOrNull { it.label.equals(defaultQuality, ignoreCase = true) }?.id
@@ -1141,18 +1194,21 @@ class PlayerViewModel(
         val media = resolved ?: return
         val streams = streamsForQuality(qualityId, media)
         val targetUrl = streams.firstOrNull()?.url
-        val currentUrl = media.streams.firstOrNull()?.url
         val isHttpUrl = targetUrl != null && (targetUrl.startsWith("http://", ignoreCase = true) || targetUrl.startsWith("https://", ignoreCase = true))
-        // Only re-prepare if switching to a physically distinct file URL that is an actual HTTP/HTTPS stream!
-        if (streams.isNotEmpty() && isHttpUrl && targetUrl != currentUrl) {
+        if (streams.isNotEmpty() && isHttpUrl && targetUrl != currentlyPlayingUrl) {
+            currentlyPlayingUrl = targetUrl
             val startMs = if (resumeAtMs >= 0L) resumeAtMs else pendingResumeAtMs
+            val primaryStream = streams.firstOrNull()
+            val mergedHeaders = media.headers.toMutableMap().apply {
+                primaryStream?.headers?.let { putAll(it) }
+            }
             _commands.trySend(
                 PlayerCommand.Prepare(
                     streams = streams,
                     startPositionMs = startMs,
                     subtitles = media.subtitles,
                     selectedSubtitle = _state.value.selectedSubtitle,
-                    headers = media.headers,
+                    headers = mergedHeaders,
                 ),
             )
         }
@@ -1168,10 +1224,17 @@ class PlayerViewModel(
         _commands.trySend(PlayerCommand.SetSpeed(speed))
     }
 
-    /** Mid-playback failure: continue the chain after the server that just died (ARCH §7.3). */
     fun onPlaybackFailed(positionMs: Long) {
         val deadServer = _state.value.selectedServer
         selectedHosterKey = null
+        isManualServerSelection = false
+        val cleanDead = cleanServerKey(deadServer)
+        if (!cleanDead.isNullOrBlank()) {
+            failedPlaybackServers.add(cleanDead)
+        }
+        if (!deadServer.isNullOrBlank()) {
+            failedPlaybackServers.add(deadServer)
+        }
         job?.cancel()
         job = viewModelScope.launch {
             _state.update { it.copy(phase = PlayerPhase.RESOLVING, error = null) }
@@ -1181,7 +1244,6 @@ class PlayerViewModel(
         }
     }
 
-    /** The player reports the video levels it found in an adaptive master (ARCH §6). */
     fun onPlayerQualityLevels(levels: List<Stream>) {
         val media = resolved ?: return
         val sheet = DerivedUi.qualitySheet(media, levels)
@@ -1203,22 +1265,22 @@ class PlayerViewModel(
         val media = resolved ?: return
         val streams = streamsForQuality(_state.value.selectedQualityId, media)
         if (streams.isEmpty()) return
+        val primaryStream = streams.firstOrNull()
+        currentlyPlayingUrl = primaryStream?.url
+        val mergedHeaders = media.headers.toMutableMap().apply {
+            primaryStream?.headers?.let { putAll(it) }
+        }
         _commands.trySend(
             PlayerCommand.Prepare(
                 streams = streams,
                 startPositionMs = positionMs,
                 subtitles = media.subtitles,
                 selectedSubtitle = _state.value.selectedSubtitle,
-                headers = media.headers,
+                headers = mergedHeaders,
             ),
         )
     }
 
-    /**
-     * Fast-path stream validation for Continue Watching & raw playback.
-     * Directly validates the saved stream URL via a lightweight range probe.
-     * If still valid, plays immediately without scraping/matching sources from scratch!
-     */
     private fun probeAndPlaySavedStream(saved: HistoryItem, resumeAtMs: Long) {
         val streamUrl = saved.streamUrl ?: run {
             loadAndResolve(resumeAt = resumeAtMs)
@@ -1272,7 +1334,6 @@ class PlayerViewModel(
                     )
                 )
             } else if (isActive) {
-                // Saved stream expired or unreachable -> fallback seamlessly to resolver
                 _state.update { it.copy(message = null) }
                 loadAndResolve(resumeAt = pendingResumeAtMs)
             }
@@ -1307,7 +1368,6 @@ class PlayerViewModel(
         }.getOrDefault(false)
     }
 
-    /** Re-prepares the current resolved stream (e.g. returning from Subtitle Settings). */
     fun rePrepareCurrentIfReady(resumePositionMs: Long = -1L) {
         val media = resolved ?: return
         val streams = streamsForQuality(_state.value.selectedQualityId, media)
@@ -1329,10 +1389,10 @@ class PlayerViewModel(
         val all = media.streams.sortedByDescending { it.height ?: 0 }
         if (id == DerivedUi.AUTO_ID) return all
         val sanitized = DerivedUi.sanitizeQualityLabel(id.substringBefore('#'))
-        val chosen = _state.value.quality?.firstOrNull { 
-            it.id == id || DerivedUi.sanitizeQualityLabel(it.label).equals(sanitized, ignoreCase = true) 
-        }?.stream ?: media.streams.firstOrNull { 
-            DerivedUi.sanitizeQualityLabel(it.qualityLabel).equals(sanitized, ignoreCase = true) 
+        val chosen = _state.value.quality?.firstOrNull {
+            it.id == id || DerivedUi.sanitizeQualityLabel(it.label).equals(sanitized, ignoreCase = true)
+        }?.stream ?: media.streams.firstOrNull {
+            DerivedUi.sanitizeQualityLabel(it.qualityLabel).equals(sanitized, ignoreCase = true)
         } ?: return all
         return listOf(chosen)
     }
@@ -1350,6 +1410,7 @@ class PlayerViewModel(
                     seasonNumber = _state.value.seasonNumber,
                     isTmdb = isTmdb,
                     isAdult = isAdult,
+                    romaji = metaQuery.titles.romaji,
                 )
                 if (metaMap.isNotEmpty()) {
                     _state.update { current ->

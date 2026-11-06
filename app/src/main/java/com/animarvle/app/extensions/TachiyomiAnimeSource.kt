@@ -204,10 +204,11 @@ class TachiyomiAnimeSource(
             }
 
             if (explicitDub.isNotEmpty() || explicitSub.isNotEmpty()) {
-                dubHosters.addAll(explicitDub.ifEmpty { allServers })
+                dubHosters.addAll(explicitDub)
                 subHosters.addAll(explicitSub.ifEmpty { allServers })
-            } else {
+            } else if (isDubMedia || isSourceDubSpecialized) {
                 dubHosters.addAll(allServers)
+            } else {
                 subHosters.addAll(allServers)
             }
         }

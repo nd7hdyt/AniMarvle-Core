@@ -581,7 +581,7 @@ class DetailsFragment : Fragment() {
             val preferTmdb = media.isTmdb
             val effectiveMediaType = when {
                 isDonghua -> "ANIME"
-                preferTmdb -> if (isMovie) "MOVIE" else "TV"
+                preferTmdb -> if (isMovie) "MOVIE" else if (type == MediaType.ANIME) "ANIME" else "TV"
                 type == MediaType.MOVIE -> "MOVIE"
                 else -> "ANIME"
             }
@@ -603,6 +603,7 @@ class DetailsFragment : Fragment() {
                 putSerializable("seasons", ArrayList(media.seasons))
             }
             putBoolean("preferTmdb", preferTmdb)
+            putBoolean("isMovie", isMovie)
         }
         findNavController().navigate(R.id.playerFragment, args)
     }
@@ -706,7 +707,10 @@ class DetailsFragment : Fragment() {
                                 withContext(Dispatchers.IO) {
                                     runCatching {
                                         val choice = com.animarvle.sourceapi.Choice(option?.audio ?: com.animarvle.sourceapi.Audio.SUB, option?.serverKey.orEmpty())
-                                        source.resolve(ep, choice).streams.firstOrNull()?.url
+                                        val resolved = source.resolve(ep, choice)
+                                        resolved.streams.firstOrNull {
+                                            it.qualityLabel.equals(option?.qualityBadge, ignoreCase = true)
+                                        }?.url ?: resolved.streams.firstOrNull()?.url
                                     }.getOrNull()
                                 } ?: option?.streamUrl.orEmpty()
                             } else {
@@ -756,10 +760,12 @@ class DetailsFragment : Fragment() {
         val isMovieFormat = media?.format?.contains("MOVIE", ignoreCase = true) == true ||
             media?.format?.contains("FILM", ignoreCase = true) == true
         val isMovie = isMovieFormat || (isTmdbMedia && !isAnimation && !isDonghuaMedia && (media?.episodes ?: 1) <= 1 && media?.seasons.isNullOrEmpty())
-        val type = if (isDonghuaMedia || !isTmdbMedia || isAnimation) {
+        val type = if (isDonghuaMedia || isAnimation) {
             MediaType.ANIME
-        } else {
+        } else if (isMovie || isTmdbMedia) {
             MediaType.MOVIE
+        } else {
+            MediaType.ANIME
         }
         return type to isMovie
     }

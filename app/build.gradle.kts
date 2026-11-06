@@ -24,8 +24,8 @@ android {
         applicationId = "com.animarvle.app"
         minSdk = 26
         targetSdk = 37
-        versionCode = 2
-        versionName = "0.1.1"
+        versionCode = 3
+        versionName = "0.1.2"
 
         val tmdbKey = getSecret("TMDB_API_KEY", "db4ff5546d1b35981cc4715cdd5f27f7")
         val googleClientId = getSecret("GOOGLE_WEB_CLIENT_ID", "547903414124-6sl6utfrls85ajguhhf2v6kqgg00hq09.apps.googleusercontent.com")

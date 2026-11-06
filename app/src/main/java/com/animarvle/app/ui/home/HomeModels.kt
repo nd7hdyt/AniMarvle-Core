@@ -65,6 +65,19 @@ sealed class FeedRow {
         val title: String,
         val items: List<Media>
     ) : FeedRow()
+
+    // 5. Dynamic Filter Rail with Dropdown Option Selector & Optional Dual Pills
+    data class FilterableRail(
+        val railId: String,
+        val title: String,
+        val filterType: String,
+        val selectedOption: String,
+        val availableOptions: List<String>,
+        val items: List<Media>,
+        val pillOptions: List<String> = emptyList(),
+        val activePillIndex: Int = 0,
+        val isLoading: Boolean = false,
+    ) : FeedRow()
 }
 
 class MediaDiffCallback : DiffUtil.ItemCallback<Media>() {

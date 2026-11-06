@@ -22,6 +22,9 @@ class HomeFeedAdapter(
     private val onMyListClick: (Media) -> Unit = {},
     private val onSeeAllClick: (String) -> Unit = {},
     private val onProviderClick: (ProviderLogo) -> Unit = {},
+    private val onFilterRailHeaderClick: (FeedRow.FilterableRail) -> Unit = {},
+    private val onFilterRailOptionSelected: (FeedRow.FilterableRail, String) -> Unit = { _, _ -> },
+    private val onFilterRailPillSelected: (FeedRow.FilterableRail, Int) -> Unit = { _, _ -> },
 ) : ListAdapter<FeedRow, RecyclerView.ViewHolder>(FeedRowDiffCallback()) {
 
     private var savedMediaIds: Set<Long> = emptySet()
@@ -37,6 +40,7 @@ class HomeFeedAdapter(
         private const val TYPE_CONTINUE_WATCHING = 1
         private const val TYPE_PROVIDER_BUBBLES = 2
         private const val TYPE_STANDARD_RAIL = 3
+        private const val TYPE_FILTERABLE_RAIL = 4
     }
 
     override fun getItemViewType(position: Int): Int {
@@ -45,6 +49,7 @@ class HomeFeedAdapter(
             is FeedRow.ContinueWatching -> TYPE_CONTINUE_WATCHING
             is FeedRow.ProviderBubbles -> TYPE_PROVIDER_BUBBLES
             is FeedRow.StandardRail -> TYPE_STANDARD_RAIL
+            is FeedRow.FilterableRail -> TYPE_FILTERABLE_RAIL
         }
     }
 
@@ -67,6 +72,10 @@ class HomeFeedAdapter(
                 val view = inflater.inflate(R.layout.item_feed_standard_rail, parent, false)
                 StandardRailViewHolder(view)
             }
+            TYPE_FILTERABLE_RAIL -> {
+                val view = inflater.inflate(R.layout.item_feed_filterable_rail, parent, false)
+                FilterableRailViewHolder(view)
+            }
             else -> throw IllegalArgumentException("Unknown viewType: $viewType")
         }
     }
@@ -78,6 +87,7 @@ class HomeFeedAdapter(
             is ContinueWatchingViewHolder -> holder.bind(row as FeedRow.ContinueWatching)
             is ProviderBubblesViewHolder -> holder.bind(row as FeedRow.ProviderBubbles)
             is StandardRailViewHolder -> holder.bind(row as FeedRow.StandardRail)
+            is FilterableRailViewHolder -> holder.bind(row as FeedRow.FilterableRail)
         }
     }
 
@@ -207,6 +217,77 @@ class HomeFeedAdapter(
             }
         }
     }
+
+    inner class FilterableRailViewHolder(view: View) : RecyclerView.ViewHolder(view) {
+        private val titleContainer: View = view.findViewById(R.id.titleContainer)
+        private val tvRailTitle: TextView = view.findViewById(R.id.tvRailTitle)
+        private val btnFilterDropdown: View = view.findViewById(R.id.btnFilterDropdown)
+        private val tvSelectedFilter: TextView = view.findViewById(R.id.tvSelectedFilter)
+        private val pillContainer: View = view.findViewById(R.id.pillContainer)
+        private val pillOption1: TextView = view.findViewById(R.id.pillOption1)
+        private val pillOption2: TextView = view.findViewById(R.id.pillOption2)
+        private val railProgressBar: ProgressBar = view.findViewById(R.id.railProgressBar)
+        private val recyclerView: RecyclerView = view.findViewById(R.id.horizontalRecyclerView)
+        private val horizontalAdapter = HorizontalMediaAdapter { media -> onMediaClick(media) }
+
+        init {
+            recyclerView.layoutManager = LinearLayoutManager(view.context, LinearLayoutManager.HORIZONTAL, false)
+            recyclerView.adapter = horizontalAdapter
+        }
+
+        fun bind(row: FeedRow.FilterableRail) {
+            tvRailTitle.text = row.title
+            tvSelectedFilter.text = row.selectedOption
+            railProgressBar.visibility = if (row.isLoading) View.VISIBLE else View.GONE
+            horizontalAdapter.submitList(row.items)
+
+            titleContainer.setOnClickListener {
+                onFilterRailHeaderClick(row)
+            }
+
+            btnFilterDropdown.setOnClickListener { anchor ->
+                com.animarvle.app.ui.common.FilterMenuPopupHelper.showOptionMenu(
+                    anchor = anchor,
+                    options = row.availableOptions,
+                    selectedOption = row.selectedOption,
+                    onOptionSelected = { chosen ->
+                        onFilterRailOptionSelected(row, chosen)
+                    }
+                )
+            }
+
+            if (row.pillOptions.size >= 2) {
+                pillContainer.visibility = View.VISIBLE
+                pillOption1.text = row.pillOptions[0]
+                pillOption2.text = row.pillOptions[1]
+
+                if (row.activePillIndex == 0) {
+                    pillOption1.setBackgroundResource(R.drawable.bg_rail_pill_active)
+                    pillOption1.setTextColor(android.graphics.Color.WHITE)
+                    pillOption2.setBackgroundResource(R.drawable.bg_rail_pill_inactive)
+                    pillOption2.setTextColor(android.graphics.Color.parseColor("#99FFFFFF"))
+                } else {
+                    pillOption2.setBackgroundResource(R.drawable.bg_rail_pill_active)
+                    pillOption2.setTextColor(android.graphics.Color.WHITE)
+                    pillOption1.setBackgroundResource(R.drawable.bg_rail_pill_inactive)
+                    pillOption1.setTextColor(android.graphics.Color.parseColor("#99FFFFFF"))
+                }
+
+                pillOption1.setOnClickListener {
+                    if (row.activePillIndex != 0) {
+                        onFilterRailPillSelected(row, 0)
+                    }
+                }
+                pillOption2.setOnClickListener {
+                    if (row.activePillIndex != 1) {
+                        onFilterRailPillSelected(row, 1)
+                    }
+                }
+            } else {
+                pillContainer.visibility = View.GONE
+            }
+        }
+    }
 }
 
 class ProviderBubbleAdapter(
@@ -267,9 +348,12 @@ class FeedRowDiffCallback : DiffUtil.ItemCallback<FeedRow>() {
     override fun areItemsTheSame(oldItem: FeedRow, newItem: FeedRow): Boolean {
         if (oldItem::class != newItem::class) return false
         return when {
+            oldItem is FeedRow.FilterableRail && newItem is FeedRow.FilterableRail -> oldItem.railId == newItem.railId
             oldItem is FeedRow.StandardRail && newItem is FeedRow.StandardRail -> oldItem.title == newItem.title
             oldItem is FeedRow.ContinueWatching && newItem is FeedRow.ContinueWatching -> oldItem.title == newItem.title
-            else -> true
+            oldItem is FeedRow.HeroCarousel && newItem is FeedRow.HeroCarousel -> true
+            oldItem is FeedRow.ProviderBubbles && newItem is FeedRow.ProviderBubbles -> true
+            else -> false
         }
     }
 

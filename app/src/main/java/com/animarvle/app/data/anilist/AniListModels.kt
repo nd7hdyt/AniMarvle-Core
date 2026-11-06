@@ -125,3 +125,16 @@ data class ScheduleData(val Page: SchedulePage? = null)
 
 @Serializable
 data class MediaData(val Media: Media? = null)
+
+@Serializable
+data class StudioMediaConnection(val nodes: List<Media> = emptyList())
+
+@Serializable
+data class StudioNode(
+    val id: Long? = null,
+    val name: String? = null,
+    val media: StudioMediaConnection? = null,
+)
+
+@Serializable
+data class StudioData(val Studio: StudioNode? = null)

@@ -25,7 +25,7 @@ class AniListApi(
         explicitNulls = false
     }
 
-    suspend fun trending(page: Int = 1, perPage: Int = 20): List<Media> =
+    suspend fun trending(page: Int = 1, perPage: Int = 50): List<Media> =
         pageQuery(trendingQuery(isAdultProvider()), page, perPage).media
 
     suspend fun topAiring(page: Int = 1, perPage: Int = 20): List<Media> =
@@ -61,9 +61,9 @@ class AniListApi(
     suspend fun donghua(page: Int = 1, perPage: Int = 20): List<Media> =
         pageQuery(donghuaQuery(isAdultProvider()), page, perPage).media
 
-    suspend fun search(query: String, page: Int = 1, perPage: Int = 20): List<Media> =
+    suspend fun search(query: String, page: Int = 1, perPage: Int = 50, includeAdult: Boolean = false): List<Media> =
         post(
-            searchQuery(isAdultProvider()),
+            searchQuery(includeAdult || isAdultProvider()),
             buildMap {
                 put("page", page.toString())
                 put("perPage", perPage.toString())
@@ -72,8 +72,55 @@ class AniListApi(
             TrendingData.serializer(),
         ).Page?.media.orEmpty()
 
+    suspend fun discoverAnime(
+        page: Int = 1,
+        perPage: Int = 50,
+        genre: String? = null,
+        format: String? = null,
+        year: Int? = null,
+        sort: String = "POPULARITY_DESC",
+        includeAdult: Boolean = false,
+        isAdultOnly: Boolean = false,
+    ): List<Media> {
+        val adultFilterStr = when {
+            isAdultOnly -> ", isAdult: true"
+            includeAdult || isAdultProvider() -> ""
+            else -> ", isAdult: false"
+        }
+        val genreFilterStr = if (!genre.isNullOrBlank()) ", genre: \"$genre\"" else ""
+        val formatFilterStr = if (!format.isNullOrBlank()) ", format: $format" else ""
+        val yearFilterStr = if (year != null && year > 0) ", seasonYear: $year" else ""
+
+        val query = """
+            query (${'$'}page: Int, ${'$'}perPage: Int) {
+              Page(page: ${'$'}page, perPage: ${'$'}perPage) {
+                pageInfo { currentPage hasNextPage total }
+                media(type: ANIME, sort: $sort$genreFilterStr$formatFilterStr$yearFilterStr$adultFilterStr) { $MEDIA_FIELDS }
+              }
+            }
+        """.trimIndent()
+        return pageQuery(query, page, perPage).media
+    }
+
     suspend fun details(id: Long): Media? =
         post(DETAILS, mapOf("id" to id.toString()), MediaData.serializer()).Media
+
+    suspend fun studioAnime(studioName: String, page: Int = 1, perPage: Int = 25): List<Media> = runCatching {
+        val query = """
+            query (${'$'}studio: String, ${'$'}page: Int, ${'$'}perPage: Int) {
+              Studio(search: ${'$'}studio) {
+                media(sort: POPULARITY_DESC, page: ${'$'}page, perPage: ${'$'}perPage) {
+                  nodes { $MEDIA_FIELDS }
+                }
+              }
+            }
+        """.trimIndent()
+        post(
+            query,
+            mapOf("studio" to studioName, "page" to page.toString(), "perPage" to perPage.toString()),
+            StudioData.serializer(),
+        ).Studio?.media?.nodes.orEmpty()
+    }.getOrElse { emptyList() }
 
     suspend fun recommendations(id: Long): List<Media> =
         post(DETAILS, mapOf("id" to id.toString()), MediaData.serializer())

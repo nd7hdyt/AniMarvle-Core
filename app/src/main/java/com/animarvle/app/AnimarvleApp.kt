@@ -52,7 +52,23 @@ class AnimarvleApp : Application(), ImageLoaderFactory {
         private set
 
     override fun newImageLoader(): ImageLoader {
+        val imageOkHttp = okhttp3.OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                val orig = chain.request()
+                val urlStr = orig.url.toString()
+                val builder = orig.newBuilder()
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                if (urlStr.contains("pinoymoviepedia")) {
+                    builder.header("Referer", "https://pinoymoviepedia.ru/")
+                } else if (urlStr.contains("cat3movie") || urlStr.contains("blogger.googleusercontent.com") || urlStr.contains("bp.blogspot.com")) {
+                    builder.header("Referer", "https://www.cat3movie.club/")
+                }
+                chain.proceed(builder.build())
+            }
+            .build()
+
         return ImageLoader.Builder(this)
+            .okHttpClient(imageOkHttp)
             .allowHardware(false)
             .crossfade(true)
             .build()
@@ -79,12 +95,36 @@ class AnimarvleApp : Application(), ImageLoaderFactory {
     companion object {
         private val registeredDonghuaIds = java.util.concurrent.ConcurrentHashMap.newKeySet<Long>()
         private val registeredDonghuaTitles = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+        private val registeredPinoyTitles = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+        private val registeredAsianAdultTitles = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
 
         fun registerDonghua(id: Long?, vararg titles: String?) {
             if (id != null) registeredDonghuaIds.add(id)
             titles.filterNotNull().filter { it.isNotBlank() }.forEach {
                 registeredDonghuaTitles.add(it.trim().lowercase())
             }
+        }
+
+        fun registerPinoy(vararg titles: String?) {
+            titles.filterNotNull().filter { it.isNotBlank() }.forEach {
+                registeredPinoyTitles.add(it.trim().lowercase())
+            }
+        }
+
+        fun registerAsianAdult(vararg titles: String?) {
+            titles.filterNotNull().filter { it.isNotBlank() }.forEach {
+                registeredAsianAdultTitles.add(it.trim().lowercase())
+            }
+        }
+
+        fun isPinoyTitle(title: String?): Boolean {
+            if (title.isNullOrBlank()) return false
+            val tl = title.lowercase().trim()
+            if (registeredPinoyTitles.contains(tl)) return true
+            if (registeredPinoyTitles.any { tl.contains(it) || it.contains(tl) }) return true
+            return tl.contains("vivamax") || tl.contains("pinoy") || tl.contains("tagalog") ||
+                tl.contains("scorpio nights") || tl.contains("alindog") || tl.contains("sukdulan") ||
+                tl.contains("dutdot")
         }
 
         fun isDonghua(title: String?, mediaId: Long? = null): Boolean {
@@ -143,6 +183,27 @@ class AnimarvleApp : Application(), ImageLoaderFactory {
                 "donghua",
             )
             return donghuaList.any { t.contains(it) }
+        }
+
+        fun isAsianAdultTitle(title: String?): Boolean {
+            if (title.isNullOrBlank()) return false
+            val tl = title.lowercase().trim()
+            if (registeredAsianAdultTitles.contains(tl)) return true
+            if (registeredAsianAdultTitles.any { it.length >= 6 && (tl == it || tl.contains(it)) }) return true
+
+            if (isDonghua(tl) || tl.contains("delicious in dungeon") || tl.contains("dungeon meshi")) return false
+
+            val hasJavCode = Regex("""\b(?:ipx|ssis|mide|jul|sone|stars|abp|abw|ssni|pred|adn|jufe|fset|sdde|fc2)[-_]?\d{2,5}\b""").containsMatchIn(tl)
+            val hasAdultKeyword = listOf(
+                "hitozuma", "in'yoku", "musebinaki", "jav ", "[uncensored]", "pink film",
+                "roman porno", "erotic tutor", "soapland", "fuzoku", "chikan",
+                "not in the textbooks", "kyoukasho", "sweet whip", "antiporno",
+                "creampie", "blowjob", "shoko takahashi", "delicious flight",
+                "cat3", "mov18plus", "scarlet innocence", "green chair",
+                "female hostel", "house with a nice view", "delicious room",
+                "good lawyer's wife", "love clinic", "purpose of reunion"
+            ).any { tl.contains(it) }
+            return hasJavCode || hasAdultKeyword
         }
     }
 }
@@ -276,6 +337,8 @@ class AppContainer(
     val builtinSources: List<MediaSource> by lazy {
         listOf(
             com.animarvle.app.data.source.builtin.AnimarvleStreamSource(http, appContext),
+            com.animarvle.app.data.source.builtin.AsianCinemaSource(http),
+            com.animarvle.app.data.source.builtin.PinoyMoviePediaSource(http),
             // Kept in codebase for future reference; disabled in active build per AniVortex standard:
             // com.animarvle.app.data.source.builtin.AllAnimeSource(http),
             // com.animarvle.app.data.source.builtin.AniKotoSource(http),
@@ -289,7 +352,12 @@ class AppContainer(
      */
     fun sourcesFor(type: MediaType, title: String? = null): List<MediaSource> {
         val isDonghuaTitle = AnimarvleApp.isDonghua(title)
+        val isAsianAdultTitle = AnimarvleApp.isAsianAdultTitle(title)
+        val isPinoyTitle = AnimarvleApp.isPinoyTitle(title)
         val relay = builtinSources.first()
+        val asianAdult = builtinSources.find { it is com.animarvle.app.data.source.builtin.AsianCinemaSource }
+        val pinoy = builtinSources.find { it is com.animarvle.app.data.source.builtin.PinoyMoviePediaSource }
+
         val extra = extensionSources.filter { type in it.supportedTypes }
         val sortedExtra = when {
             isDonghuaTitle -> {
@@ -306,16 +374,26 @@ class AppContainer(
                     }
                 })
             }
-            type == MediaType.MOVIE -> {
+            type == MediaType.MOVIE || isAsianAdultTitle || isPinoyTitle -> {
                 extra.sortedWith(compareByDescending { src ->
                     val n = src.name.lowercase()
                     when {
-                        n.contains("moviebox") -> 200
-                        n.contains("hexawatch") -> 180
-                        n.contains("sflix") -> 170
-                        n.contains("kisskh") -> 160
-                        n.contains("uniquestream") -> 150
-                        n.contains("movie") -> 140
+                        n.contains("kisskh") -> 300
+                        n.contains("hexawatch") -> 280
+                        n.contains("moviebox") -> 250
+                        n.contains("uniquestream") -> 200
+                        n.contains("movie") || n.contains("film") || n.contains("cinema") -> 150
+                        n.contains("sflix") -> 60
+                        n.contains("flix") || n.contains("stream") -> 100
+                        // Anime scrapers get very low priority for movies
+                        n.contains("anime") || n.startsWith("ani") ||
+                        n.contains("anichi") || n.contains("anikoto") || n.contains("animekai") ||
+                        n.contains("aniwave") || n.contains("gogoanime") || n.contains("hianime") ||
+                        n.contains("zoro") || n.contains("animepahe") || n.contains("wcostream") ||
+                        n.contains("123anime") || n.contains("lucifer") || n.contains("allanime") ||
+                        n.contains("otaku") || n.contains("donghua") || n.contains("toki") ||
+                        n.contains("take") || n.contains("onsen") || n.contains("av1") ||
+                        n.contains("paradise") -> 10
                         else -> 50
                     }
                 })
@@ -325,13 +403,12 @@ class AppContainer(
             }
         }
 
-        return if (isDonghuaTitle) {
-            // For Donghua, dedicated scrapers (Anichi, KissKH) win immediately.
-            // Builtin Cloudflare relay does not host Chinese donghua, so put it after Anichi/KissKH
-            // to eliminate the initial 3-5s timeout and buffering!
-            sortedExtra + listOf(relay)
-        } else {
-            listOf(relay) + sortedExtra
+        return when {
+            isPinoyTitle -> listOfNotNull(pinoy, asianAdult) + sortedExtra + listOfNotNull(relay)
+            isAsianAdultTitle -> listOfNotNull(asianAdult, pinoy) + sortedExtra + listOfNotNull(relay)
+            isDonghuaTitle -> sortedExtra + listOf(relay)
+            type == MediaType.MOVIE -> listOfNotNull(relay) + sortedExtra + listOfNotNull(pinoy, asianAdult)
+            else -> listOfNotNull(relay) + sortedExtra + listOfNotNull(asianAdult, pinoy)
         }
     }
 
@@ -365,7 +442,22 @@ class AppContainer(
     }
 
     val downloadDataSourceFactory: DefaultDataSource.Factory by lazy {
-        val okHttpFactory = OkHttpDataSource.Factory(http)
+        val downloadHttp = http.newBuilder()
+            .addInterceptor { chain ->
+                val req = chain.request()
+                val urlStr = req.url.toString()
+                val cdnHeaders = com.animarvle.app.data.source.builtin.AnimarvleStreamSource.buildHeadersForUrl(urlStr)
+                val newReq = req.newBuilder().apply {
+                    cdnHeaders.forEach { (k, v) ->
+                        if (req.header(k) == null) {
+                            header(k, v)
+                        }
+                    }
+                }.build()
+                chain.proceed(newReq)
+            }
+            .build()
+        val okHttpFactory = OkHttpDataSource.Factory(downloadHttp)
         DefaultDataSource.Factory(appContext, okHttpFactory)
     }
 

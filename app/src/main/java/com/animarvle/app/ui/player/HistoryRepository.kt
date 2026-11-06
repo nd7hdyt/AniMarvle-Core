@@ -336,6 +336,24 @@ class HistoryRepository(context: Context) {
             if (knownTvTitles.contains(lowerTitle)) return "TV"
             if (knownMovieTitles.contains(lowerTitle)) return "MOVIE"
 
+            // Asian Cinema (Cat3Movie, JavMost, jav.com.co, JavMenu, Pinoy, or adult live-action movies/studio codes)
+            val mediaIdLong = mediaUrl?.toLongOrNull()
+            if (mediaIdLong != null && mediaIdLong >= 800000000L) {
+                return "MOVIE"
+            }
+
+            if (lowerUrl.contains("cat3movie") || lowerPoster.contains("cat3movie") ||
+                lowerUrl.contains("javmost") || lowerPoster.contains("javmost") ||
+                lowerUrl.contains("jav.com.co") || lowerPoster.contains("jav.com.co") ||
+                lowerUrl.contains("javmenu") || lowerPoster.contains("javmenu") ||
+                lowerUrl.contains("sooplive") || lowerUrl.contains("mostplayer") || lowerUrl.contains("dooplayer") ||
+                lowerUrl.contains("pinoy") || lowerUrl.contains("vivamax") || lowerTitle.contains("vivamax") ||
+                com.animarvle.app.AnimarvleApp.isAsianAdultTitle(title) ||
+                Regex("""\b[a-z]{2,6}[-_]?\d{2,5}\b""").containsMatchIn(lowerTitle)
+            ) {
+                return "MOVIE"
+            }
+
             // Pure numeric mediaUrl indicates a TMDB ID (e.g. "61595", "212488", "220360")
             if (mediaUrl?.toLongOrNull() != null) {
                 return if (durationMs > 50 * 60 * 1000L) "MOVIE" else "TV"
@@ -346,10 +364,6 @@ class HistoryRepository(context: Context) {
 
             val raw = rawMediaType.orEmpty()
             if (raw.equals("MOVIE", ignoreCase = true) || raw.equals("TV", ignoreCase = true)) {
-                // If the URL has http/https and is not a TMDB embed/resolve, it's an anime stream
-                if (lowerUrl.startsWith("http") && !lowerUrl.contains("tmdb") && !lowerUrl.contains("videasy") && !lowerUrl.contains("vidlink") && !lowerUrl.contains("2embed")) {
-                    return "ANIME"
-                }
                 return raw.uppercase(Locale.ROOT)
             }
 

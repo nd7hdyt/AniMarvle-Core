@@ -4,6 +4,9 @@ import com.animarvle.sourceapi.MediaSource
 import com.animarvle.sourceapi.MediaType
 import com.animarvle.sourceapi.SourceMedia
 import com.animarvle.sourceapi.Titles
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 
 /** What the matcher needs from the metadata provider (ARCH §4). */
 data class MetaQuery(
@@ -71,11 +74,19 @@ class SourceMatcher(
         val allCandidates = mutableListOf<MatchCandidate>()
 
         for (source in sources) {
+            currentCoroutineContext().ensureActive()
             if (meta.type !in source.supportedTypes) continue
 
             val sourceCandidates = mutableListOf<MatchCandidate>()
             for (q in queries) {
-                val results = runCatching { source.search(q, meta.type) }.getOrDefault(emptyList())
+                currentCoroutineContext().ensureActive()
+                val results = try {
+                    source.search(q, meta.type)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Throwable) {
+                    emptyList()
+                }
                 for (media in results) {
                     score(meta, media)?.let { sourceCandidates.add(MatchCandidate(media, it.score, it.reasons, source)) }
                 }
@@ -147,6 +158,10 @@ class SourceMatcher(
                 score -= YEAR_PENALTY
                 reasons += "year mismatch ($diff)"
             }
+        } else if (bestSimilarity >= 0.88) {
+            // Scraped cards without explicit year (e.g. Cat3Movie/JavMost) matching title with high confidence
+            score += 0.35
+            reasons += "high-confidence title +0.35"
         }
 
         if (meta.type == MediaType.MOVIE) {
@@ -173,7 +188,6 @@ class SourceMatcher(
         val nb = normalize(b)
         if (na.isEmpty() || nb.isEmpty()) return 0.0
         if (na == nb) return 1.0
-        if (na.contains(nb) || nb.contains(na)) return 0.9
 
         val ta = na.split(' ').filter { it.isNotEmpty() }.toSet()
         val tb = nb.split(' ').filter { it.isNotEmpty() }.toSet()
@@ -221,6 +235,6 @@ class SourceMatcher(
             "\\b(season|staffel|saison)\\s*\\d{1,2}\\b|\\b\\d{1,2}(st|nd|rd|th)\\s+season\\b|第\\d{1,2}期",
         )
         private val S_MARKER = Regex("\\bs(\\d{1,2})\\b")
-        private val NON_ALNUM = Regex("[^a-z0-9\\u3040-\\u30ff\\u4e00-\\u9fff]+")
+        private val NON_ALNUM = Regex("[^a-z0-9\\u3040-\\u30ff\\u4e00-\\u9fff\\uac00-\\ud7af\\u3130-\\u318f]+")
     }
 }

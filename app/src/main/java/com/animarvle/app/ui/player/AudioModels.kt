@@ -41,20 +41,18 @@ enum class SpokenLanguage(
                 lang.aliases.any { it == normalized }
             }?.let { return it }
 
-            // 2. Substring match (e.g. "(Hindi)", "[Hindi]", "Hindi Dub", "Spiral (Hindi)", "Multi (Hindi + Tamil)")
+            // 2. Word-boundary match on explicit displayName first (prevents "sub" or "br" from hijacking "Hindi Sub" or "BR-Rip")
+            entries.firstOrNull { lang ->
+                val displayLower = Regex.escape(lang.displayName.lowercase())
+                Regex("\\b$displayLower\\b").containsMatchIn(normalized)
+            }?.let { return it }
+
+            // 3. Word-boundary match on ISO codes and specific aliases (excluding ambiguous "sub"/"raw"/"original"/"br")
+            val ambiguousAliases = setOf("sub", "raw", "original", "br")
             return entries.firstOrNull { lang ->
-                val displayLower = lang.displayName.lowercase()
-                normalized.contains("($displayLower)") ||
-                normalized.contains("[$displayLower]") ||
-                normalized.contains(" $displayLower") ||
-                normalized.contains("$displayLower ") ||
-                normalized.contains(displayLower) ||
-                lang.aliases.any { alias ->
-                    normalized == alias ||
-                    normalized.contains("($alias)") ||
-                    normalized.contains("[$alias]") ||
-                    normalized.contains(" $alias") ||
-                    normalized.contains("$alias ")
+                lang.aliases.filter { it !in ambiguousAliases }.any { alias ->
+                    val escaped = Regex.escape(alias.trimEnd('-'))
+                    Regex("\\b$escaped\\b").containsMatchIn(normalized)
                 }
             }
         }

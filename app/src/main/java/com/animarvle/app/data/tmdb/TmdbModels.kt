@@ -31,6 +31,7 @@ data class TmdbSeason(
 @Serializable
 data class TmdbItem(
     val id: Long,
+    val adult: Boolean? = null,
     val title: String? = null,
     val name: String? = null,
     @SerialName("original_title") val originalTitle: String? = null,

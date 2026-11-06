@@ -7,7 +7,9 @@ import com.animarvle.app.R
 import com.animarvle.app.data.AppMediaMode
 import com.animarvle.app.data.MediaTypeManager
 import com.animarvle.app.data.MetadataRepository
+import com.animarvle.app.domain.MediaUi
 import com.animarvle.app.ui.player.HistoryRepository
+import com.animarvle.app.ui.search.SearchFilterData
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -86,24 +88,33 @@ class HomeViewModel(
     }
 
     private suspend fun buildAnimeRails() = coroutineScope {
+        val history = historyRepo?.historyFlow?.value.orEmpty()
+            .filter { isAnimeHistory(it) }
+            .distinctBy { it.title.trim().lowercase(java.util.Locale.ROOT).replace(Regex("""\s+season\s+\d+.*""", RegexOption.IGNORE_CASE), "") }
+        val isTasteUnlocked = history.size >= 10
+        val watchedIds = history.mapNotNull { it.mediaUrl.toLongOrNull() }
+
         val trendingDef = async { runCatching { repo.trending() }.getOrDefault(emptyList()) }
-        val airingNowDef = async { runCatching { repo.airingNow() }.getOrDefault(emptyList()) }
         val popularSeasonDef = async { runCatching { repo.popularThisSeason() }.getOrDefault(emptyList()) }
         val topRatedDef = async { runCatching { repo.topRated() }.getOrDefault(emptyList()) }
         val donghuaDef = async { runCatching { repo.donghua() }.getOrDefault(emptyList()) }
-        val allTimePopularDef = async { runCatching { repo.allTimePopular() }.getOrDefault(emptyList()) }
         val popularMoviesDef = async { runCatching { repo.popularMovies() }.getOrDefault(emptyList()) }
+        val adventureGenreDef = async { runCatching { repo.anilistDiscoverFiltered(genre = "Adventure") }.getOrDefault(emptyList()) }
+        val mappaStudioDef = async { runCatching { repo.studioAnime("MAPPA") }.getOrDefault(emptyList()) }
+        val tasteDef = if (isTasteUnlocked && watchedIds.isNotEmpty()) {
+            async { runCatching { repo.tasteRecommendations(watchedIds, isAnime = true) }.getOrDefault(emptyList()) }
+        } else null
 
         val trending = trendingDef.await()
-        val airingNow = airingNowDef.await()
         val popularSeason = popularSeasonDef.await()
         val topRated = topRatedDef.await()
         val donghua = donghuaDef.await()
-        val allTimePopular = allTimePopularDef.await()
         val popularMovies = popularMoviesDef.await()
+        val adventureItems = adventureGenreDef.await()
+        val mappaItems = mappaStudioDef.await()
+        val tasteItems = tasteDef?.await().orEmpty()
 
-        // Cache known vertical cover posters by title so Continue Watching always uses the Anime's cover art
-        (trending + airingNow + popularSeason + topRated + donghua + allTimePopular + popularMovies).forEach { mediaUi ->
+        (trending + popularSeason + topRated + donghua + popularMovies + adventureItems + mappaItems + tasteItems).forEach { mediaUi ->
             if (!mediaUi.coverUrl.isNullOrBlank()) {
                 resolvedPosterCache[mediaUi.title.lowercase().trim()] = mediaUi.coverUrl
             }
@@ -111,17 +122,14 @@ class HomeViewModel(
 
         val rails = mutableListOf<FeedRow>()
 
-        // 1. Hero Carousel (Top 8 trending items)
-        val heroPool = if (trending.isNotEmpty()) trending else airingNow
+        // 1. Hero Carousel (Top 8 trending anime)
+        val heroPool = if (trending.isNotEmpty()) trending else popularSeason
         val heroItems = heroPool.take(8).map { it.toMedia("ANIME") }
         if (heroItems.isNotEmpty()) {
             rails.add(FeedRow.HeroCarousel(heroItems))
         }
 
-        // 2. Continue Watching (Anime only - uses vertical cover poster)
-        val history = historyRepo?.historyFlow?.value.orEmpty()
-            .filter { isAnimeHistory(it) }
-            .distinctBy { it.title.trim().lowercase(java.util.Locale.ROOT).replace(Regex("""\s+season\s+\d+.*""", RegexOption.IGNORE_CASE), "") }
+        // 2. Continue Watching (Anime only)
         if (history.isNotEmpty()) {
             val cwItems = history.map { h ->
                 val bestCover = resolvedPosterCache[h.title.lowercase().trim()] ?: h.posterUrl.orEmpty()
@@ -130,27 +138,63 @@ class HomeViewModel(
             rails.add(FeedRow.ContinueWatching(items = cwItems))
         }
 
-        // NOTE: Fix #6 — NO ProviderBubbles on Anime Home Screen!
-
-        // 3. Curated Anime Rails
-        if (airingNow.isNotEmpty()) {
-            rails.add(FeedRow.StandardRail("Latest Anime", airingNow.map { it.toMedia("ANIME") }))
+        // 3. Your Taste (ONLY unlocked after >= 10 watches)
+        if (isTasteUnlocked && tasteItems.isNotEmpty()) {
+            rails.add(FeedRow.StandardRail("Your Taste", tasteItems.map { it.toMedia("ANIME") }))
         }
+
+        // 4. Trending Anime
         if (trending.isNotEmpty()) {
             rails.add(FeedRow.StandardRail("Trending Anime", trending.map { it.toMedia("ANIME") }))
         }
+
+        // 5. Anime Genre › [ Adventure ⌃ ] (Dynamic filter rail)
+        rails.add(
+            FeedRow.FilterableRail(
+                railId = "anime_genre",
+                title = "Anime Genre",
+                filterType = "genre",
+                selectedOption = "Adventure",
+                availableOptions = listOf(
+                    "Adventure", "Action", "Comedy", "Drama", "Fantasy",
+                    "Isekai", "Mecha", "Mystery", "Psychological", "Romance",
+                    "Sci-Fi", "Slice of Life", "Sports", "Supernatural", "Thriller"
+                ),
+                items = adventureItems.map { it.toMedia("ANIME") }
+            )
+        )
+
+        // 6. Popular This Season
         if (popularSeason.isNotEmpty()) {
             rails.add(FeedRow.StandardRail("Popular This Season", popularSeason.map { it.toMedia("ANIME") }))
         }
+
+        // 7. Animation Studios › [ MAPPA ⌃ ] (Dynamic filter rail)
+        rails.add(
+            FeedRow.FilterableRail(
+                railId = "anime_studio",
+                title = "Animation Studios",
+                filterType = "studio",
+                selectedOption = "MAPPA",
+                availableOptions = listOf(
+                    "MAPPA", "Ufotable", "Madhouse", "Bones", "Wit Studio",
+                    "Kyoto Animation", "CloverWorks", "Toei Animation", "A-1 Pictures", "CoMix Wave Films"
+                ),
+                items = mappaItems.map { it.toMedia("ANIME") }
+            )
+        )
+
+        // 8. Top Rated Anime
         if (topRated.isNotEmpty()) {
             rails.add(FeedRow.StandardRail("Top Rated Anime", topRated.map { it.toMedia("ANIME") }))
         }
+
+        // 9. Donghua
         if (donghua.isNotEmpty()) {
             rails.add(FeedRow.StandardRail("Donghua", donghua.map { it.toMedia("ANIME") }))
         }
-        if (allTimePopular.isNotEmpty()) {
-            rails.add(FeedRow.StandardRail("All Time Popular", allTimePopular.map { it.toMedia("ANIME") }))
-        }
+
+        // 10. Anime Movies
         if (popularMovies.isNotEmpty()) {
             rails.add(FeedRow.StandardRail("Anime Movies", popularMovies.map { it.toMedia("MOVIE") }))
         }
@@ -162,29 +206,48 @@ class HomeViewModel(
     }
 
     private suspend fun buildMovieRails() = coroutineScope {
+        val history = historyRepo?.historyFlow?.value.orEmpty()
+            .filter { !isAnimeHistory(it) }
+            .distinctBy { it.title.trim().lowercase(java.util.Locale.ROOT) }
+        val isTasteUnlocked = history.size >= 10
+        val watchedIds = history.mapNotNull { it.mediaUrl.toLongOrNull() }
+
         val tmdbTrendingDef = async { runCatching { repo.tmdbTrending() }.getOrDefault(emptyList()) }
         val tmdbTrendingMoviesDef = async { runCatching { repo.tmdbTrendingMovies() }.getOrDefault(emptyList()) }
         val tmdbTrendingTvDef = async { runCatching { repo.tmdbTrendingTv() }.getOrDefault(emptyList()) }
         val tmdbTopRatedDef = async { runCatching { repo.tmdbTopRated() }.getOrDefault(emptyList()) }
-        val tmdbNowPlayingDef = async { runCatching { repo.tmdbNowPlaying() }.getOrDefault(emptyList()) }
-        val tmdbPopularMoviesDef = async { runCatching { repo.tmdbPopularMovies() }.getOrDefault(emptyList()) }
-        val tmdbPopularTvDef = async { runCatching { repo.tmdbPopularTv() }.getOrDefault(emptyList()) }
-        val tmdbCartoonsDef = async { runCatching { repo.tmdbCartoons() }.getOrDefault(emptyList()) }
-        val tmdbKDramasDef = async { runCatching { repo.tmdbKDramas() }.getOrDefault(emptyList()) }
-        val tmdbCDramasDef = async { runCatching { repo.tmdbCDramas() }.getOrDefault(emptyList()) }
+        val horrorGenreDef = async { runCatching { repo.tmdbDiscoverFiltered("movie", pages = 2, withGenres = "27") }.getOrDefault(emptyList()) }
+        val nolanDef = async { runCatching { repo.tmdbDiscoverFiltered("movie", pages = 2, withCrew = "525") }.getOrDefault(emptyList()) }
+        val pughDef = async { runCatching { repo.tmdbDiscoverFiltered("movie", pages = 2, withCast = "1373737") }.getOrDefault(emptyList()) }
+        val chalametDef = async { runCatching { repo.tmdbDiscoverFiltered("movie", pages = 2, withCast = "1190668") }.getOrDefault(emptyList()) }
+        val indianWebSeriesDef = async { runCatching { repo.tmdbDiscoverFiltered("tv", pages = 2, withOriginalLanguage = "hi") }.getOrDefault(emptyList()) }
+        val bollywoodPicksDef = async { runCatching { repo.tmdbDiscoverFiltered("movie", pages = 2, withOriginalLanguage = "hi") }.getOrDefault(emptyList()) }
+        val cartoonsDef = async { runCatching { repo.tmdbCartoons() }.getOrDefault(emptyList()) }
+        val asianSchoolDef = async {
+            runCatching {
+                val res = repo.tmdbDiscoverFiltered("tv", pages = 2, withOriginalLanguage = "ko", withKeywords = "10683|210024|246535")
+                if (res.isNotEmpty()) res else repo.tmdbDiscoverFiltered("tv", pages = 2, withOriginalLanguage = "ko", withGenres = "18,35")
+            }.getOrDefault(emptyList())
+        }
+        val tasteDef = if (isTasteUnlocked && watchedIds.isNotEmpty()) {
+            async { runCatching { repo.tasteRecommendations(watchedIds, isAnime = false) }.getOrDefault(emptyList()) }
+        } else null
 
         val trending = tmdbTrendingDef.await()
         val trendingMovies = tmdbTrendingMoviesDef.await()
         val trendingTv = tmdbTrendingTvDef.await()
         val topRated = tmdbTopRatedDef.await()
-        val nowPlaying = tmdbNowPlayingDef.await()
-        val popularMovies = tmdbPopularMoviesDef.await()
-        val popularTv = tmdbPopularTvDef.await()
-        val cartoons = tmdbCartoonsDef.await()
-        val kdramas = tmdbKDramasDef.await()
-        val cdramas = tmdbCDramasDef.await()
+        val horrorItems = horrorGenreDef.await()
+        val nolanItems = nolanDef.await()
+        val pughItems = pughDef.await()
+        val chalametItems = chalametDef.await()
+        val indianWebSeries = indianWebSeriesDef.await()
+        val bollywoodPicks = bollywoodPicksDef.await()
+        val cartoons = cartoonsDef.await()
+        val asianSchoolItems = asianSchoolDef.await()
+        val tasteItems = tasteDef?.await().orEmpty()
 
-        (trending + trendingMovies + trendingTv + topRated + nowPlaying + popularMovies + popularTv).forEach { mediaUi ->
+        (trending + trendingMovies + trendingTv + topRated + horrorItems + nolanItems + pughItems + chalametItems + indianWebSeries + bollywoodPicks + cartoons + asianSchoolItems + tasteItems).forEach { mediaUi ->
             if (!mediaUi.coverUrl.isNullOrBlank()) {
                 resolvedPosterCache[mediaUi.title.lowercase().trim()] = mediaUi.coverUrl
             }
@@ -192,7 +255,7 @@ class HomeViewModel(
 
         val rails = mutableListOf<FeedRow>()
 
-        // 1. Hero Carousel
+        // 1. Hero Carousel (Top 8 trending movies/tv)
         val heroPool = if (trending.isNotEmpty()) trending else (trendingMovies + trendingTv)
         val heroItems = heroPool.take(8).map {
             val isMovie = it.format?.contains("MOVIE", ignoreCase = true) == true
@@ -202,9 +265,7 @@ class HomeViewModel(
             rails.add(FeedRow.HeroCarousel(heroItems))
         }
 
-        // 2. Continue Watching (Movie/TV only - uses vertical cover poster)
-        val history = historyRepo?.historyFlow?.value.orEmpty()
-            .filter { !isAnimeHistory(it) }
+        // 2. Continue Watching (Movie/TV only)
         if (history.isNotEmpty()) {
             val cwItems = history.map { h ->
                 val bestCover = resolvedPosterCache[h.title.lowercase().trim()] ?: h.posterUrl.orEmpty()
@@ -213,41 +274,271 @@ class HomeViewModel(
             rails.add(FeedRow.ContinueWatching(items = cwItems))
         }
 
-        // 3. Provider Bubbles ONLY in Movie Hub (Fix #6)
+        // 3. Provider Brand Bubbles (Netflix, Disney+, Prime, etc.)
         rails.add(FeedRow.ProviderBubbles(providers = getBrandedProviders()))
 
-        // 4. Movie & TV Rails
-        if (trendingMovies.isNotEmpty()) {
-            rails.add(FeedRow.StandardRail("Trending Movies", trendingMovies.map { it.toMedia("MOVIE") }))
+        // 4. Your Taste (ONLY unlocked after >= 10 watches)
+        if (isTasteUnlocked && tasteItems.isNotEmpty()) {
+            rails.add(FeedRow.StandardRail("Your Taste", tasteItems.map { it.toMedia("MOVIE") }))
         }
-        if (trendingTv.isNotEmpty()) {
-            rails.add(FeedRow.StandardRail("Trending TV Shows", trendingTv.map { it.toMedia("TV") }))
+
+        // 5. Trending Movies / TV
+        val combinedTrending = (trendingMovies + trendingTv).take(20).ifEmpty { trending.take(20) }
+        if (combinedTrending.isNotEmpty()) {
+            rails.add(FeedRow.StandardRail("Trending Movies / TV", combinedTrending.map {
+                val isMovie = it.format?.contains("MOVIE", ignoreCase = true) == true
+                it.toMedia(if (isMovie) "MOVIE" else "TV")
+            }))
         }
+
+        // 6. Movie Genre › [ Horror ⌃ ] (Dynamic filter rail)
+        rails.add(
+            FeedRow.FilterableRail(
+                railId = "movie_genre",
+                title = "Movie Genre",
+                filterType = "genre",
+                selectedOption = "Horror",
+                availableOptions = listOf(
+                    "Horror", "Action", "Adventure", "Comedy", "Crime & Gangster",
+                    "Drama", "Fantasy", "Mystery & Thriller", "Romance", "Sci-Fi", "War", "Western"
+                ),
+                items = horrorItems.map { it.toMedia("MOVIE") }
+            )
+        )
+
+        // 7. Directors › [ Christopher Nolan ⌃ ] (Dynamic filter rail)
+        rails.add(
+            FeedRow.FilterableRail(
+                railId = "movie_director",
+                title = "Directors",
+                filterType = "director",
+                selectedOption = "Christopher Nolan",
+                availableOptions = listOf(
+                    "Christopher Nolan", "Quentin Tarantino", "Martin Scorsese", "Steven Spielberg",
+                    "Stanley Kubrick", "David Fincher", "Denis Villeneuve", "James Cameron", "Ridley Scott", "Guillermo del Toro"
+                ),
+                items = nolanItems.map { it.toMedia("MOVIE") }
+            )
+        )
+
+        // 8. Top Rated on IMDb
         if (topRated.isNotEmpty()) {
             rails.add(FeedRow.StandardRail("Top Rated on IMDb", topRated.map { it.toMedia("MOVIE") }))
         }
-        if (nowPlaying.isNotEmpty()) {
-            rails.add(FeedRow.StandardRail("Now Playing in Theaters", nowPlaying.map { it.toMedia("MOVIE") }))
+
+        // 9. Female Actress › [ Florence Pugh ⌃ ] (Dynamic filter rail)
+        rails.add(
+            FeedRow.FilterableRail(
+                railId = "movie_actress",
+                title = "Female Actress",
+                filterType = "female_actress",
+                selectedOption = "Florence Pugh",
+                availableOptions = listOf(
+                    "Florence Pugh", "Scarlett Johansson", "Margot Robbie", "Zendaya",
+                    "Emma Stone", "Jennifer Lawrence", "Anya Taylor-Joy", "Sydney Sweeney", "Jenna Ortega", "Ana de Armas"
+                ),
+                items = pughItems.map { it.toMedia("MOVIE") }
+            )
+        )
+
+        // 10. Male Actor › [ Timothée Chalamet ⌃ ] (Dynamic filter rail)
+        rails.add(
+            FeedRow.FilterableRail(
+                railId = "movie_actor",
+                title = "Male Actor",
+                filterType = "male_actor",
+                selectedOption = "Timothée Chalamet",
+                availableOptions = listOf(
+                    "Timothée Chalamet", "Leonardo DiCaprio", "Cillian Murphy", "Brad Pitt",
+                    "Christian Bale", "Keanu Reeves", "Tom Hanks", "Robert Downey Jr.", "Ryan Gosling", "Pedro Pascal"
+                ),
+                items = chalametItems.map { it.toMedia("MOVIE") }
+            )
+        )
+
+        // 11. Series › [ All-Time Best ⌃ ] (Dynamic filter rail)
+        rails.add(
+            FeedRow.FilterableRail(
+                railId = "movie_series",
+                title = "Series",
+                filterType = "series",
+                selectedOption = "All-Time Best",
+                availableOptions = listOf(
+                    "All-Time Best", "Trending Now", "Crime & Mystery",
+                    "Sci-Fi & Fantasy", "Mini-Series", "Binge-Worthy Comedy"
+                ),
+                items = topRated.take(20).map { it.toMedia("TV") }
+            )
+        )
+
+        // 12. Indian Web Series
+        if (indianWebSeries.isNotEmpty()) {
+            rails.add(FeedRow.StandardRail("Indian Web Series", indianWebSeries.map { it.toMedia("TV") }))
         }
-        if (popularMovies.isNotEmpty()) {
-            rails.add(FeedRow.StandardRail("Popular Movies", popularMovies.map { it.toMedia("MOVIE") }))
+
+        // 13. Bollywood Picks
+        if (bollywoodPicks.isNotEmpty()) {
+            rails.add(FeedRow.StandardRail("Bollywood Picks", bollywoodPicks.map { it.toMedia("MOVIE") }))
         }
-        if (popularTv.isNotEmpty()) {
-            rails.add(FeedRow.StandardRail("Popular TV Shows", popularTv.map { it.toMedia("TV") }))
-        }
+
+        // 14. Cartoons & Animation
         if (cartoons.isNotEmpty()) {
             rails.add(FeedRow.StandardRail("Cartoons & Animation", cartoons.map { it.toMedia("TV") }))
         }
-        if (kdramas.isNotEmpty()) {
-            rails.add(FeedRow.StandardRail("K-Drama & Korean Shows", kdramas.map { it.toMedia("TV") }))
-        }
-        if (cdramas.isNotEmpty()) {
-            rails.add(FeedRow.StandardRail("C-Drama & Asian Series", cdramas.map { it.toMedia("TV") }))
-        }
+
+        // 15. [K-Drama & Korean shows] [ C-drama & Asian series ] (pills) › [ School & Youth ⌃ ] (Dynamic filter rail)
+        rails.add(
+            FeedRow.FilterableRail(
+                railId = "asian_drama",
+                title = "Asian Dramas",
+                filterType = "asian",
+                selectedOption = "School & Youth",
+                availableOptions = listOf(
+                    "School & Youth", "All Popular", "Romance",
+                    "Mystery & Thriller", "Historical / Period", "Fantasy & Supernatural"
+                ),
+                pillOptions = listOf("K-Drama & Korean Shows", "C-Drama & Asian Series"),
+                activePillIndex = 0,
+                items = asianSchoolItems.map { it.toMedia("TV") }
+            )
+        )
 
         cachedMovieRails = rails
         if (_currentDomain.value == HomeDomain.MOVIE) {
             _feedState.value = rails
+        }
+    }
+
+    /**
+     * Handles in-place dynamic filter option selection for any FilterableRail.
+     */
+    fun onFilterRailOptionChanged(railId: String, newOption: String) {
+        val currentRows = _feedState.value.toMutableList()
+        val index = currentRows.indexOfFirst { it is FeedRow.FilterableRail && it.railId == railId }
+        if (index == -1) return
+        val currentRail = currentRows[index] as FeedRow.FilterableRail
+        if (currentRail.selectedOption == newOption && !currentRail.isLoading) return
+
+        // Set loading state immediately for quick feedback
+        currentRows[index] = currentRail.copy(selectedOption = newOption, isLoading = true)
+        _feedState.value = currentRows
+
+        viewModelScope.launch {
+            val newItems = runCatching {
+                fetchFilterRailItems(railId, newOption, currentRail.activePillIndex)
+            }.getOrDefault(emptyList())
+
+            val updatedRows = _feedState.value.toMutableList()
+            val targetIdx = updatedRows.indexOfFirst { it is FeedRow.FilterableRail && it.railId == railId }
+            if (targetIdx != -1) {
+                val existing = updatedRows[targetIdx] as FeedRow.FilterableRail
+                updatedRows[targetIdx] = existing.copy(
+                    selectedOption = newOption,
+                    items = newItems,
+                    isLoading = false
+                )
+                _feedState.value = updatedRows
+                if (_currentDomain.value == HomeDomain.ANIME) {
+                    cachedAnimeRails = updatedRows
+                } else {
+                    cachedMovieRails = updatedRows
+                }
+            }
+        }
+    }
+
+    /**
+     * Handles dual-pill toggle for pill-enabled FilterableRails (e.g. K-Drama vs C-Drama).
+     */
+    fun onFilterRailPillChanged(railId: String, newPillIndex: Int) {
+        val currentRows = _feedState.value.toMutableList()
+        val index = currentRows.indexOfFirst { it is FeedRow.FilterableRail && it.railId == railId }
+        if (index == -1) return
+        val currentRail = currentRows[index] as FeedRow.FilterableRail
+        if (currentRail.activePillIndex == newPillIndex && !currentRail.isLoading) return
+
+        currentRows[index] = currentRail.copy(activePillIndex = newPillIndex, isLoading = true)
+        _feedState.value = currentRows
+
+        viewModelScope.launch {
+            val newItems = runCatching {
+                fetchFilterRailItems(railId, currentRail.selectedOption, newPillIndex)
+            }.getOrDefault(emptyList())
+
+            val updatedRows = _feedState.value.toMutableList()
+            val targetIdx = updatedRows.indexOfFirst { it is FeedRow.FilterableRail && it.railId == railId }
+            if (targetIdx != -1) {
+                val existing = updatedRows[targetIdx] as FeedRow.FilterableRail
+                updatedRows[targetIdx] = existing.copy(
+                    activePillIndex = newPillIndex,
+                    items = newItems,
+                    isLoading = false
+                )
+                _feedState.value = updatedRows
+                if (_currentDomain.value == HomeDomain.ANIME) {
+                    cachedAnimeRails = updatedRows
+                } else {
+                    cachedMovieRails = updatedRows
+                }
+            }
+        }
+    }
+
+    private suspend fun fetchFilterRailItems(railId: String, option: String, pillIndex: Int): List<Media> {
+        return when (railId) {
+            "anime_genre" -> {
+                repo.anilistDiscoverFiltered(genre = option).map { it.toMedia("ANIME") }
+            }
+            "anime_studio" -> {
+                repo.studioAnime(studioName = option).map { it.toMedia("ANIME") }
+            }
+            "movie_genre" -> {
+                val genreId = SearchFilterData.MOVIE_GENRES[option]
+                repo.tmdbDiscoverFiltered("movie", pages = 2, withGenres = genreId?.toString()).map { it.toMedia("MOVIE") }
+            }
+            "movie_director" -> {
+                val crewId = SearchFilterData.DIRECTORS[option]
+                repo.tmdbDiscoverFiltered("movie", pages = 2, withCrew = crewId?.toString()).map { it.toMedia("MOVIE") }
+            }
+            "movie_actress" -> {
+                val castId = SearchFilterData.FEMALE_ACTRESSES[option]
+                repo.tmdbDiscoverFiltered("movie", pages = 2, withCast = castId?.toString()).map { it.toMedia("MOVIE") }
+            }
+            "movie_actor" -> {
+                val castId = SearchFilterData.MALE_ACTORS[option]
+                repo.tmdbDiscoverFiltered("movie", pages = 2, withCast = castId?.toString()).map { it.toMedia("MOVIE") }
+            }
+            "movie_series" -> {
+                when (option) {
+                    "All-Time Best" -> repo.tmdbTopRated().map { it.toMedia("TV") }
+                    "Trending Now" -> repo.tmdbTrendingTv().map { it.toMedia("TV") }
+                    "Crime & Mystery" -> repo.tmdbDiscoverFiltered("tv", pages = 2, withGenres = "80,9648").map { it.toMedia("TV") }
+                    "Sci-Fi & Fantasy" -> repo.tmdbDiscoverFiltered("tv", pages = 2, withGenres = "10765").map { it.toMedia("TV") }
+                    "Mini-Series" -> repo.tmdbDiscoverFiltered("tv", pages = 2, withKeywords = "210024|222243").map { it.toMedia("TV") }
+                    "Binge-Worthy Comedy" -> repo.tmdbDiscoverFiltered("tv", pages = 2, withGenres = "35").map { it.toMedia("TV") }
+                    else -> repo.tmdbPopularTv().map { it.toMedia("TV") }
+                }
+            }
+            "asian_drama" -> {
+                val lang = if (pillIndex == 0) "ko" else "zh"
+                val list = when (option) {
+                    "School & Youth" -> {
+                        val res = repo.tmdbDiscoverFiltered("tv", pages = 2, withOriginalLanguage = lang, withKeywords = "10683|210024|246535")
+                        if (res.isNotEmpty()) res else repo.tmdbDiscoverFiltered("tv", pages = 2, withOriginalLanguage = lang, withGenres = "18,35")
+                    }
+                    "All Popular" -> repo.tmdbDiscoverFiltered("tv", pages = 2, withOriginalLanguage = lang, sortBy = "popularity.desc")
+                    "Romance" -> repo.tmdbDiscoverFiltered("tv", pages = 2, withOriginalLanguage = lang, withGenres = "10749,18")
+                    "Mystery & Thriller" -> repo.tmdbDiscoverFiltered("tv", pages = 2, withOriginalLanguage = lang, withGenres = "9648,80")
+                    "Historical / Period" -> {
+                        val res = repo.tmdbDiscoverFiltered("tv", pages = 2, withOriginalLanguage = lang, withKeywords = "156096|207317")
+                        if (res.isNotEmpty()) res else repo.tmdbDiscoverFiltered("tv", pages = 2, withOriginalLanguage = lang, withGenres = "18")
+                    }
+                    "Fantasy & Supernatural" -> repo.tmdbDiscoverFiltered("tv", pages = 2, withOriginalLanguage = lang, withGenres = "10765")
+                    else -> repo.tmdbDiscoverFiltered("tv", pages = 2, withOriginalLanguage = lang, sortBy = "popularity.desc")
+                }
+                list.map { it.toMedia("TV") }
+            }
+            else -> emptyList()
         }
     }
 

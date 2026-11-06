@@ -159,6 +159,7 @@ class PlayerFragment : Fragment() {
         val sources = container.sourcesFor(mediaType, mediaTitle)
         val candidateSource = sources.firstOrNull { it.id == sourceId }
         val isMovieSource = candidateSource != null && (
+            candidateSource.supportedTypes.contains(MediaType.MOVIE) ||
             candidateSource.name.contains("4k", ignoreCase = true) ||
             candidateSource.name.contains("moviebox", ignoreCase = true) ||
             candidateSource.name.contains("hexawatch", ignoreCase = true) ||
@@ -167,6 +168,9 @@ class PlayerFragment : Fragment() {
             candidateSource.name.contains("moviesmod", ignoreCase = true) ||
             candidateSource.name.contains("uhdmovies", ignoreCase = true) ||
             candidateSource.name.contains("uniquestream", ignoreCase = true) ||
+            candidateSource.name.contains("pinoy", ignoreCase = true) ||
+            candidateSource.name.contains("asian", ignoreCase = true) ||
+            candidateSource.name.contains("cinema", ignoreCase = true) ||
             candidateSource.name.contains("movie", ignoreCase = true)
         )
         val isDonghuaSource = candidateSource != null && (
@@ -916,8 +920,9 @@ class PlayerFragment : Fragment() {
             is PlayerCommand.Prepare -> {
                 val primaryStream = command.streams.firstOrNull() ?: return
                 currentStreamUrl = primaryStream.url
-                currentStreamHeaders = command.headers
-                okFactory?.setDefaultRequestProperties(command.headers)
+                val effectiveHeaders = command.headers.ifEmpty { primaryStream.headers }
+                currentStreamHeaders = effectiveHeaders
+                okFactory?.setDefaultRequestProperties(effectiveHeaders)
                 val startPos = command.startPositionMs.coerceAtLeast(0L)
                 p.setMediaItem(toMediaItem(primaryStream, command.subtitles), startPos)
                 if (startPos > 0L) p.seekTo(startPos)
@@ -1464,43 +1469,50 @@ class PlayerFragment : Fragment() {
             }
 
             if (p != null) {
-                if (chosenQuality.equals("Auto", ignoreCase = true)) {
+                if (hlsTracks.size > 1) {
+                    if (chosenQuality.equals("Auto", ignoreCase = true)) {
+                        p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
+                            .clearOverridesOfType(C.TRACK_TYPE_VIDEO)
+                            .clearVideoSizeConstraints()
+                            .build()
+                    } else {
+                        val (minW, maxW, minH, maxH) = when {
+                            chosenQuality.contains("2160") || chosenQuality.contains("4k", ignoreCase = true) ->
+                                listOf(2500, 3840, 1500, 2160)
+                            chosenQuality.contains("1080") ->
+                                listOf(1400, 1920, 750, 1080)
+                            chosenQuality.contains("720") ->
+                                listOf(900, 1280, 480, 720)
+                            chosenQuality.contains("480") ->
+                                listOf(600, 854, 350, 480)
+                            chosenQuality.contains("360") ->
+                                listOf(400, 640, 250, 360)
+                            chosenQuality.contains("240") ->
+                                listOf(200, 426, 150, 240)
+                            chosenQuality.contains("144") ->
+                                listOf(100, 256, 80, 144)
+                            else ->
+                                listOf(1400, 1920, 750, 1080)
+                        }
+                        val matchingTrack = hlsTracks.firstOrNull { (g, i) ->
+                            val f = g.getTrackFormat(i)
+                            val q = formatToQuality(f.width, f.height)
+                            q == chosenQuality || (f.height in minH..maxH && f.width in minW..maxW)
+                        }
+                        val builder = p.trackSelectionParameters.buildUpon()
+                            .clearOverridesOfType(C.TRACK_TYPE_VIDEO)
+                            .setMaxVideoSize(maxW, maxH)
+                            .setMinVideoSize(minW, minH)
+                        if (matchingTrack != null) {
+                            builder.addOverride(TrackSelectionOverride(matchingTrack.first.mediaTrackGroup, matchingTrack.second))
+                        }
+                        p.trackSelectionParameters = builder.build()
+                    }
+                } else {
                     p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
                         .clearOverridesOfType(C.TRACK_TYPE_VIDEO)
                         .clearVideoSizeConstraints()
                         .build()
-                } else {
-                    val (minW, maxW, minH, maxH) = when {
-                        chosenQuality.contains("2160") || chosenQuality.contains("4k", ignoreCase = true) ->
-                            listOf(2500, 3840, 1500, 2160)
-                        chosenQuality.contains("1080") ->
-                            listOf(1400, 1920, 750, 1080)
-                        chosenQuality.contains("720") ->
-                            listOf(900, 1280, 480, 720)
-                        chosenQuality.contains("480") ->
-                            listOf(600, 854, 350, 480)
-                        chosenQuality.contains("360") ->
-                            listOf(400, 640, 250, 360)
-                        chosenQuality.contains("240") ->
-                            listOf(200, 426, 150, 240)
-                        chosenQuality.contains("144") ->
-                            listOf(100, 256, 80, 144)
-                        else ->
-                            listOf(1400, 1920, 750, 1080)
-                    }
-                    val matchingTrack = hlsTracks.firstOrNull { (g, i) ->
-                        val f = g.getTrackFormat(i)
-                        val q = formatToQuality(f.width, f.height)
-                        q == chosenQuality || (f.height in minH..maxH && f.width in minW..maxW)
-                    }
-                    val builder = p.trackSelectionParameters.buildUpon()
-                        .clearOverridesOfType(C.TRACK_TYPE_VIDEO)
-                        .setMaxVideoSize(maxW, maxH)
-                        .setMinVideoSize(minW, minH)
-                    if (matchingTrack != null) {
-                        builder.addOverride(TrackSelectionOverride(matchingTrack.first.mediaTrackGroup, matchingTrack.second))
-                    }
-                    p.trackSelectionParameters = builder.build()
                 }
             }
             toast(chosenQuality)

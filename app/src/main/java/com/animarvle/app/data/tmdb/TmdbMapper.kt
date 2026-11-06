@@ -45,19 +45,28 @@ object TmdbMapper {
         val parsedYear = dateStr?.take(4)?.toIntOrNull()
         val format = if (item.name != null || item.mediaType == "tv") "TV" else "MOVIE"
 
-        val genreNames = if (item.genres.isNotEmpty()) {
+        val rawGenreNames = if (item.genres.isNotEmpty()) {
             item.genres.map { it.name }
         } else {
             item.genreIds.mapNotNull { GENRE_MAP[it] }
         }
+        val genreNames = if (item.adult == true && !rawGenreNames.contains("Adult (18+)")) {
+            rawGenreNames + "Adult (18+)"
+        } else {
+            rawGenreNames
+        }
 
         val totalEpisodes = item.numberOfEpisodes ?: if (format == "MOVIE") 1 else null
+
+        val hasAnimation = item.genreIds.contains(16) || item.genres.any { it.id == 16 || it.name.equals("Animation", ignoreCase = true) }
+        val isJapanese = item.originalLanguage?.equals("ja", ignoreCase = true) == true
+        val isAnimeItem = (hasAnimation && isJapanese) || com.animarvle.app.AnimarvleApp.isDonghua(displayTitle)
 
         return MediaUi(
             id = item.id,
             title = displayTitle,
-            romajiTitle = item.originalTitle ?: item.originalName,
-            nativeTitle = null,
+            romajiTitle = if (isAnimeItem) (item.originalTitle ?: item.originalName) else null,
+            nativeTitle = if (!isAnimeItem) (item.originalTitle ?: item.originalName) else null,
             synonyms = emptyList(),
             synopsis = item.overview,
             coverUrl = item.posterPath?.let { "$IMG_W500$it" },

@@ -59,9 +59,22 @@ class TmdbApi(
         watchRegion: String = "US",
         withGenres: String? = null,
         withOriginalLanguage: String? = null,
-        sortBy: String = "popularity.desc"
+        sortBy: String = "popularity.desc",
+        withCast: String? = null,
+        withCrew: String? = null,
+        withCompanies: String? = null,
+        voteAverageGte: Double? = null,
+        primaryReleaseYear: String? = null,
+        withKeywords: String? = null,
+        includeAdult: Boolean = false,
     ): List<TmdbItem> {
         val params = StringBuilder("/discover/$type?api_key=$apiKey&page=$page&sort_by=$sortBy")
+        if (includeAdult) {
+            params.append("&include_adult=true")
+        }
+        if (!withKeywords.isNullOrBlank()) {
+            params.append("&with_keywords=$withKeywords")
+        }
         if (!watchProviders.isNullOrBlank()) {
             params.append("&with_watch_providers=$watchProviders&watch_region=$watchRegion&with_watch_monetization_types=flatrate")
         }
@@ -71,12 +84,56 @@ class TmdbApi(
         if (!withOriginalLanguage.isNullOrBlank()) {
             params.append("&with_original_language=$withOriginalLanguage")
         }
+        if (!withCast.isNullOrBlank()) {
+            params.append("&with_cast=$withCast")
+        }
+        if (!withCrew.isNullOrBlank()) {
+            params.append("&with_crew=$withCrew")
+        }
+        if (!withCompanies.isNullOrBlank()) {
+            params.append("&with_companies=$withCompanies")
+        }
+        if (voteAverageGte != null && voteAverageGte > 0.0) {
+            params.append("&vote_average.gte=$voteAverageGte&vote_count.gte=10")
+        }
+        if (!primaryReleaseYear.isNullOrBlank() && primaryReleaseYear != "Any") {
+            if (primaryReleaseYear.contains("-")) {
+                val parts = primaryReleaseYear.split("-")
+                val startYear = parts.getOrNull(0)?.trim()
+                val endYear = parts.getOrNull(1)?.trim()
+                if (type == "movie") {
+                    if (!startYear.isNullOrBlank()) params.append("&primary_release_date.gte=$startYear-01-01")
+                    if (!endYear.isNullOrBlank()) params.append("&primary_release_date.lte=$endYear-12-31")
+                } else {
+                    if (!startYear.isNullOrBlank()) params.append("&first_air_date.gte=$startYear-01-01")
+                    if (!endYear.isNullOrBlank()) params.append("&first_air_date.lte=$endYear-12-31")
+                }
+            } else if (primaryReleaseYear.endsWith("s")) {
+                val base = primaryReleaseYear.removeSuffix("s").toIntOrNull()
+                if (base != null) {
+                    val start = "$base-01-01"
+                    val end = "${base + 9}-12-31"
+                    if (type == "movie") {
+                        params.append("&primary_release_date.gte=$start&primary_release_date.lte=$end")
+                    } else {
+                        params.append("&first_air_date.gte=$start&first_air_date.lte=$end")
+                    }
+                }
+            } else {
+                if (type == "movie") {
+                    params.append("&primary_release_year=$primaryReleaseYear")
+                } else {
+                    params.append("&first_air_date_year=$primaryReleaseYear")
+                }
+            }
+        }
         return get(params.toString())
     }
 
-    suspend fun searchMulti(query: String, page: Int = 1): List<TmdbItem> {
+    suspend fun searchMulti(query: String, page: Int = 1, includeAdult: Boolean = false): List<TmdbItem> {
         val encoded = withContext(Dispatchers.IO) { URLEncoder.encode(query, "UTF-8") }
-        return get("/search/multi?api_key=$apiKey&query=$encoded&page=$page")
+        val adultParam = if (includeAdult) "&include_adult=true" else ""
+        return get("/search/multi?api_key=$apiKey&query=$encoded&page=$page$adultParam")
     }
 
     suspend fun movieDetails(id: Long): TmdbItem? =

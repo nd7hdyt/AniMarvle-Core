@@ -230,6 +230,24 @@ async function handleStreamResolve(request, url, ctx, env) {
         .then(res => { if (res) streams.push(...res); })
         .catch(() => {})
     );
+    // Provider A2: Videasy, MovieBox Multi-Audio & 2Embed Fallbacks for Movies & TV
+    if (type === "movie" || type === "tv" || type === "series") {
+      fetchPromises.push(
+        resolveVideasyMultiAudio(type, resolvedTmdb, season, episode, url.origin)
+          .then(res => { if (res) streams.push(...res); })
+          .catch(() => {})
+      );
+      fetchPromises.push(
+        resolveMovieBoxMultiAudio(resolvedTmdb, resolvedImdb, type, season, episode, url.origin)
+          .then(res => { if (res) streams.push(...res); })
+          .catch(() => {})
+      );
+      fetchPromises.push(
+        resolveFallbackHls(resolvedTmdb, resolvedImdb, type, season, episode, url.origin)
+          .then(res => { if (res) streams.push(...res); })
+          .catch(() => {})
+      );
+    }
   }
 
   // Provider B: Anime Native HLS (For Anime titles)
@@ -286,7 +304,8 @@ async function handleStreamResolve(request, url, ctx, env) {
   }
 
   // Provider J: Adult Anime Streams (HentaiNi, HentaiMama, AnimeSex)
-  if (type === "anime" || type === "hentai" || type === "adult" || url.searchParams.get("adult") === "1") {
+  // Strictly isolated to adult/hentai content; NEVER execute for mainstream anime
+  if (type === "hentai" || type === "adult" || url.searchParams.get("adult") === "1") {
     fetchPromises.push(
       resolveAdultAnimeStreams(title || resolvedTitle, episode, url.origin, romaji, synonyms)
         .then(res => { if (res) streams.push(...res); })
@@ -458,9 +477,25 @@ async function resolveVidLink(type, tmdbId, season, episode, workerOrigin) {
 
     // Quality mapping for AniVortex servers:
     const isAnime = type === "anime";
+    function getStreamHeaders(streamUrl) {
+      if (streamUrl && (streamUrl.includes("hakunaymatata.com") || streamUrl.includes("bcdn.") || streamUrl.includes("acdn.") || streamUrl.includes("vcdn.") || streamUrl.includes("fcdn.") || streamUrl.includes("watch32."))) {
+        return { "User-Agent": "okhttp/4.12.0" };
+      }
+      return { "Origin": "https://vidlink.pro" };
+    }
+
+    const nowUnix = Math.floor(Date.now() / 1000);
+    function isExpiredToken(streamUrl) {
+      if (!streamUrl) return false;
+      const match = streamUrl.match(/[?&]t=([0-9]+)/);
+      if (!match) return false;
+      const t = parseInt(match[1], 10);
+      return t > 1000000000 && t < nowUnix;
+    }
+
     // Spiral: 1080p (or best available direct CDN stream)
     const q1080 = quals["1080"] || quals["720"] || quals["480"];
-    if (q1080 && q1080.url) {
+    if (q1080 && q1080.url && !isExpiredToken(q1080.url)) {
       results.push({
         server: "Spiral",
         url: q1080.url,
@@ -470,14 +505,14 @@ async function resolveVidLink(type, tmdbId, season, episode, workerOrigin) {
         qualities: availableQualities,
         audio: "SUB",
         audioLanguage: isAnime ? "Japanese" : "English",
-        headers: { "Origin": "https://vidlink.pro" },
+        headers: getStreamHeaders(q1080.url),
         subtitles: captions
       });
     }
 
     // Turbo: 720p / 480p (high speed streaming)
     const q720 = quals["720"] || quals["480"] || quals["360"];
-    if (q720 && q720.url && q720.url !== q1080?.url) {
+    if (q720 && q720.url && q720.url !== q1080?.url && !isExpiredToken(q720.url)) {
       results.push({
         server: "Turbo",
         url: q720.url,
@@ -487,14 +522,14 @@ async function resolveVidLink(type, tmdbId, season, episode, workerOrigin) {
         qualities: availableQualities,
         audio: "SUB",
         audioLanguage: isAnime ? "Japanese" : "English",
-        headers: { "Origin": "https://vidlink.pro" },
+        headers: getStreamHeaders(q720.url),
         subtitles: captions
       });
     }
 
     // FastX: 360p (mobile data saver)
     const q360 = quals["360"] || quals["480"];
-    if (q360 && q360.url && q360.url !== q1080?.url && q360.url !== q720?.url) {
+    if (q360 && q360.url && q360.url !== q1080?.url && q360.url !== q720?.url && !isExpiredToken(q360.url)) {
       results.push({
         server: "FastX",
         url: q360.url,
@@ -504,7 +539,7 @@ async function resolveVidLink(type, tmdbId, season, episode, workerOrigin) {
         qualities: availableQualities,
         audio: "SUB",
         audioLanguage: isAnime ? "Japanese" : "English",
-        headers: { "Origin": "https://vidlink.pro" },
+        headers: getStreamHeaders(q360.url),
         subtitles: captions
       });
     }
@@ -1218,9 +1253,10 @@ function isConfidentMatch(targetTitle, candidateTitle) {
   const candTokens = normCand.split(" ").filter(w => w.length >= 3 && !["and", "the", "for", "with", "sex", "all"].includes(w));
   if (targetTokens.length === 0 || candTokens.length === 0) return false;
 
-  const matches = targetTokens.filter(t => candTokens.some(c => c.includes(t) || t.includes(c)));
-  const ratio = matches.length / Math.min(targetTokens.length, candTokens.length);
-  return ratio >= 0.6;
+  const matches = targetTokens.filter(t => candTokens.some(c => c === t || (c.length >= 4 && t.length >= 4 && (c.includes(t) || t.includes(c)))));
+  const minMatchesRequired = Math.min(candTokens.length, 2);
+  const ratio = matches.length / Math.max(targetTokens.length, candTokens.length);
+  return matches.length >= minMatchesRequired && ratio >= 0.4;
 }
 
 async function resolveAdultAnimeStreams(title, episode, workerOrigin, romaji = "", synonyms = []) {

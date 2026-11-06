@@ -610,7 +610,10 @@ class DetailFragment : Fragment() {
                                 withContext(Dispatchers.IO) {
                                     runCatching {
                                         val choice = com.animarvle.sourceapi.Choice(option?.audio ?: com.animarvle.sourceapi.Audio.SUB, option?.serverKey.orEmpty())
-                                        source.resolve(ep, choice).streams.firstOrNull()?.url
+                                        val resolved = source.resolve(ep, choice)
+                                        resolved.streams.firstOrNull {
+                                            it.qualityLabel.equals(option?.qualityBadge, ignoreCase = true)
+                                        }?.url ?: resolved.streams.firstOrNull()?.url
                                     }.getOrNull()
                                 } ?: option?.streamUrl.orEmpty()
                             } else {
