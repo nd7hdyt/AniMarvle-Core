@@ -72,7 +72,6 @@ class StreamResolver(
     ): Flow<ResolveEvent> = flow {
         val options = withTimeout(timeoutMs) { source.options(episode) }
         val servers = options.byAudio[requested.audio]
-            ?: (if (requested.audio == Audio.SUB) options.byAudio[Audio.RAW] else null)
         if (servers.isNullOrEmpty()) {
             emit(
                 ResolveEvent.AudioUnavailable(

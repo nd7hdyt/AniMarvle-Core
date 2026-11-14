@@ -127,6 +127,7 @@ class DetailFragment : Fragment() {
                     score = media.score,
                     totalEpisodes = media.episodes,
                     year = media.year,
+                    mediaType = if (media.format?.contains("TV", ignoreCase = true) == true) "TV" else "MOVIE",
                 )
                 sheet.show(childFragmentManager, com.animarvle.app.ui.mylist.AddToMyListBottomSheet.TAG)
             } else {
@@ -463,11 +464,14 @@ class DetailFragment : Fragment() {
             .currentMode.value == com.animarvle.app.data.AppMediaMode.MOVIES_TV
         val isMovieFormat = media?.format?.contains("MOVIE", ignoreCase = true) == true ||
             media?.format?.contains("FILM", ignoreCase = true) == true
-        val isMovie = isMovieFormat || (isMoviesAndTv && !isAnimation && !isDonghuaMedia && (media?.episodes ?: 1) <= 1 && media?.seasons.isNullOrEmpty())
+        val isTmdbMedia = media?.isTmdb == true || (media == null && (arguments?.getBoolean("preferTmdb", false) ?: false))
+        val isMovie = isMovieFormat || (isTmdbMedia && !isAnimation && !isDonghuaMedia && (media?.episodes ?: 1) <= 1 && media?.seasons.isNullOrEmpty())
         val type = if (isDonghuaMedia || isAnimation) {
             MediaType.ANIME
-        } else if (isMoviesAndTv || isMovieFormat) {
+        } else if (isMovie) {
             MediaType.MOVIE
+        } else if (isTmdbMedia || isMoviesAndTv) {
+            MediaType.TV
         } else {
             MediaType.ANIME
         }
@@ -485,16 +489,29 @@ class DetailFragment : Fragment() {
         val args = Bundle().apply {
             val appContainer = (requireActivity().application as AnimarvleApp).container
             val isDonghua = AnimarvleApp.isDonghua(media.title)
+            val isHentai = media.genres.any { it.equals("Hentai", ignoreCase = true) } ||
+                com.animarvle.app.data.MetadataRepository.isAdultTitle(media.title) ||
+                com.animarvle.app.data.MetadataRepository.isAdultTitle(media.romajiTitle)
+            val hasAdultLiveGenre = media.genres.any {
+                it.contains("JAV", ignoreCase = true) ||
+                it.equals("Adult (18+)", ignoreCase = true) ||
+                it.equals("Erotic", ignoreCase = true)
+            }
+            val isAsianAdult = !isHentai && (media.id >= 800000000L || media.mediaUrl != null || hasAdultLiveGenre || AnimarvleApp.isAsianAdultTitle(media.title) || AnimarvleApp.isPinoyTitle(media.title))
             val candidateBound = appContainer.sourceBindings.getBoundSourceId(media.id)
             val sources = appContainer.sourcesFor(type, media.title)
             val boundSourceId: Long? = if (isDonghua) {
                 val isCandidateValid = sources.any { s -> s.id == candidateBound && (s.name.contains("anichi", ignoreCase = true) || s.name.contains("kisskh", ignoreCase = true)) }
                 if (isCandidateValid) candidateBound else sources.firstOrNull()?.id
+            } else if (isAsianAdult) {
+                val isPinoy = media.mediaUrl?.contains("pinoy") == true || AnimarvleApp.isPinoyTitle(media.title)
+                if (isPinoy) 40005L else 40006L
             } else {
                 candidateBound ?: sources.firstOrNull()?.id
             }
             boundSourceId?.let { putLong("sourceId", it) }
             putLong("mediaId", media.id)
+            media.mediaUrl?.let { putString("mediaUrl", it) }
             putString("mediaTitle", media.title)
             putString("romajiTitle", media.romajiTitle)
             putString("nativeTitle", media.nativeTitle)
@@ -522,6 +539,10 @@ class DetailFragment : Fragment() {
             val preferTmdb = media.isTmdb
             putBoolean("preferTmdb", preferTmdb)
             putBoolean("isMovie", isMovie)
+            putBoolean("isAdult", isAsianAdult)
+            putBoolean("isAsianAdult", isAsianAdult)
+            putBoolean("isHentai", isHentai)
+            media.originalLanguage?.let { putString("originalLanguage", it) }
         }
         findNavController().navigate(R.id.playerFragment, args)
     }
@@ -594,7 +615,11 @@ class DetailFragment : Fragment() {
 
                     val sourceEpisodes = if (source != null && epNumbers.size > 1) {
                         withContext(Dispatchers.IO) {
-                            runCatching { source.episodes(result.media) }.getOrNull()
+                            runCatching {
+                                withTimeoutOrNull(15_000L) {
+                                    source.episodes(result.media)
+                                }
+                            }.getOrNull()
                         }.orEmpty()
                     } else {
                         emptyList()
@@ -603,24 +628,38 @@ class DetailFragment : Fragment() {
                     epNumbers.forEach { epNum ->
                         val epTitle = getString(R.string.details_next_episode, epNum)
                         val epStreamUrl: String = if (epNum == epNumbers.first() && !option?.streamUrl.isNullOrBlank()) {
-                            option!!.streamUrl
+                            option.streamUrl
                         } else if (source != null) {
                             val ep = sourceEpisodes.firstOrNull { it.number.toInt() == epNum }
                             if (ep != null) {
                                 withContext(Dispatchers.IO) {
                                     runCatching {
-                                        val choice = com.animarvle.sourceapi.Choice(option?.audio ?: com.animarvle.sourceapi.Audio.SUB, option?.serverKey.orEmpty())
-                                        val resolved = source.resolve(ep, choice)
-                                        resolved.streams.firstOrNull {
-                                            it.qualityLabel.equals(option?.qualityBadge, ignoreCase = true)
-                                        }?.url ?: resolved.streams.firstOrNull()?.url
+                                        withTimeoutOrNull(12_000L) {
+                                            val audioChoice = option?.audio ?: com.animarvle.sourceapi.Audio.SUB
+                                            val epOptions = source.options(ep)
+                                            val serverList = epOptions.byAudio[audioChoice]
+                                                ?: epOptions.byAudio.values.flatten()
+                                            val targetServer = serverList.firstOrNull {
+                                                it.label.contains(serverName.orEmpty(), ignoreCase = true) ||
+                                                it.key.contains(serverName.orEmpty(), ignoreCase = true)
+                                            } ?: serverList.firstOrNull()
+
+                                            if (targetServer != null) {
+                                                val resolved = source.resolve(ep, com.animarvle.sourceapi.Choice(audioChoice, targetServer.key))
+                                                resolved.streams.firstOrNull {
+                                                    it.qualityLabel.equals(option?.qualityBadge, ignoreCase = true)
+                                                }?.url ?: resolved.streams.firstOrNull()?.url
+                                            } else {
+                                                null
+                                            }
+                                        }
                                     }.getOrNull()
-                                } ?: option?.streamUrl.orEmpty()
+                                }.orEmpty()
                             } else {
-                                option?.streamUrl.orEmpty()
+                                ""
                             }
                         } else {
-                            option?.streamUrl.orEmpty()
+                            ""
                         }
 
                         if (epStreamUrl.isNotBlank()) {
@@ -650,24 +689,23 @@ class DetailFragment : Fragment() {
                     val quality = option?.qualityBadge ?: "AUTO"
                     val serverName = option?.serverName
                     val streamUrl = option?.streamUrl.orEmpty()
-                    if (streamUrl.isNotBlank()) {
-                        epNumbers.forEach { epNum ->
-                            val epTitle = getString(R.string.details_next_episode, epNum)
-                            container.downloads.enqueue(
-                                id = "${media.id}_ep$epNum",
-                                mediaId = media.id,
-                                mediaTitle = media.title,
-                                episodeTitle = epTitle,
-                                episodeNumber = epNum,
-                                posterUrl = media.coverUrl ?: media.bannerUrl,
-                                streamUrl = streamUrl,
-                                totalBytes = option?.estimatedBytes ?: 0L,
-                                quality = quality,
-                                serverName = serverName,
-                                language = option?.language ?: "English",
-                            )
-                        }
-                        toast(getString(R.string.detail_enqueued_episodes, epNumbers.size, quality))
+                    if (streamUrl.isNotBlank() && epNumbers.isNotEmpty()) {
+                        val firstEpNum = epNumbers.first()
+                        val epTitle = getString(R.string.details_next_episode, firstEpNum)
+                        container.downloads.enqueue(
+                            id = "${media.id}_ep$firstEpNum",
+                            mediaId = media.id,
+                            mediaTitle = media.title,
+                            episodeTitle = epTitle,
+                            episodeNumber = firstEpNum,
+                            posterUrl = media.coverUrl ?: media.bannerUrl,
+                            streamUrl = streamUrl,
+                            totalBytes = option?.estimatedBytes ?: 0L,
+                            quality = quality,
+                            serverName = serverName,
+                            language = option?.language ?: "English",
+                        )
+                        toast(getString(R.string.download_queued_toast, "${media.title} $epTitle ($quality)"))
                     } else {
                         toast(R.string.details_install_source)
                     }

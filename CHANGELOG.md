@@ -6,6 +6,91 @@ semantic versioning once a release cadence is agreed.
 
 Dates are ISO-8601. Milestones follow `PROMPT.md` §10.
 
+## [0.1.3] - 2026-11-14
+
+### Offline Playback Fullscreen & Orientation Lock
+- **Direct Locked Landscape Fullscreen (`PlayerFragment.kt`):** Offline playback of downloaded media now locks directly into sensor landscape mode (`SCREEN_ORIENTATION_SENSOR_LANDSCAPE`), hiding the online scrollview (`playerScrollView`) and disabling orientation switches to the portrait mini-player.
+- **Display Mode Controls (`PlayerFragment.kt`):** The fullscreen button in offline playback mode cycles through display modes (Fit / Zoom / Fill) without exiting fullscreen.
+
+### Server Deduplication & Stream Optimization
+- **Halo & Nebula Deduplication (`worker.js`, `AnimarvleStreamSource.kt`, `ChooseQualityBottomSheet.kt`):**
+  - Removed duplicate Nebula server injections in Cloudflare Worker edge relay.
+  - Added filter in `AnimarvleStreamSource.kt` to omit redundant VidLink mirrors when Halo is present.
+  - Added server deduplication in `ChooseQualityBottomSheet.kt` based on matching stream lists to keep download and player quality pickers concise and non-redundant.
+
+### CDN 403 Forbidden Normalization & Download Resilience
+- **Hakunaymatata Cluster Fallback (`AnimarvleStreamSource.kt`, `DownloadRepository.kt`, `AnimarvleApp.kt`):**
+  - Added automatic hostname rewriting for partitioned CDN nodes (e.g. `bcdn4.hakunaymatata.com`) to the high-availability master cluster (`bcdn.hakunaymatata.com`), eliminating HTTP 403 Forbidden download failures.
+  - Embedded normalization into download addition, resumption, and file loading.
+  - Implemented dynamic per-server file sizing when toggling server options in the download sheet.
+
+### Subtitle Language Flags & Customization
+- **ISO 639-1 Flag Integration (`LanguageFlagHelper.kt`, `SubtitlesBottomSheet.kt`):** Added national emoji flags corresponding to subtitle and audio languages.
+- **CineSrc Subtitles & Font Proportionality (`CineSrcSubtitlesService.kt`, `PlayerFragment.kt`):** Cleaned subtitle size scaling across portrait and landscape viewing modes.
+
+### Security Hardening & Cloud Synchronization
+- **Keystore Protection (`.gitignore`, `app/build.gradle.kts`):** Removed tracked debug keystore from git index and made local keystore configuration optional for external CI environments.
+- **Secret Purge (`.github/workflows/android.yml`, `app/build.gradle.kts`):** Removed hardcoded client secrets from codebase and CI scripts.
+- **Tombstone Sync (`MyListRepository.kt`, `GoogleDriveSyncRepository.kt`):** Implemented composite key tracking and tombstones for Google Drive synchronization to eliminate deletion resurrection loops.
+
+## [0.2.0] - 2026-11-12
+
+### Strict Content Quarantine: Anime vs. Hentai vs. Mainstream Hollywood/TV vs. Adult 18+
+- **Complete Pipeline Partitioning (`PlayerFragment.kt`, `PlayerViewModel.kt`, `AnimarvleApp.kt`, `MetadataRepository.kt`):**
+  - **Scraper Quarantine:** Standard anime scrapers (`Gogo`, `HiAnime`, `Zoro`, `Kitsune`, etc.) are strictly prohibited from being queried or falling back for adult live-action or Hentai titles. Conversely, adult scrapers (`AsianCinemaSource`, `PinoyMoviePediaSource`) are strictly excluded from mainstream Hollywood/TV movies and anime titles.
+  - **Source Instantiation Partitioning (`PlayerFragment.kt`):** `sources` is now partitioned at fragment initialization: if `!isAdultAsian`, `AsianCinemaSource` (40006L) and `PinoyMoviePediaSource` (40005L) are filtered out entirely, preventing adult plugins from leaking into candidate source lists or fallback chains.
+  - **Title Heuristics & Studio Code Recognition (`AnimarvleApp.kt`):** Expanded `isAsianAdultTitle` and `isPinoyTitle` to detect 80+ Vivamax and Asian adult title keywords (`hot moves`, `sex drive`, `gl forever`, `choosy`, `palitan`, `bela luna`, `virgin forest`, `silip sa apoy`, `alindog`, etc.) and standard Japanese studio codes (`\b[A-Za-z]{2,6}[-_]?\d{2,5}\b` such as `SW-339`, `SSIS`, `IPX`, `MIDV`, `JUL`, `SONE`, `STARS`, `ABP`, `SSNI`, `PRED`).
+  - **Error Fallback Protection (`PlayerViewModel.kt:handleSourceFailure`):** When a source fails, the fallback selector verifies content classification: adult titles fall back exclusively among adult sources (`AsianCinemaSource` ↔ `PinoyMoviePediaSource`), while mainstream movies fall back strictly to Hollywood scrapers (`Halo`, `Solara`, etc.), eliminating loops into anime sources.
+
+### Dedicated Branded Server Architecture & Hoster Separation
+- **Branded Server Infrastructure (`AudioModels.kt`, `PlayerViewModel.kt`):**
+  - Added `isAdultOnly = true` flag to `BrandedServer`.
+  - Created distinct, dedicated server identities:
+    - **`Cat3 Direct HD`** 🇯🇵 (`CAT3_DIRECT`, direct Cat3Movie high-speed HLS CDN, instant 800ms start time).
+    - **`VidHide / DooPlayer HD`** 🇯🇵 (`VIDHIDE`, VidHide, DooPlayer, and JavMost stream hosters).
+    - **`Pinoy / Vivamax`** 🇵🇭 (`PINOY_VIVAMAX`, Vivamax and Tagalog adult streams).
+    - **`Halo`** 🇺🇸 (`HALO`, mainstream Hollywood CDN).
+  - **Eliminated Server-Name Morphing:** Standardized server names across modal items and playback chips. Previously, when Asian Cinema was active, it displayed internal hoster "Cat3 Direct HD (HLS / MP4)", but when Halo was active, it displayed source plugin name "Asian Cinema (18+)". The server identities are now unified and invariant across all views.
+  - **Halo / Pinoy De-Aliasing & Host Recognition (`AudioModels.kt:fromRawServerName`):**
+    - Bound `sourceId == 40005L` and hoster names (`playmogo`, `mixdrop`, `streamhls`, `abstream`, `voe`, `shanelocal`, `filipino`) to `PINOY_VIVAMAX`.
+    - Resolved critical bug where `Playmogo (Direct MP4)` was unmapped and fell through to `else -> HALO`, causing Pinoy streams to display as "Halo" with a Philippine flag 🇵🇭 while leaving the dedicated `Pinoy / Vivamax` server unselected with a grey dot.
+    - `Pinoy / Vivamax` now renders with its green dot (`READY`) and green checkmark when active, while `Halo` remains an independent mainstream US-flagged server 🇺🇸.
+    - Added `SpokenLanguage.TAGALOG` (`tl`, `tgl`, `Filipino`) with national flag `🇵🇭`.
+  - **Strict Adult Server UI Masking & Hollywood Elimination (`PlayerViewModel.kt:updateServerModalItems`, `PlayerFragment.kt`):**
+    - `baseSources` (Hollywood / FlixHQ) is completely excluded from `PlayerFragment.kt:sources` when playing adult content (`isAdultAsian`), eliminating the `Halo` buffering loop fallback.
+    - When `isAdultContent == true`, the Source Selector Modal strictly filters out all non-adult servers (`Halo`, `Velvet`, `Spiral`, `Turbo`, `Nebula`, `Prism`, `Solara`). Only dedicated adult servers (`Cat3 Direct HD` 🇯🇵, `VidHide / DooPlayer HD` 🇯🇵, `Pinoy / Vivamax` 🇵🇭) appear.
+    - Unprobed candidate servers strictly render with an `AVAILABLE` neutral gray dot (⚪). Only the currently active playing stream renders with a `READY` green dot (🟢) and checkmark (✓). Deduplicated checkmarks so multiple servers never display checkmarks simultaneously.
+    - Enforced Philippine flag `🇵🇭` on `Pinoy / Vivamax` across all states (eliminating US flag fallback).
+
+### Hentai Scraper Quarantine, Fast Direct Resolution & HD Preview Thumbnails
+- **Content Pipeline Quarantine (`PlayerFragment.kt`, `PlayerViewModel.kt`, `AnimarvleStreamSource.kt`):**
+  - Plumbed `isHentai` and `isAdult` across `PlayerFragment` -> `PlayerViewModel` -> `AnimarvleStreamSource`.
+  - Hentai titles query `type=hentai&adult=1`. Mainstream anime extensions (`Anikoto`, `AnimeKai`, `Anichi`, etc.) and live-action adult sources (`AsianCinemaSource`, `PinoyMoviePediaSource`) are strictly quarantined from probing or falling back during Hentai playback.
+  - Expanded `MetadataRepository.KNOWN_ADULT_KEYWORDS` to classify titles like `bitch`, `shiboraretai`, `school slut`, `creampie`, `milf`, `erotic`, and `ecchi`.
+- **Fast Native HentaiMama Direct Resolver (`AnimarvleStreamSource.kt:resolveHentaiMamaDirect`):**
+  - Implemented in-app fallback that scrapes `hentaimama.io` directly, queries `admin-ajax.php`, extracts the iframe embed, and resolves direct 1080p/720p MP4 streams from `gdvid.info`.
+  - Added required streaming headers (`Referer: https://hentaimama.io/` and `Origin: https://hentaimama.io`) in `AnimarvleStreamSource.buildHeadersForUrl()`.
+  - Prioritized `resolveHentaiMamaDirect` upfront on adult hentai titles to bypass the 14-second Cloudflare worker timeout when the edge worker is unavailable or missing matching slugs, reducing time-to-stream from ~16s down to <2s.
+- **Episode Thumbnails Architecture & Coil 403 Forbidden Fix (`AnimarvleStreamSource.kt`, `AnimarvleApp.kt`):**
+  - **In-App Episode Extraction (`fetchHentaiMamaEpisodes`):** Scrapes HentaiMama show pages in <1s to retrieve complete episode lists with titles and 1280x720 `.webp` preview thumbnails (`https://hentaimama.io/wp-content/uploads/...webp`).
+  - **Coil Header Interceptor (`AnimarvleApp.kt:newImageLoader`):** HentaiMama servers reject image requests without referers with `HTTP 403 Forbidden`. Added an interceptor in Coil's `OkHttpClient` injecting `Referer: https://hentaimama.io/` and a browser `User-Agent` for `hentaimama.io` and `hentaini.com`, allowing episode snapshot thumbnails to load with `HTTP 200 OK`.
+
+### ExoPlayer LoadControl & Byte-Range Ceiling (Zero Data Waste & 800ms Start)
+- **Hard Byte Ceiling (`PlayerFragment.kt:initPlayer`):**
+  - Replaced unbounded buffer configurations with `DefaultLoadControl.Builder.setTargetBufferBytes(8 * 1024 * 1024)` (strict 8 MB buffer cap) and `setPrioritizeTimeOverSizeThresholds(false)`.
+  - Reduced buffer durations from 15,000ms down to `minBufferMs = 2_000`, `maxBufferMs = 6_000`, `bufferForPlaybackMs = 800` (guaranteeing instant 800ms start time), and `bufferForPlaybackAfterRebufferMs = 1_200`.
+  - Set back-buffer to 10s: `setBackBuffer(10_000, false)`.
+  - Eliminates 20–35 MB segment download spikes and cellular data waste.
+- **Immediate Socket Termination on Server Switch (`PlayerFragment.kt:execute`):**
+  - Added `player?.stop()` before `setMediaItem()` in `PlayerCommand.Prepare`, immediately aborting hung/looping HTTP sockets from dead or slow servers when switching streams.
+
+### Multi-Server Options & Auto-Fallback in AsianCinemaSource
+- **Dual Server Options (`AsianCinemaSource.kt:options`):**
+  - Exposes both `Cat3 Direct HD` and `VidHide / DooPlayer HD` as selectable options.
+- **Automatic High-Speed CDN Resolution & Auto-Fallback (`AsianCinemaSource.kt:resolve`):**
+  - Prioritizes instant 800ms Cat3 direct CDN, performs automated studio code and title cross-probing (`resolveCat3ByTitleOrCode`), and automatically falls back to VidHide/JavMost mirrors if Cat3 returns 404/410.
+  - Implemented fast candidate URL pre-flight probing with `Range: bytes=0-100` headers.
+
 ## [0.1.5] - 2026-10-26
 
 ### Cloudflare Worker Runtime Standards & TypeScript Diagnostics

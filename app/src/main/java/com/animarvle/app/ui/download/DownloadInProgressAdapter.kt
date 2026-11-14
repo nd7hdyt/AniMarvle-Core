@@ -90,6 +90,8 @@ class DownloadInProgressAdapter(
                 popup.menu.add(0, 1, 0, "Pause")
             } else if (item.status == DownloadStatus.PAUSED) {
                 popup.menu.add(0, 2, 0, "Resume")
+            } else if (item.status == DownloadStatus.FAILED) {
+                popup.menu.add(0, 2, 0, "Retry")
             }
             popup.menu.add(0, 3, 1, "Cancel Download")
 

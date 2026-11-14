@@ -38,23 +38,264 @@ async function fetchWithTimeout(url, options = {}, ms = 3500) {
   }
 }
 
+const ALLOWED_STREAM_DOMAINS = [
+  // Video and stream providers used across built-in sources
+  "hakunaymatata.com",
+  "vidlink.pro",
+  "anitaku.to",
+  "anitaku.so",
+  "anitaku.pe",
+  "anitaku.bz",
+  "animahd.org",
+  "multiembed.mov",
+  "2embed.cc",
+  "videasy.net",
+  "donghuastream.org",
+  "hentaini.com",
+  "hentaimama.io",
+  "animesex.club",
+  "clean-tube-player.com",
+  "gdvid.net",
+  "gdvid.pro",
+  "gdvid.xyz",
+  "gdvid.com",
+  "yesterdaymail.com",
+  "yesterdaymail.xyz",
+  "videoprov.com",
+  "pelisplushd.to",
+  "pelisplus.lat",
+  "pelisplus.icu",
+  "asiancinema.me",
+  "pinoymoviepedia.ru",
+  // Video hosting & file hosts
+  "video-gen.xyz",
+  "driveseed.org",
+  "fastdl.workers.dev",
+  "hubcloud.club",
+  "hubcloud.lat",
+  "gdtot.lat",
+  "gdtot.pro",
+  // Specific dedicated CDN subnets (BunnyCDN edges for hakunaymatata/vidlink)
+  "b-cdn.net",
+  "bunnycdn.com",
+  // AniKoto & MegaPlay (Onyx)
+  "megaplay.buzz",
+  "megap.shiora.top",
+  "shiora.top",
+  "emeralddrift.world",
+  "anipixcdn.co",
+  "nekostream.site",
+  "anikoto.net",
+  "anikoto.me",
+  "anikoto.bz",
+  "anikototv.to",
+  // KissKH & Asian Dramas (Velvet)
+  "kisskh.co",
+  "kisskh.do",
+  "kisskh.id",
+  "kisskh.is",
+  "kisskh.la",
+  "kisskh.ovh",
+  "cdnvideo11.shop",
+  "dembed1.com",
+  "sbplay2.xyz",
+  "script.google.com",
+  "script.googleusercontent.com"
+];
+
+const LANGUAGE_META = {
+  en: { name: "English",    flag: "\ud83c\uddfa\ud83c\uddf8" },
+  ja: { name: "Japanese",   flag: "\ud83c\uddef\ud83c\uddf5" },
+  ko: { name: "Korean",     flag: "\ud83c\uddf0\ud83c\uddf7" },
+  tr: { name: "Turkish",    flag: "\ud83c\uddf9\ud83c\uddf7" },
+  es: { name: "Spanish",    flag: "\ud83c\uddea\ud83c\uddf8" },
+  hi: { name: "Hindi",      flag: "\ud83c\uddee\ud83c\uddf3" },
+  de: { name: "German",     flag: "\ud83c\udde9\ud83c\uddea" },
+  fr: { name: "French",     flag: "\ud83c\uddeb\ud83c\uddf7" },
+  ru: { name: "Russian",    flag: "\ud83c\uddf7\ud83c\uddfa" },
+  pt: { name: "Portuguese", flag: "\ud83c\udde7\ud83c\uddf7" },
+  ar: { name: "Arabic",     flag: "\ud83c\uddf8\ud83c\udde6" },
+  it: { name: "Italian",    flag: "\ud83c\uddee\ud83c\uddf9" },
+  zh: { name: "Chinese",    flag: "\ud83c\udde8\ud83c\uddf3" },
+  ta: { name: "Tamil",      flag: "\ud83c\uddee\ud83c\uddf3" },
+  te: { name: "Telugu",     flag: "\ud83c\uddee\ud83c\uddf3" },
+  ur: { name: "Urdu",       flag: "\ud83c\uddf5\ud83c\uddf0" },
+  bn: { name: "Bengali",    flag: "\ud83c\udde7\ud83c\udde9" },
+  ml: { name: "Malayalam",  flag: "\ud83c\uddee\ud83c\uddf3" },
+  kn: { name: "Kannada",    flag: "\ud83c\uddee\ud83c\uddf3" }
+};
+
+function getLanguageMeta(langCodeOrName, fallbackCode = "en") {
+  const norm = (langCodeOrName || "").toLowerCase().trim();
+  if (LANGUAGE_META[norm]) return { code: norm, ...LANGUAGE_META[norm] };
+  for (const [code, meta] of Object.entries(LANGUAGE_META)) {
+    if (meta.name.toLowerCase() === norm) return { code, ...meta };
+  }
+  return { code: fallbackCode, ...(LANGUAGE_META[fallbackCode] || LANGUAGE_META.en) };
+}
+
+const ISO_TO_NAME = {
+  en: "English",
+  ja: "Japanese",
+  hi: "Hindi",
+  tr: "Turkish",
+  ko: "Korean",
+  zh: "Chinese",
+  es: "Spanish",
+  fr: "French",
+  de: "German",
+  it: "Italian",
+  pt: "Portuguese",
+  ru: "Russian",
+  ar: "Arabic",
+  ta: "Tamil",
+  te: "Telugu",
+  ur: "Urdu",
+  bn: "Bengali",
+  ml: "Malayalam",
+  kn: "Kannada",
+  id: "Indonesian",
+  th: "Thai",
+  vi: "Vietnamese",
+  pl: "Polish"
+};
+
+// Map spoken language names to ISO-639-1 codes for PlayerViewModel.rebuildAudioOptions()
+const LANG_CODE_MAP = {
+  english: "en",
+  spanish: "es",
+  hindi: "hi",
+  german: "de",
+  french: "fr",
+  russian: "ru",
+  portuguese: "pt",
+  arabic: "ar",
+  italian: "it",
+  japanese: "ja",
+  korean: "ko",
+  chinese: "zh",
+  turkish: "tr",
+  tamil: "ta",
+  telugu: "te",
+  urdu: "ur",
+  bengali: "bn",
+  malayalam: "ml",
+  kannada: "kn",
+  indonesian: "id",
+  thai: "th",
+  vietnamese: "vi",
+  polish: "pl"
+};
+
+function resolveLanguagePair(langInput, defaultLang = "English") {
+  if (!langInput) {
+    const code = LANG_CODE_MAP[defaultLang.toLowerCase()] || "en";
+    return { name: defaultLang, code: code };
+  }
+  const clean = langInput.trim().toLowerCase();
+  if (ISO_TO_NAME[clean]) {
+    return { name: ISO_TO_NAME[clean], code: clean };
+  }
+  if (LANG_CODE_MAP[clean]) {
+    const code = LANG_CODE_MAP[clean];
+    const name = ISO_TO_NAME[code] || (clean.charAt(0).toUpperCase() + clean.slice(1));
+    return { name: name, code: code };
+  }
+  return {
+    name: clean.charAt(0).toUpperCase() + clean.slice(1),
+    code: clean.slice(0, 2)
+  };
+}
+
+function isPrivateOrBlockedHost(urlString) {
+  try {
+    const u = new URL(urlString);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return true;
+    const host = u.hostname.toLowerCase();
+    return (
+      host === "localhost" ||
+      host === "127.0.0.1" ||
+      host === "0.0.0.0" ||
+      host === "::1" ||
+      host === "metadata.google.internal" ||
+      host === "instance-data" ||
+      host.startsWith("127.") ||
+      host.startsWith("10.") ||
+      host.startsWith("192.168.") ||
+      host.startsWith("169.254.") ||
+      /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(host) ||
+      host.startsWith("fc00:") ||
+      host.startsWith("fd00:") ||
+      host.startsWith("fe80:")
+    );
+  } catch (_) {
+    return true;
+  }
+}
+
+// Lightweight deterministic signature helper so CDN child playlists/segments authorized by Worker pass validation
+function signProxyUrl(targetUrl, secret = "animarvle-edge-proxy-v1") {
+  let hash = 2166136261;
+  const input = `${targetUrl}|${secret}`;
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16);
+}
+
+function isAuthorizedProxyRequest(targetUrl, sig) {
+  if (isPrivateOrBlockedHost(targetUrl)) return false;
+  if (sig && sig === signProxyUrl(targetUrl)) return true;
+  return isAllowedTargetUrl(targetUrl);
+}
+
+async function fetchWithManualRedirects(initialUrl, options = {}, timeoutMs = 8000, maxHops = 3, allowPublicHosts = false) {
+  let curUrl = initialUrl;
+  for (let hop = 0; hop <= maxHops; hop++) {
+    if (isPrivateOrBlockedHost(curUrl)) {
+      throw new Error(`Target URL ${curUrl} not allowed`);
+    }
+    if (!allowPublicHosts && !isAllowedTargetUrl(curUrl)) {
+      throw new Error(`Target URL ${curUrl} not allowed`);
+    }
+    const res = await fetchWithTimeout(curUrl, { ...options, redirect: "manual" }, timeoutMs);
+    if (res.status >= 301 && res.status <= 308) {
+      const location = res.headers.get("Location");
+      if (!location) return res;
+      const resolved = new URL(location, curUrl).toString();
+      if (isPrivateOrBlockedHost(resolved)) {
+        throw new Error(`Redirect target ${resolved} not allowed`);
+      }
+      if (!allowPublicHosts && !isAllowedTargetUrl(resolved)) {
+        throw new Error(`Redirect target ${resolved} not allowed`);
+      }
+      curUrl = resolved;
+      continue;
+    }
+    return res;
+  }
+  throw new Error("Too many redirects");
+}
+
 function isAllowedTargetUrl(urlString) {
   try {
     const u = new URL(urlString);
     if (u.protocol !== "http:" && u.protocol !== "https:") return false;
-    const host = u.hostname.toLowerCase();
-    if (
-      host === "localhost" ||
-      host === "127.0.0.1" ||
-      host === "::1" ||
-      host.startsWith("169.254.") ||
-      host.startsWith("10.") ||
-      host.startsWith("192.168.") ||
-      host.startsWith("127.")
-    ) {
+
+    // 1. Strict blocking of private, loopback, link-local, cloud metadata IPs & hostnames
+    if (isPrivateOrBlockedHost(urlString)) {
       return false;
     }
-    return true;
+
+    const host = u.hostname.toLowerCase();
+
+    // 2. Strict allowlist matching against authorized streaming hosts & CDNs
+    const isDomainAllowed = ALLOWED_STREAM_DOMAINS.some(allowed =>
+      host === allowed || host.endsWith("." + allowed)
+    );
+
+    return isDomainAllowed;
   } catch (_) {
     return false;
   }
@@ -121,9 +362,15 @@ export default {
           service: "Animarvle Edge Relay",
           version: "2.1.0",
           colo: request.cf?.colo || "edge",
-          servers: ["Spiral", "Turbo", "FastX"],
+          servers: ["Halo", "Nebula", "Prism (multi-audio)", "Solara", "Onyx", "Kitsune", "Velvet"],
           features: ["instant-playback", "206-range-streaming", "hls-adaptive", "multi-subtitle", "edge-cache", "ssrf-protected", "rate-limited"]
         });
+      }
+
+      // Modular per-resolver route: /resolve/halo, /resolve/nebula, /resolve/prism, etc.
+      if (path.startsWith("/resolve/")) {
+        const resolverKey = path.replace("/resolve/", "").toLowerCase().trim();
+        return await handleSingleResolver(request, url, ctx, env, resolverKey);
       }
 
       // 2. Stream Resolution API
@@ -172,6 +419,79 @@ export default {
   }
 };
 
+async function handleSingleResolver(request, url, ctx, env, resolverKey) {
+  const title = url.searchParams.get("title") || "";
+  const type = (url.searchParams.get("type") || "movie").toLowerCase();
+  const season = url.searchParams.get("season") || "1";
+  const episode = url.searchParams.get("episode") || "1";
+  const tmdbId = url.searchParams.get("tmdb") || "";
+  const imdbId = url.searchParams.get("imdb") || "";
+  const origLang = url.searchParams.get("orig_lang") || url.searchParams.get("original_language") || "";
+
+  let resolvedTmdb = tmdbId;
+  let resolvedImdb = imdbId;
+  let resolvedTitle = title;
+  let resolvedOrigLang = origLang;
+
+  if (!resolvedTmdb && title) {
+    const meta = await lookupMediaMetadata(title, type, "", env);
+    if (meta) {
+      resolvedTmdb = meta.tmdbId || "";
+      resolvedImdb = meta.imdbId || "";
+      resolvedTitle = meta.title || title;
+      if (!resolvedOrigLang) resolvedOrigLang = meta.originalLanguage || "";
+    }
+  }
+
+  let streams = [];
+  switch (resolverKey) {
+    case "halo":
+    case "nebula": {
+      if (resolvedTmdb) {
+        const res = await resolveVidLink(type, resolvedTmdb, season, episode, url.origin, resolvedOrigLang);
+        streams = res.filter(s => s.serverKey === resolverKey || (!streams.length && s.serverKey));
+      }
+      break;
+    }
+    case "prism": {
+      if (resolvedTmdb || resolvedImdb) {
+        const res = await resolvePrismMultiAudio(resolvedTmdb, resolvedImdb, type, season, episode, resolvedOrigLang, url.origin);
+        if (res) streams = [res];
+      }
+      break;
+    }
+    case "solara": {
+      if (resolvedTmdb || resolvedImdb) {
+        streams = await resolveFallbackHls(resolvedTmdb, resolvedImdb, type, season, episode, url.origin, resolvedOrigLang);
+      }
+      break;
+    }
+    case "kitsune": {
+      streams = await resolveAnimeHls(resolvedTitle || title, season, episode, url.origin);
+      break;
+    }
+    case "onyx": {
+      const res = await resolveAniKotoMegaPlay(resolvedTitle || title, season, episode, url.origin, url.searchParams.get("lang") || "");
+      if (res) streams = Array.isArray(res) ? res : [res];
+      break;
+    }
+    case "velvet": {
+      const res = await resolveKissKH(resolvedTitle || title, type, season, episode, url.origin);
+      if (res) streams = Array.isArray(res) ? res : [res];
+      break;
+    }
+    default: {
+      return jsonResponse({ success: false, error: `Unknown resolver: ${resolverKey}` }, 400);
+    }
+  }
+
+  return jsonResponse({
+    success: streams.length > 0,
+    resolver: resolverKey,
+    streams: streams
+  }, streams.length > 0 ? 200 : 404);
+}
+
 // --- Stream Resolvers -------------------------------------------------------
 
 async function handleStreamResolve(request, url, ctx, env) {
@@ -202,13 +522,17 @@ async function handleStreamResolve(request, url, ctx, env) {
     }
   }
 
-  // 1. Resolve TMDB ID if not directly provided
-  let resolvedTmdb = tmdbId;
-  let resolvedImdb = imdbId;
+  const isHentai = type === "hentai" || type === "adult" || url.searchParams.get("adult") === "1";
+
+  // 1. Resolve TMDB ID if not directly provided (NEVER lookup TMDB for adult/hentai content)
+  let resolvedTmdb = isHentai ? "" : tmdbId;
+  let resolvedImdb = isHentai ? "" : imdbId;
   let resolvedTitle = title;
   let resolvedYear = year;
+  let resolvedOrigLang = url.searchParams.get("orig_lang") || url.searchParams.get("original_language") || "";
+  let isAnimation = false;
 
-  if (!resolvedTmdb && title) {
+  if (!isHentai && !resolvedTmdb && title) {
     const cleanLookupTitle = title.replace(/\s*(\(dub\)|\(sub\)|\(raw\)|\[dub\]|\[sub\]|\[raw\])\s*$/gi, "").trim();
     const meta = await lookupMediaMetadata(cleanLookupTitle, type, year, env);
     if (meta) {
@@ -216,45 +540,89 @@ async function handleStreamResolve(request, url, ctx, env) {
       resolvedImdb = meta.imdbId || "";
       resolvedTitle = meta.title || title;
       resolvedYear = meta.year || year;
+      if (!resolvedOrigLang && meta.originalLanguage) {
+        resolvedOrigLang = meta.originalLanguage;
+      }
+      if (meta.genreIds && meta.genreIds.includes(16)) {
+        isAnimation = true;
+      }
     }
+  }
+
+  if (!isHentai && resolvedTmdb) {
+    const details = await getTmdbMediaDetails(resolvedTmdb, type, env);
+    if (details) {
+      if (!resolvedOrigLang && details.originalLanguage) {
+        resolvedOrigLang = details.originalLanguage;
+      }
+      if (details.isAnimation) {
+        isAnimation = true;
+      }
+    }
+  }
+
+  if (!resolvedOrigLang && type === "anime") {
+    resolvedOrigLang = "ja";
   }
 
   const reqLang = (url.searchParams.get("lang") || url.searchParams.get("audio") || "").toLowerCase();
   const streams = [];
   const fetchPromises = [];
 
-  // Provider A: VidLink Pro High-Speed CDN Streams (Primary for Movies, TV, and Anime)
-  if (resolvedTmdb) {
+  // Mainstream Anime Content: strictly non-hentai animation or anime
+  const isAnimeContent = !isHentai && (
+    type === "anime" ||
+    (isAnimation && (resolvedOrigLang === "ja" || Boolean(romaji))) ||
+    Boolean(romaji && resolvedOrigLang === "ja")
+  );
+
+  // Provider A: VidLink Pro High-Speed CDN Streams (STRICTLY for Movies & TV series)
+  // NEVER query VidLink for Anime or Hentai: upstream VidLink serves poisoned troll loops (Morbius, adult JAV)
+  if (resolvedTmdb && !isAnimeContent && !isHentai) {
     fetchPromises.push(
-      resolveVidLink(type, resolvedTmdb, season, episode, url.origin)
+      resolveVidLink(type, resolvedTmdb, season, episode, url.origin, resolvedOrigLang)
         .then(res => { if (res) streams.push(...res); })
         .catch(() => {})
     );
-    // Provider A2: Videasy, MovieBox Multi-Audio & 2Embed Fallbacks for Movies & TV
+    // Provider A2: Prism (MultiEmbed + Videasy Multi-Audio) & Solara (2Embed) for Movies & TV
     if (type === "movie" || type === "tv" || type === "series") {
       fetchPromises.push(
-        resolveVideasyMultiAudio(type, resolvedTmdb, season, episode, url.origin)
-          .then(res => { if (res) streams.push(...res); })
+        resolvePrismMultiAudio(resolvedTmdb, resolvedImdb, type, season, episode, resolvedOrigLang, url.origin)
+          .then(res => { if (res) streams.push(res); })
           .catch(() => {})
       );
       fetchPromises.push(
-        resolveMovieBoxMultiAudio(resolvedTmdb, resolvedImdb, type, season, episode, url.origin)
+        resolveFallbackHls(resolvedTmdb, resolvedImdb, type, season, episode, url.origin, resolvedOrigLang)
           .then(res => { if (res) streams.push(...res); })
           .catch(() => {})
       );
+      // Provider A3: KissKH (Velvet) Asian Drama / Cinema & International Movies/TV
       fetchPromises.push(
-        resolveFallbackHls(resolvedTmdb, resolvedImdb, type, season, episode, url.origin)
-          .then(res => { if (res) streams.push(...res); })
+        resolveKissKH(resolvedTitle || title, type, season, episode, url.origin)
+          .then(res => { if (res) streams.push(res); })
           .catch(() => {})
       );
     }
   }
 
-  // Provider B: Anime Native HLS (For Anime titles)
-  if (type === "anime") {
+  // Provider B: Anime Native HLS (STRICTLY for Mainstream Anime, NEVER for Hentai)
+  if (isAnimeContent && !isHentai) {
+    // Onyx (AniKoto / MegaPlay) - PRIMARY DEFAULT ANIME SERVER
+    fetchPromises.push(
+      resolveAniKotoMegaPlay(resolvedTitle || title, season, episode, url.origin, reqLang)
+        .then(res => { if (res) { if (Array.isArray(res)) streams.push(...res); else streams.push(res); } })
+        .catch(() => {})
+    );
+    // Kitsune (Gogoanime/Anitaku) - SECONDARY ANIME SERVER
     fetchPromises.push(
       resolveAnimeHls(resolvedTitle || title, season, episode, url.origin)
         .then(res => { if (res) streams.push(...res); })
+        .catch(() => {})
+    );
+    // Velvet (KissKH) - TERTIARY ANIME FALLBACK
+    fetchPromises.push(
+      resolveKissKH(resolvedTitle || title, "anime", season, episode, url.origin)
+        .then(res => { if (res) streams.push(res); })
         .catch(() => {})
     );
     if (!reqLang || reqLang === "pt" || reqLang === "es" || reqLang === "ja") {
@@ -267,8 +635,7 @@ async function handleStreamResolve(request, url, ctx, env) {
   }
 
   // Provider F: Hindi Dubbed / Bollywood / Dual Audio (MoviesMod)
-  // Gated: Run on discovery (default) or when Hindi is requested
-  if (!reqLang || reqLang === "hi" || reqLang === "hindi") {
+  if (!isHentai && (!reqLang || reqLang === "hi" || reqLang === "hindi")) {
     fetchPromises.push(
       resolveHindiStreams(resolvedTitle || title, resolvedYear || year, type, season, episode, url.origin)
         .then(res => { if (res) streams.push(...res); })
@@ -277,7 +644,7 @@ async function handleStreamResolve(request, url, ctx, env) {
   }
 
   // Provider G: Spanish (PelisPlusHD) - gated when Spanish requested
-  if (reqLang === "es" || reqLang === "spanish" || reqLang === "spa") {
+  if (!isHentai && (reqLang === "es" || reqLang === "spanish" || reqLang === "spa")) {
     fetchPromises.push(
       resolveSpanishStreams(resolvedTitle || title, type, resolvedTmdb, season, episode, url.origin)
         .then(res => { if (res) streams.push(...res); })
@@ -286,7 +653,7 @@ async function handleStreamResolve(request, url, ctx, env) {
   }
 
   // Provider H: Arabic (EgyDead) - gated when Arabic requested
-  if (reqLang === "ar" || reqLang === "arabic") {
+  if (!isHentai && (reqLang === "ar" || reqLang === "arabic")) {
     fetchPromises.push(
       resolveArabicStreams(resolvedTitle || title, type, season, episode, url.origin)
         .then(res => { if (res) streams.push(...res); })
@@ -295,7 +662,7 @@ async function handleStreamResolve(request, url, ctx, env) {
   }
 
   // Provider I: Chinese Donghua (DonghuaStream)
-  if ((type === "anime" || (title && title.toLowerCase().includes("donghua"))) && (!reqLang || reqLang === "zh" || reqLang === "chinese")) {
+  if (!isHentai && (type === "anime" || (title && title.toLowerCase().includes("donghua"))) && (!reqLang || reqLang === "zh" || reqLang === "chinese")) {
     fetchPromises.push(
       resolveDonghuaStreams(resolvedTitle || title, episode, url.origin)
         .then(res => { if (res) streams.push(...res); })
@@ -304,8 +671,8 @@ async function handleStreamResolve(request, url, ctx, env) {
   }
 
   // Provider J: Adult Anime Streams (HentaiNi, HentaiMama, AnimeSex)
-  // Strictly isolated to adult/hentai content; NEVER execute for mainstream anime
-  if (type === "hentai" || type === "adult" || url.searchParams.get("adult") === "1") {
+  // Strictly isolated to adult/hentai content; NEVER execute for mainstream anime or movies
+  if (isHentai) {
     fetchPromises.push(
       resolveAdultAnimeStreams(title || resolvedTitle, episode, url.origin, romaji, synonyms)
         .then(res => { if (res) streams.push(...res); })
@@ -315,8 +682,30 @@ async function handleStreamResolve(request, url, ctx, env) {
 
   await Promise.allSettled(fetchPromises);
 
-  // If a specific language was requested, prioritize streams matching that language
-  if (reqLang) {
+  // Sort streams: for mainstream anime, prioritize Onyx as the primary server, followed by Kitsune and Velvet;
+  // if reqLang was requested, prioritize streams matching that language
+  if (!isHentai && (type === "anime" || isAnimeContent)) {
+    streams.sort((a, b) => {
+      if (reqLang) {
+        const aMatch = (a.audioLanguage?.toLowerCase() === reqLang || a.languageCode === reqLang) ? 1 : 0;
+        const bMatch = (b.audioLanguage?.toLowerCase() === reqLang || b.languageCode === reqLang) ? 1 : 0;
+        if (aMatch !== bMatch) return bMatch - aMatch;
+      }
+      const aOnyx = (a.serverKey === "onyx" || (a.server && a.server.toLowerCase() === "onyx")) ? 1 : 0;
+      const bOnyx = (b.serverKey === "onyx" || (b.server && b.server.toLowerCase() === "onyx")) ? 1 : 0;
+      if (aOnyx !== bOnyx) return bOnyx - aOnyx;
+
+      const aKitsune = (a.serverKey === "kitsune" || (a.server && a.server.toLowerCase() === "kitsune")) ? 1 : 0;
+      const bKitsune = (b.serverKey === "kitsune" || (b.server && b.server.toLowerCase() === "kitsune")) ? 1 : 0;
+      if (aKitsune !== bKitsune) return bKitsune - aKitsune;
+
+      const aVelvet = (a.serverKey === "velvet" || (a.server && a.server.toLowerCase() === "velvet")) ? 1 : 0;
+      const bVelvet = (b.serverKey === "velvet" || (b.server && b.server.toLowerCase() === "velvet")) ? 1 : 0;
+      if (aVelvet !== bVelvet) return bVelvet - aVelvet;
+
+      return 0;
+    });
+  } else if (reqLang) {
     streams.sort((a, b) => {
       const aMatch = (a.audioLanguage?.toLowerCase() === reqLang || a.languageCode === reqLang) ? 1 : 0;
       const bMatch = (b.audioLanguage?.toLowerCase() === reqLang || b.languageCode === reqLang) ? 1 : 0;
@@ -324,64 +713,36 @@ async function handleStreamResolve(request, url, ctx, env) {
     });
   }
 
-  // Group and format streams into the AniVortex server model: Spiral, Turbo, FastX + Multi-Audio servers
+  // Group streams into 1-to-1 Branded Server model (Halo, Nebula, Prism, Solara, Kitsune, Velvet, etc.)
   const finalServers = [];
-  const serverNames = ["Spiral", "Turbo", "FastX"];
-
-  // Sort streams: 1080p first, then 720p, 480p, 360p
-  const qMap = { "1080p": 4, "720p": 3, "480p": 2, "360p": 1, "auto": 3 };
-  streams.sort((a, b) => (qMap[b.quality?.toLowerCase()] || 2) - (qMap[a.quality?.toLowerCase()] || 2));
-
-  const seenUrls = new Set();
-  const byLanguage = {};
+  const seenServers = new Set();
 
   for (const s of streams) {
-    if (!s.url || seenUrls.has(s.url)) continue;
-    seenUrls.add(s.url);
-    const lang = s.audioLanguage || "English";
-    if (!byLanguage[lang]) byLanguage[lang] = [];
-    byLanguage[lang].push(s);
-  }
+    if (!s || !s.url) continue;
+    const serverKey = (s.serverKey || s.server || "").toLowerCase().trim();
+    const audioKey = (s.audio || "").toLowerCase().trim();
+    const key = audioKey ? `${serverKey}:${audioKey}` : serverKey;
+    if (!serverKey || seenServers.has(key)) continue;
+    seenServers.add(key);
 
-  const langCodeMap = {
-    "english": "en",
-    "hindi": "hi",
-    "japanese": "ja",
-    "spanish": "es",
-    "arabic": "ar",
-    "chinese": "zh",
-    "portuguese": "pt",
-    "russian": "ru",
-    "french": "fr",
-    "german": "de",
-    "italian": "it",
-    "korean": "ko"
-  };
-
-  let serverIdx = 0;
-  for (const [lang, langStreams] of Object.entries(byLanguage)) {
-    const lCode = langCodeMap[lang.toLowerCase()] || lang.toLowerCase().substring(0, 2);
-    // Preserve up to 3 quality tiers (Spiral, Turbo, FastX) per language
-    for (let i = 0; i < Math.min(langStreams.length, 3); i++) {
-      const s = langStreams[i];
-      const assignedName = serverNames[serverIdx] || `${lang} Server ${i + 1}`;
-      finalServers.push({
-        server: s.server || assignedName,
-        url: s.url,
-        rawUrl: s.rawUrl || s.url,
-        kind: s.kind || "hls",
-        quality: s.quality || "1080p",
-        qualities: s.qualities || {},
-        audio: s.audio || (lang === "Japanese" || lang === "Chinese" ? "SUB" : "DUB"),
-        audioLanguage: lang,
-        languageCode: s.languageCode || lCode,
-        headers: s.headers || {},
-        subtitles: s.subtitles || []
-      });
-      serverIdx++;
-      if (finalServers.length >= 12) break;
-    }
-    if (finalServers.length >= 12) break;
+    const langMeta = getLanguageMeta(s.languageCode || s.audioLanguage || resolvedOrigLang || "en");
+    finalServers.push({
+      serverKey: s.serverKey || key,
+      server: s.server,
+      url: s.url,
+      rawUrl: s.rawUrl || s.url,
+      kind: s.kind || "hls",
+      quality: s.quality || "1080p",
+      qualities: s.qualities || { [s.quality || "1080p"]: s.url },
+      audio: s.audio || (langMeta.code === "ja" || langMeta.code === "zh" ? "SUB" : "DUB"),
+      audioLanguage: s.audioLanguage || langMeta.name,
+      languageCode: s.languageCode || langMeta.code,
+      flag: s.flag || (s.isMultiAudio ? "\ud83c\udf10" : langMeta.flag),
+      isMultiAudio: !!s.isMultiAudio,
+      audioTracks: s.audioTracks || [],
+      headers: s.headers || {},
+      subtitles: s.subtitles || []
+    });
   }
 
   const availableLanguages = Array.from(new Set(finalServers.map(s => s.audioLanguage).filter(Boolean)));
@@ -410,7 +771,7 @@ async function handleStreamResolve(request, url, ctx, env) {
   return response;
 }
 
-// --- VidLink Native Encrypted Resolver --------------------------------------
+// --- VidLink Native Encrypted Resolver (Halo & Nebula) ----------------------
 
 function encryptVidLinkToken(mediaId) {
   const timestamp = Math.floor(Date.now() / 1000) + 480;
@@ -434,7 +795,7 @@ function encryptVidLinkToken(mediaId) {
   return bytesToBase64Url(fullPayload);
 }
 
-async function resolveVidLink(type, tmdbId, season, episode, workerOrigin) {
+async function resolveVidLink(type, tmdbId, season, episode, workerOrigin, mediaOriginalLanguage = "") {
   try {
     const token = encryptVidLinkToken(tmdbId);
     const isTv = type === "tv" || type === "series" || type === "anime";
@@ -473,76 +834,82 @@ async function resolveVidLink(type, tmdbId, season, episode, workerOrigin) {
       }
     }
 
+    const isAnime = type === "anime";
+    const defaultLang = isAnime ? "ja" : "en";
+    const langMeta = getLanguageMeta(mediaOriginalLanguage || defaultLang);
+
+    function getStreamHeaders(streamUrl, specificHeaders = {}) {
+      const isFilmboom = streamUrl && (streamUrl.includes("filmboom") || streamUrl.includes("bcdnxw."));
+      const isBcdn = streamUrl && (streamUrl.includes("hakunaymatata.com") || streamUrl.includes("bcdn.") || streamUrl.includes("acdn.") || streamUrl.includes("vcdn.") || streamUrl.includes("fcdn.") || streamUrl.includes("watch32."));
+
+      if (isBcdn && !isFilmboom) {
+        // bcdn.hakunaymatata.com strictly returns HTTP 429 when given filmboom referer or origin!
+        return {
+          "User-Agent": "okhttp/4.12.0",
+          "Accept": "*/*"
+        };
+      }
+      if (isFilmboom) {
+        return {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
+          "Referer": "https://filmboom.top/",
+          "Origin": "https://filmboom.top",
+          "Accept": "*/*"
+        };
+      }
+      const h = { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36" };
+      if (specificHeaders && typeof specificHeaders === "object") {
+        for (const [k, v] of Object.entries(specificHeaders)) {
+          if (v) {
+            const normalizedKey = k.toLowerCase() === "user-agent" ? "User-Agent" :
+                                 k.toLowerCase() === "referer" ? "Referer" :
+                                 k.toLowerCase() === "origin" ? "Origin" :
+                                 k.charAt(0).toUpperCase() + k.slice(1).toLowerCase();
+            h[normalizedKey] = v;
+          }
+        }
+      }
+      if (!h["Referer"] && !h["referer"]) {
+        h["Origin"] = "https://vidlink.pro";
+      }
+      return h;
+    }
+
+    const q1080 = quals["1080"] || quals["720"] || quals["480"] || quals["360"];
+    if (!q1080 || !q1080.url) return [];
+
+    const bestQuality = quals["1080"] ? "1080p" : (quals["720"] ? "720p" : (quals["480"] ? "480p" : "360p"));
     const results = [];
 
-    // Quality mapping for AniVortex servers:
-    const isAnime = type === "anime";
-    function getStreamHeaders(streamUrl) {
-      if (streamUrl && (streamUrl.includes("hakunaymatata.com") || streamUrl.includes("bcdn.") || streamUrl.includes("acdn.") || streamUrl.includes("vcdn.") || streamUrl.includes("fcdn.") || streamUrl.includes("watch32."))) {
-        return { "User-Agent": "okhttp/4.12.0" };
-      }
-      return { "Origin": "https://vidlink.pro" };
+    // Normalize bcdn4 to primary operational bcdn to avoid 403 Forbidden
+    function cleanCdnUrl(u) {
+      if (!u) return u;
+      return u.replace(/bcdn\d*\.hakunaymatata\.com/gi, "bcdn.hakunaymatata.com");
     }
 
-    const nowUnix = Math.floor(Date.now() / 1000);
-    function isExpiredToken(streamUrl) {
-      if (!streamUrl) return false;
-      const match = streamUrl.match(/[?&]t=([0-9]+)/);
-      if (!match) return false;
-      const t = parseInt(match[1], 10);
-      return t > 1000000000 && t < nowUnix;
+    const cleanedUrl = cleanCdnUrl(q1080.url);
+    const cleanedQualities = {};
+    for (const [k, v] of Object.entries(availableQualities)) {
+      cleanedQualities[k] = cleanCdnUrl(v);
     }
 
-    // Spiral: 1080p (or best available direct CDN stream)
-    const q1080 = quals["1080"] || quals["720"] || quals["480"];
-    if (q1080 && q1080.url && !isExpiredToken(q1080.url)) {
-      results.push({
-        server: "Spiral",
-        url: q1080.url,
-        rawUrl: q1080.url,
-        kind: "mp4",
-        quality: quals["1080"] ? "1080p" : (quals["720"] ? "720p" : "480p"),
-        qualities: availableQualities,
-        audio: "SUB",
-        audioLanguage: isAnime ? "Japanese" : "English",
-        headers: getStreamHeaders(q1080.url),
-        subtitles: captions
-      });
-    }
-
-    // Turbo: 720p / 480p (high speed streaming)
-    const q720 = quals["720"] || quals["480"] || quals["360"];
-    if (q720 && q720.url && q720.url !== q1080?.url && !isExpiredToken(q720.url)) {
-      results.push({
-        server: "Turbo",
-        url: q720.url,
-        rawUrl: q720.url,
-        kind: "mp4",
-        quality: quals["720"] ? "720p" : "480p",
-        qualities: availableQualities,
-        audio: "SUB",
-        audioLanguage: isAnime ? "Japanese" : "English",
-        headers: getStreamHeaders(q720.url),
-        subtitles: captions
-      });
-    }
-
-    // FastX: 360p (mobile data saver)
-    const q360 = quals["360"] || quals["480"];
-    if (q360 && q360.url && q360.url !== q1080?.url && q360.url !== q720?.url && !isExpiredToken(q360.url)) {
-      results.push({
-        server: "FastX",
-        url: q360.url,
-        rawUrl: q360.url,
-        kind: "mp4",
-        quality: "360p",
-        qualities: availableQualities,
-        audio: "SUB",
-        audioLanguage: isAnime ? "Japanese" : "English",
-        headers: getStreamHeaders(q360.url),
-        subtitles: captions
-      });
-    }
+    // Halo: Direct high-speed CDN stream with bundled multi-qualities (1080p, 720p, 480p, 360p)
+    results.push({
+      serverKey: "halo",
+      server: "Halo",
+      url: cleanedUrl,
+      rawUrl: cleanedUrl,
+      kind: "mp4",
+      quality: bestQuality,
+      qualities: cleanedQualities,
+      audio: langMeta.code === "ja" ? "SUB" : "DUB",
+      audioLanguage: langMeta.name,
+      languageCode: langMeta.code,
+      flag: langMeta.flag,
+      isMultiAudio: false,
+      headers: getStreamHeaders(cleanedUrl, q1080.headers),
+      subtitles: captions
+    });
 
     return results;
   } catch (_) {
@@ -550,7 +917,7 @@ async function resolveVidLink(type, tmdbId, season, episode, workerOrigin) {
   }
 }
 
-// --- Anime HLS Resolver (HiAnime / GogoAnime) -------------------------------
+// --- Anime HLS Resolver (Kitsune / Anitaku / GogoAnime) -----------------------
 
 async function resolveAnimeHls(title, season, episode, workerOrigin) {
   const results = [];
@@ -560,7 +927,7 @@ async function resolveAnimeHls(title, season, episode, workerOrigin) {
     const cleanTitle = encodeURIComponent(title.replace(/[^\w\s]/gi, "").trim());
     const consumetUrl = `https://api-consumet-org-production.up.railway.app/anime/gogoanime/${cleanTitle}`;
 
-    const res = await fetchWithTimeout(consumetUrl, {}, 3500);
+    const res = await fetchWithTimeout(consumetUrl, {}, 1500);
 
     if (res.ok) {
       const searchData = await res.json();
@@ -575,9 +942,11 @@ async function resolveAnimeHls(title, season, episode, workerOrigin) {
               const epData = await subRes.json();
               for (const s of epData?.sources || []) {
                 if (s.url && s.url.includes(".m3u8")) {
-                  const proxyUrl = `${workerOrigin}/proxy/m3u8?url=${encodeURIComponent(s.url)}&referer=${encodeURIComponent("https://anitaku.to/")}`;
+                  const sig = signProxyUrl(s.url);
+                  const proxyUrl = `${workerOrigin}/proxy/m3u8?url=${encodeURIComponent(s.url)}&referer=${encodeURIComponent("https://anitaku.to/")}&sig=${sig}`;
                   results.push({
-                    server: "Spiral",
+                    serverKey: "kitsune",
+                    server: "Kitsune",
                     url: proxyUrl,
                     rawUrl: s.url,
                     kind: "hls",
@@ -585,6 +954,7 @@ async function resolveAnimeHls(title, season, episode, workerOrigin) {
                     audio: "SUB",
                     audioLanguage: "Japanese",
                     languageCode: "ja",
+                    flag: "\ud83c\uddef\ud83c\uddf5",
                     headers: { "Referer": "https://anitaku.to/" }
                   });
                   break;
@@ -603,9 +973,11 @@ async function resolveAnimeHls(title, season, episode, workerOrigin) {
               const dubData = await dubRes.json();
               for (const s of dubData?.sources || []) {
                 if (s.url && s.url.includes(".m3u8")) {
-                  const proxyUrl = `${workerOrigin}/proxy/m3u8?url=${encodeURIComponent(s.url)}&referer=${encodeURIComponent("https://anitaku.to/")}`;
+                  const sig = signProxyUrl(s.url);
+                  const proxyUrl = `${workerOrigin}/proxy/m3u8?url=${encodeURIComponent(s.url)}&referer=${encodeURIComponent("https://anitaku.to/")}&sig=${sig}`;
                   results.push({
-                    server: "FastX",
+                    serverKey: "kitsune",
+                    server: "Kitsune",
                     url: proxyUrl,
                     rawUrl: s.url,
                     kind: "hls",
@@ -613,6 +985,7 @@ async function resolveAnimeHls(title, season, episode, workerOrigin) {
                     audio: "DUB",
                     audioLanguage: "English",
                     languageCode: "en",
+                    flag: "\ud83c\uddfa\ud83c\uddf8",
                     headers: { "Referer": "https://anitaku.to/" }
                   });
                   break;
@@ -628,6 +1001,344 @@ async function resolveAnimeHls(title, season, episode, workerOrigin) {
   } catch (_) {}
 
   return results;
+}
+
+// --- AniKoto & MegaPlay Native Encrypted Resolver (Onyx) -------------------
+
+async function decryptMegaPlay(encStr) {
+  try {
+    let base64 = encStr.replace(/-/g, "+").replace(/_/g, "/");
+    while (base64.length % 4 !== 0) base64 += "=";
+    const binaryString = atob(base64);
+    const cipherBytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      cipherBytes[i] = binaryString.charCodeAt(i);
+    }
+
+    const keyBytes = new Uint8Array(32);
+    const rawKeyStr = "i?LMTAx0Q6,:}50U";
+    for (let i = 0; i < rawKeyStr.length; i++) {
+      keyBytes[i] = rawKeyStr.charCodeAt(i);
+    }
+
+    const ivStr = "W0;27ToaUpl_P%'c";
+    const ivBytes = new Uint8Array(16);
+    for (let i = 0; i < ivStr.length; i++) {
+      ivBytes[i] = ivStr.charCodeAt(i);
+    }
+
+    const cryptoKey = await crypto.subtle.importKey(
+      "raw",
+      keyBytes,
+      { name: "AES-CBC" },
+      false,
+      ["decrypt"]
+    );
+
+    const decryptedBuf = await crypto.subtle.decrypt(
+      { name: "AES-CBC", iv: ivBytes },
+      cryptoKey,
+      cipherBytes
+    );
+
+    return JSON.parse(new TextDecoder().decode(decryptedBuf));
+  } catch (err) {
+    return null;
+  }
+}
+
+async function resolveAniKotoMegaPlay(title, season = "1", episode = "1", workerOrigin = "", reqLang = "") {
+  if (!title) return null;
+  const cleanTitle = title.replace(/\s*(\(dub\)|\(sub\)|\(raw\)|\[dub\]|\[sub\]|\[raw\])\s*$/gi, "").trim();
+  const domains = ["https://anikoto.net", "https://anikoto.me", "https://anikototv.to"];
+  
+  for (const base of domains) {
+    try {
+      const searchUrl = `${base}/ajax/anime/search?keyword=${encodeURIComponent(cleanTitle)}`;
+      const searchRes = await fetchWithTimeout(searchUrl, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+          "X-Requested-With": "XMLHttpRequest",
+          "Referer": `${base}/`
+        }
+      }, 3500);
+      if (!searchRes.ok) continue;
+      const searchData = await searchRes.json().catch(() => null);
+      if (!searchData) continue;
+      const searchHtml = searchData.result?.html || searchData.html || "";
+      if (!searchHtml) continue;
+
+      const itemRegex = /<a class="item" href="([^"]+)">[\s\S]*?<div class="name d-title"(?: data-jp="([^"]*)")?>([^<]+)<\/div>/gi;
+      let itemMatch;
+      const items = [];
+      while ((itemMatch = itemRegex.exec(searchHtml)) !== null) {
+        items.push({ href: itemMatch[1], jp: itemMatch[2] || "", title: itemMatch[3].trim() });
+      }
+      if (!items.length) continue;
+
+      const matched = items.find(it => isConfidentMatch(cleanTitle, it.title) || (it.jp && isConfidentMatch(cleanTitle, it.jp)));
+      if (!matched) continue;
+
+      let watchBaseUrl = matched.href;
+      if (!watchBaseUrl.startsWith("http")) watchBaseUrl = `${base}${watchBaseUrl}`;
+      const epWatchUrl = watchBaseUrl.includes("/ep-") ? watchBaseUrl : (episode === "1" ? watchBaseUrl : `${watchBaseUrl}/ep-${episode}`);
+
+      const pageRes = await fetchWithTimeout(epWatchUrl, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+          "Referer": `${base}/`
+        }
+      }, 3500);
+      if (!pageRes.ok) continue;
+      const pageHtml = await pageRes.text();
+      const animeIdMatch = pageHtml.match(/data-anime-id="(\d+)"/) || pageHtml.match(/data-id="(\d+)"/);
+      if (!animeIdMatch) continue;
+      const animeId = animeIdMatch[1];
+
+      const epListRes = await fetchWithTimeout(`${base}/ajax/episode/list/${animeId}`, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+          "X-Requested-With": "XMLHttpRequest",
+          "Referer": epWatchUrl
+        }
+      }, 3000);
+      if (!epListRes.ok) continue;
+      const epListData = await epListRes.json();
+      const epListHtml = epListData.result || epListData.html || "";
+
+      const epRegex = new RegExp(`data-num="${episode}"[\\s\\S]*?data-ids="([^"]+)"`, "i");
+      const epMatch = epListHtml.match(epRegex) || epListHtml.match(/data-ids="([^"]+)"/);
+      if (!epMatch) continue;
+      const dataIds = epMatch[1];
+
+      const srvRes = await fetchWithTimeout(`${base}/ajax/server/list?servers=${encodeURIComponent(dataIds)}`, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+          "X-Requested-With": "XMLHttpRequest",
+          "Referer": epWatchUrl
+        }
+      }, 3000);
+      if (!srvRes.ok) continue;
+      const srvData = await srvRes.json();
+      const srvHtml = srvData.result || srvData.html || "";
+
+      const servers = [];
+      const srvItemRegex = /<li[^>]*data-link-id="([^"]+)"[^>]*>([\s\S]*?)<\/li>/gi;
+      let m;
+      while ((m = srvItemRegex.exec(srvHtml)) !== null) {
+        const linkId = m[1];
+        const srvName = m[2].replace(/<[^>]+>/g, "").trim();
+        const isDub = srvHtml.lastIndexOf('data-type="dub"', m.index) > srvHtml.lastIndexOf('data-type="sub"', m.index);
+        servers.push({ linkId, srvName, isDub });
+      }
+      if (!servers.length) continue;
+
+      const resolveServerItem = async (chosen) => {
+        if (!chosen) return null;
+        try {
+          const getSrvRes = await fetchWithTimeout(`${base}/ajax/server?get=${encodeURIComponent(chosen.linkId)}`, {
+            headers: {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+              "X-Requested-With": "XMLHttpRequest",
+              "Referer": epWatchUrl
+            }
+          }, 3000);
+          if (!getSrvRes.ok) return null;
+          const getSrvData = await getSrvRes.json();
+          const embedUrl = getSrvData.result?.url;
+          const skipData = getSrvData.result?.skip_data;
+          if (!embedUrl) return null;
+
+          const embedRes = await fetchWithTimeout(embedUrl, {
+            headers: {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+              "Referer": `${base}/`
+            }
+          }, 3000);
+          if (!embedRes.ok) return null;
+          const embedHtml = await embedRes.text();
+          const mediaIdMatch = embedHtml.match(/data-id="(\d+)"/) || embedHtml.match(/File\s+(\d+)/);
+          if (!mediaIdMatch) return null;
+          const mediaId = mediaIdMatch[1];
+          const sParam = new URL(embedUrl).searchParams.get("s") || "";
+
+          const sourcesUrl = `https://megaplay.buzz/stream/getSources?id=${mediaId}${sParam ? `&s=${encodeURIComponent(sParam)}` : ""}`;
+          const sourcesRes = await fetchWithTimeout(sourcesUrl, {
+            headers: {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+              "X-Requested-With": "XMLHttpRequest",
+              "Referer": embedUrl,
+              "Accept": "application/json, */*"
+            }
+          }, 3000);
+          if (!sourcesRes.ok) return null;
+          const sourcesData = await sourcesRes.json();
+          if (!sourcesData.enc) return null;
+
+          const decrypted = await decryptMegaPlay(sourcesData.enc);
+          if (!decrypted || !decrypted.file) return null;
+
+          const streamUrl = decrypted.file;
+          const sig = signProxyUrl(streamUrl);
+          const proxyUrl = workerOrigin ? `${workerOrigin}/proxy/m3u8?url=${encodeURIComponent(streamUrl)}&referer=${encodeURIComponent("https://megaplay.buzz/")}&sig=${sig}` : streamUrl;
+
+          return {
+            serverKey: "onyx",
+            server: "Onyx",
+            url: proxyUrl,
+            rawUrl: streamUrl,
+            kind: "hls",
+            quality: "1080p",
+            audio: chosen.isDub ? "DUB" : "SUB",
+            audioLanguage: chosen.isDub ? "English" : "Japanese",
+            languageCode: chosen.isDub ? "en" : "ja",
+            flag: chosen.isDub ? "\ud83c\uddfa\ud83c\uddf8" : "\ud83c\uddef\ud83c\uddf5",
+            headers: { "Referer": "https://megaplay.buzz/" },
+            skipIntro: skipData?.intro || sourcesData.intro || null,
+            skipOutro: skipData?.outro || sourcesData.outro || null
+          };
+        } catch (_) {
+          return null;
+        }
+      };
+
+      const wantsDub = reqLang === "en" || reqLang === "dub" || reqLang === "english";
+      const wantsSub = reqLang === "ja" || reqLang === "sub" || reqLang === "japanese";
+
+      let chosenList = [];
+      if (wantsDub) {
+        const dubSrv = servers.find(s => s.isDub) || servers[0];
+        chosenList = [dubSrv];
+      } else if (wantsSub) {
+        const subSrv = servers.find(s => !s.isDub) || servers[0];
+        chosenList = [subSrv];
+      } else {
+        const subSrv = servers.find(s => !s.isDub);
+        const dubSrv = servers.find(s => s.isDub);
+        if (subSrv) chosenList.push(subSrv);
+        if (dubSrv && dubSrv !== subSrv) chosenList.push(dubSrv);
+        if (!chosenList.length) chosenList = [servers[0]];
+      }
+
+      const results = (await Promise.all(chosenList.map(resolveServerItem))).filter(Boolean);
+      if (results.length > 0) return results;
+    } catch (_) {}
+  }
+  return null;
+}
+
+// --- KissKH Native Asian Drama & International Resolver (Velvet) -----------
+
+async function resolveKissKH(title, type = "tv", season = "1", episode = "1", workerOrigin = "") {
+  if (!title) return null;
+  const cleanTitle = title.replace(/\s*(\(dub\)|\(sub\)|\(raw\)|\[dub\]|\[sub\]|\[raw\])\s*$/gi, "").trim();
+  const sNum = parseInt(season, 10) || 1;
+  const eNum = parseInt(episode, 10) || 1;
+
+  let searchQuery = cleanTitle;
+  if (type !== "movie" && sNum > 1) {
+    searchQuery = `${cleanTitle} Season ${sNum}`;
+  }
+
+  try {
+    let searchRes = await fetchWithTimeout(`https://kisskh.co/api/DramaList/Search?q=${encodeURIComponent(searchQuery)}&type=0`, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Referer": "https://kisskh.co/"
+      }
+    }, 3000).then(r => r.json()).catch(() => []);
+
+    if ((!Array.isArray(searchRes) || searchRes.length === 0) && searchQuery !== cleanTitle) {
+      searchRes = await fetchWithTimeout(`https://kisskh.co/api/DramaList/Search?q=${encodeURIComponent(cleanTitle)}&type=0`, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+          "Referer": "https://kisskh.co/"
+        }
+      }, 3000).then(r => r.json()).catch(() => []);
+    }
+
+    if (!Array.isArray(searchRes) || searchRes.length === 0) return null;
+
+    const matchedDramas = searchRes.filter(d => isConfidentMatch(cleanTitle, d.title));
+    if (matchedDramas.length === 0) return null;
+
+    const drama = matchedDramas.find(d => {
+      const t = (d.title || "").toLowerCase();
+      if (sNum > 1 && t.includes(`season ${sNum}`)) return true;
+      if (sNum === 1 && !t.includes("season 2") && !t.includes("season 3")) return true;
+      return false;
+    }) || matchedDramas[0];
+
+    const dramaInfo = await fetchWithTimeout(`https://kisskh.co/api/DramaList/Drama/${drama.id}?isq=false`, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Referer": "https://kisskh.co/"
+      }
+    }, 3000).then(r => r.json()).catch(() => null);
+
+    if (!dramaInfo || !Array.isArray(dramaInfo.episodes) || dramaInfo.episodes.length === 0) return null;
+
+    const targetEp = dramaInfo.episodes.find(e => Math.floor(e.number) === eNum) || dramaInfo.episodes[0];
+    if (!targetEp) return null;
+
+    const keyRes = await fetchWithTimeout(`https://script.google.com/macros/s/AKfycbzn8B31PuDxzaMa9_CQ0VGEDasFqfzI5bXvjaIZH4DM8DNq9q6xj1ALvZNz_JT3jF0suA/exec?id=${targetEp.id}&version=2.8.10`, {
+      headers: { "User-Agent": "Mozilla/5.0" }
+    }, 4000).then(r => r.json()).catch(() => null);
+
+    if (!keyRes || !keyRes.key) return null;
+
+    const videoData = await fetchWithTimeout(`https://kisskh.co/api/DramaList/Episode/${targetEp.id}.png?err=false&ts=&time=&kkey=${keyRes.key}`, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Referer": "https://kisskh.co/"
+      }
+    }, 3000).then(r => r.json()).catch(() => null);
+
+    const streamUrl = videoData?.Video || videoData?.ThirdParty;
+    if (!streamUrl) return null;
+
+    let subtitles = [];
+    const subKeyRes = await fetchWithTimeout(`https://script.google.com/macros/s/AKfycbyq6hTj0ZhlinYC6xbggtgo166tp6XaDKBCGtnYk8uOfYBUFwwxBui0sGXiu_zIFmA/exec?id=${targetEp.id}&version=2.8.10`, {
+      headers: { "User-Agent": "Mozilla/5.0" }
+    }, 3000).then(r => r.json()).catch(() => null);
+
+    if (subKeyRes && subKeyRes.key) {
+      const rawSubs = await fetchWithTimeout(`https://kisskh.co/api/Sub/${targetEp.id}?kkey=${subKeyRes.key}`, {
+        headers: { "Referer": "https://kisskh.co/" }
+      }, 3000).then(r => r.json()).catch(() => []);
+      if (Array.isArray(rawSubs)) {
+        subtitles = rawSubs.map(s => ({
+          url: s.src,
+          label: s.label || s.land || "English",
+          lang: s.land || s.lang || "en",
+          default: !!s.default
+        }));
+      }
+    }
+
+    const dramaTitleLower = (drama.title || "").toLowerCase();
+    const isKorean = drama.country === "South Korea" || dramaTitleLower.includes("korean") || /k-?drama/i.test(dramaTitleLower) || drama.id === 4531;
+    const isJapanese = drama.country === "Japan" || dramaTitleLower.includes("japanese");
+    const sig = signProxyUrl(streamUrl);
+    const proxyUrl = workerOrigin ? `${workerOrigin}/proxy/m3u8?url=${encodeURIComponent(streamUrl)}&referer=${encodeURIComponent("https://kisskh.co/")}&sig=${sig}` : streamUrl;
+
+    return {
+      serverKey: "velvet",
+      server: "Velvet",
+      url: proxyUrl,
+      rawUrl: streamUrl,
+      kind: "hls",
+      quality: "1080p",
+      audio: "SUB",
+      audioLanguage: isKorean ? "Korean" : (isJapanese ? "Japanese" : "English"),
+      languageCode: isKorean ? "ko" : (isJapanese ? "ja" : "en"),
+      flag: isKorean ? "\ud83c\uddf0\ud83c\uddf7" : (isJapanese ? "\ud83c\uddef\ud83c\uddf5" : "\ud83c\uddfa\ud83c\uddf8"),
+      headers: { "Referer": "https://kisskh.co/" },
+      subtitles: subtitles
+    };
+  } catch (_) {
+    return null;
+  }
 }
 
 // --- AnimaHD Anime Multi-Language (Portuguese, Spanish, Japanese) -----------
@@ -657,9 +1368,10 @@ async function resolveAnimaHD(title, episode, workerOrigin) {
             const lang = st.lang?.toLowerCase().includes("pt") || st.lang?.toLowerCase().includes("portug")
               ? "Portuguese"
               : (st.lang?.toLowerCase().includes("es") || st.lang?.toLowerCase().includes("span") ? "Spanish" : "Japanese");
+            const sig = signProxyUrl(st.url);
             results.push({
               server: `AnimaHD (${lang})`,
-              url: `${workerOrigin}/proxy/m3u8?url=${encodeURIComponent(st.url)}&referer=${encodeURIComponent("https://animahd.org/")}`,
+              url: `${workerOrigin}/proxy/m3u8?url=${encodeURIComponent(st.url)}&referer=${encodeURIComponent("https://animahd.org/")}&sig=${sig}`,
               rawUrl: st.url,
               kind: "hls",
               quality: st.quality || "1080p",
@@ -676,92 +1388,144 @@ async function resolveAnimaHD(title, episode, workerOrigin) {
   return results;
 }
 
-// --- MovieBox Multi-Audio Resolver (Russian, Portuguese, Spanish, Arabic, French, English) ---
+// --- Prism Multi-Audio Resolver (MultiEmbed + Videasy Multi-Language HLS) ---
 
-async function resolveMovieBoxMultiAudio(tmdbId, imdbId, type, season, episode, workerOrigin) {
-  if (!tmdbId && !imdbId) return [];
-  const results = [];
+async function resolvePrismMultiAudio(tmdbId, imdbId, type, season, episode, originalLangCode, workerOrigin) {
+  if (!tmdbId && !imdbId) return null;
   const id = tmdbId || imdbId;
+  const audioTracks = [];
 
   try {
-    const targetUrl = type === "tv"
+    const targetUrl = (type === "tv" || type === "series")
       ? `https://multiembed.mov/?video_id=${id}&s=${season}&e=${episode}`
       : `https://multiembed.mov/?video_id=${id}&tmdb=1`;
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 3000);
-
-    const res = await fetch(targetUrl, {
+    const res = await fetchWithTimeout(targetUrl, {
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         "Referer": "https://multiembed.mov/"
-      },
-      signal: controller.signal
-    });
-    clearTimeout(timeout);
+      }
+    }, 4000);
 
     if (res.ok) {
       const html = await res.text();
       const m3u8Matches = html.match(/https?:\/\/[^\s"'<>]+\.m3u8[^\s"'<>]*/gi) || [];
-      const langMatches = html.match(/(Russian|Portuguese|Spanish|Arabic|French|English|German|Italian)/gi) || [];
+      const langMatches = html.match(/(English|Spanish|Hindi|German|French|Russian|Portuguese|Arabic|Italian|Japanese|Korean|Turkish|Tamil|Telugu|Chinese)/gi) || [];
 
       for (let i = 0; i < m3u8Matches.length; i++) {
         const rawUrl = m3u8Matches[i];
-        const detectedLang = langMatches[i] || (i === 0 ? "English" : null);
-        if (!detectedLang) continue;
+        const rawLang = langMatches[i] || (i === 0 ? originalLangCode || "English" : null);
+        if (!rawLang) continue;
 
-        const proxyUrl = `${workerOrigin}/proxy/m3u8?url=${encodeURIComponent(rawUrl)}&referer=${encodeURIComponent("https://multiembed.mov/")}`;
-        results.push({
-          server: `MultiAudio (${detectedLang})`,
+        const langMeta = getLanguageMeta(rawLang, originalLangCode || "en");
+        const sig = signProxyUrl(rawUrl);
+        const proxyUrl = `${workerOrigin}/proxy/m3u8?url=${encodeURIComponent(rawUrl)}&referer=${encodeURIComponent("https://multiembed.mov/")}&sig=${sig}`;
+
+        audioTracks.push({
+          languageCode: langMeta.code,
+          audioLanguage: langMeta.name,
+          flag: langMeta.flag,
           url: proxyUrl,
           rawUrl: rawUrl,
-          kind: "hls",
-          quality: "1080p",
-          audio: detectedLang === "English" ? "SUB" : "DUB",
-          audioLanguage: detectedLang,
           headers: { "Referer": "https://multiembed.mov/" }
         });
       }
     }
   } catch (_) {}
 
-  return results;
+  // Videasy backup if MultiEmbed had no tracks
+  try {
+    if (audioTracks.length === 0 && tmdbId) {
+      const isTv = type === "tv" || type === "series";
+      const embedUrl = isTv
+        ? `https://player.videasy.net/tv/${tmdbId}/${season}/${episode}`
+        : `https://player.videasy.net/movie/${tmdbId}`;
+
+      const res = await fetchWithTimeout(embedUrl, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+          "Referer": "https://player.videasy.net/"
+        }
+      }, 3500);
+
+      if (res.ok) {
+        const html = await res.text();
+        const sourcesMatch = html.match(/https?:\/\/[^\s"'<>]+\.m3u8[^\s"'<>]*/gi) || [];
+        const langMeta = getLanguageMeta(originalLangCode || "en");
+        for (let i = 0; i < Math.min(sourcesMatch.length, 2); i++) {
+          const m3u8Url = sourcesMatch[i];
+          const sig = signProxyUrl(m3u8Url);
+          const proxyUrl = `${workerOrigin}/proxy/m3u8?url=${encodeURIComponent(m3u8Url)}&referer=${encodeURIComponent("https://player.videasy.net/")}&sig=${sig}`;
+          audioTracks.push({
+            languageCode: langMeta.code,
+            audioLanguage: langMeta.name,
+            flag: langMeta.flag,
+            url: proxyUrl,
+            rawUrl: m3u8Url,
+            headers: { "Referer": "https://player.videasy.net/" }
+          });
+        }
+      }
+    }
+  } catch (_) {}
+
+  if (audioTracks.length === 0) return null;
+
+  const primaryTrack = audioTracks[0];
+  return {
+    serverKey: "prism",
+    server: "Prism (multi-audio)",
+    url: primaryTrack.url,
+    rawUrl: primaryTrack.rawUrl,
+    kind: "hls",
+    quality: "1080p",
+    audio: primaryTrack.languageCode === "ja" ? "SUB" : "DUB",
+    audioLanguage: primaryTrack.audioLanguage,
+    languageCode: primaryTrack.languageCode,
+    flag: audioTracks.length > 1 ? "\ud83c\udf10" : primaryTrack.flag,
+    isMultiAudio: audioTracks.length > 1,
+    audioTracks: audioTracks,
+    headers: primaryTrack.headers
+  };
 }
 
-// --- Fallback Resolver ------------------------------------------------------
+// --- Fallback Resolver (Solara / 2Embed / Vidsrc) ----------------------------
 
-async function resolveFallbackHls(tmdbId, imdbId, type, season, episode, workerOrigin) {
+async function resolveFallbackHls(tmdbId, imdbId, type, season, episode, workerOrigin, mediaOriginalLanguage = "") {
   if (!tmdbId && !imdbId) return [];
   const results = [];
   const id = tmdbId || imdbId;
 
   try {
-    // 2Embed / Vidsrc fallback
-    const embedUrl = type === "tv"
+    const embedUrl = (type === "tv" || type === "series")
       ? `https://www.2embed.cc/embedtv/${id}&s=${season}&e=${episode}`
       : `https://www.2embed.cc/embed/${id}`;
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 3000);
-
-    const res = await fetch(embedUrl, {
-      headers: { "User-Agent": "Mozilla/5.0", "Referer": "https://2embed.cc/" },
-      signal: controller.signal
-    });
-    clearTimeout(timeout);
+    const res = await fetchWithTimeout(embedUrl, {
+      headers: { "User-Agent": "Mozilla/5.0", "Referer": "https://2embed.cc/" }
+    }, 3500);
 
     if (res.ok) {
       const html = await res.text();
       const m3u8Match = html.match(/https?:\/\/[^\s"'<>]+\.m3u8[^\s"'<>]*/i);
       if (m3u8Match) {
         const rawUrl = m3u8Match[0];
-        const proxyUrl = `${workerOrigin}/proxy/m3u8?url=${encodeURIComponent(rawUrl)}&referer=${encodeURIComponent("https://2embed.cc/")}`;
+        const sig = signProxyUrl(rawUrl);
+        const proxyUrl = `${workerOrigin}/proxy/m3u8?url=${encodeURIComponent(rawUrl)}&referer=${encodeURIComponent("https://2embed.cc/")}&sig=${sig}`;
+        const defaultLang = type === "anime" ? "ja" : "en";
+        const langMeta = getLanguageMeta(mediaOriginalLanguage || defaultLang);
         results.push({
-          server: "FastX",
+          serverKey: "solara",
+          server: "Solara",
           url: proxyUrl,
           rawUrl: rawUrl,
           kind: "hls",
           quality: "720p",
+          qualities: { "720p": proxyUrl },
+          audio: langMeta.code === "ja" ? "SUB" : "DUB",
+          audioLanguage: langMeta.name,
+          languageCode: langMeta.code,
+          flag: langMeta.flag,
           headers: { "Referer": "https://2embed.cc/" }
         });
       }
@@ -773,7 +1537,7 @@ async function resolveFallbackHls(tmdbId, imdbId, type, season, episode, workerO
 
 // --- Videasy Multi-Audio Hybrid Resolver (TMDB Catalog) ---------------------
 
-async function resolveVideasyMultiAudio(type, tmdbId, season, episode, workerOrigin) {
+async function resolveVideasyMultiAudio(type, tmdbId, season, episode, workerOrigin, mediaOriginalLanguage = "") {
   if (!tmdbId) return [];
   const results = [];
   const isTv = type === "tv" || type === "series";
@@ -793,11 +1557,14 @@ async function resolveVideasyMultiAudio(type, tmdbId, season, episode, workerOri
     if (res.ok) {
       const html = await res.text();
       const sourcesMatch = html.match(/https?:\/\/[^\s"'<>]+\.m3u8[^\s"'<>]*/gi) || [];
+      const defaultLang = type === "anime" ? "Japanese" : "English";
+      const langPair = resolveLanguagePair(mediaOriginalLanguage, defaultLang);
 
       for (let i = 0; i < Math.min(sourcesMatch.length, 2); i++) {
         const m3u8Url = sourcesMatch[i];
         if (!m3u8Url.includes(".m3u8")) continue;
-        const proxyUrl = `${workerOrigin}/proxy/m3u8?url=${encodeURIComponent(m3u8Url)}&referer=${encodeURIComponent("https://player.videasy.net/")}`;
+        const sig = signProxyUrl(m3u8Url);
+        const proxyUrl = `${workerOrigin}/proxy/m3u8?url=${encodeURIComponent(m3u8Url)}&referer=${encodeURIComponent("https://player.videasy.net/")}&sig=${sig}`;
         results.push({
           server: `Videasy (CDN ${i + 1})`,
           url: proxyUrl,
@@ -805,8 +1572,8 @@ async function resolveVideasyMultiAudio(type, tmdbId, season, episode, workerOri
           kind: "hls",
           quality: "1080p",
           audio: "SUB",
-          audioLanguage: "English",
-          languageCode: "en",
+          audioLanguage: langPair.name,
+          languageCode: langPair.code,
           headers: { "Referer": "https://player.videasy.net/" }
         });
       }
@@ -1138,7 +1905,8 @@ async function resolveArabicStreams(title, type, season, episode, workerOrigin) 
             kind: src.includes(".m3u8") ? "hls" : "mp4",
             quality: "1080p",
             audio: "DUB",
-            audioLanguage: "Arabic"
+            audioLanguage: "Arabic",
+            languageCode: "ar"
           });
           if (results.length >= 2) break;
         }
@@ -1172,7 +1940,8 @@ async function resolveDonghuaStreams(title, episode, workerOrigin) {
       const item = data?.results?.[0];
       if (item && item.url) {
         const rawUrl = item.url;
-        const proxyUrl = `${workerOrigin}/proxy/m3u8?url=${encodeURIComponent(rawUrl)}&referer=${encodeURIComponent("https://donghuastream.org/")}`;
+        const sig = signProxyUrl(rawUrl);
+        const proxyUrl = `${workerOrigin}/proxy/m3u8?url=${encodeURIComponent(rawUrl)}&referer=${encodeURIComponent("https://donghuastream.org/")}&sig=${sig}`;
         results.push({
           server: "DonghuaStream (Chinese)",
           url: proxyUrl,
@@ -1181,6 +1950,7 @@ async function resolveDonghuaStreams(title, episode, workerOrigin) {
           quality: "1080p",
           audio: "SUB",
           audioLanguage: "Chinese",
+          languageCode: "zh",
           headers: { "Referer": "https://donghuastream.org/" }
         });
       }
@@ -1225,6 +1995,8 @@ function getTitleCandidates(rawTitle, romaji = "", synonyms = []) {
     if (parts.length > 0) {
       const p0Norm = parts[0].replace(/([a-zA-Z])\1+/g, "$1");
       if (!cands.includes(p0Norm)) cands.push(p0Norm);
+      const p0NoSpace = parts[0].replace(/\s+/g, "");
+      if (p0NoSpace && p0NoSpace.length > 3 && !cands.includes(p0NoSpace)) cands.push(p0NoSpace);
     }
   }
 
@@ -1247,6 +2019,13 @@ function isConfidentMatch(targetTitle, candidateTitle) {
   if (normTarget === normCand) return true;
   if (normCand.includes(normTarget) || normTarget.includes(normCand)) {
     if (normTarget.length >= 4) return true;
+  }
+
+  // Also check without spaces (e.g. "joshi ochi" vs "joshiochi", "onichichi" vs "oni chichi")
+  const noSpaceTarget = normTarget.replace(/\s+/g, "");
+  const noSpaceCand = normCand.replace(/\s+/g, "");
+  if (noSpaceTarget.length >= 4 && (noSpaceCand.includes(noSpaceTarget) || noSpaceTarget.includes(noSpaceCand))) {
+    return true;
   }
 
   const targetTokens = normTarget.split(" ").filter(w => w.length >= 3 && !["and", "the", "for", "with", "sex", "all"].includes(w));
@@ -1299,7 +2078,8 @@ async function resolveAdultAnimeStreams(title, episode, workerOrigin, romaji = "
 
       const hls = players.find(p => p.name?.toUpperCase() === "HLS" && p.url);
       if (hls) {
-        const proxyUrl = `${workerOrigin}/proxy/m3u8?url=${encodeURIComponent(hls.url)}&referer=${encodeURIComponent("https://hentaini.com/")}`;
+        const sig = signProxyUrl(hls.url);
+        const proxyUrl = `${workerOrigin}/proxy/m3u8?url=${encodeURIComponent(hls.url)}&referer=${encodeURIComponent("https://hentaini.com/")}&sig=${sig}`;
         results.push({
           server: "Spiral",
           url: proxyUrl,
@@ -1334,7 +2114,7 @@ async function resolveAdultAnimeStreams(title, episode, workerOrigin, romaji = "
       let epUrl = null;
 
       if (tvLinks.length > 0) {
-        const showUrl = tvLinks.find(l => candidates.some(c => isConfidentMatch(c, l.replace(/-/g, " "))));
+        const showUrl = tvLinks.find(l => candidates.some(c => isConfidentMatch(c, l.replace(/-/g, " ")))) || (tvLinks.length === 1 ? tvLinks[0] : null);
         if (showUrl) {
           const showRes = await fetchWithTimeout(showUrl, {
             headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
@@ -1407,9 +2187,10 @@ async function resolveAdultAnimeStreams(title, episode, workerOrigin, romaji = "
       if (fileMatch) {
         const streamUrl = fileMatch[1].replace(/\\\//g, "/");
         const isM3u8 = streamUrl.includes(".m3u8");
+        const sig = signProxyUrl(streamUrl);
         const proxyUrl = isM3u8
-          ? `${workerOrigin}/proxy/m3u8?url=${encodeURIComponent(streamUrl)}&referer=${encodeURIComponent("https://hentaimama.io/")}`
-          : `${workerOrigin}/proxy/video?url=${encodeURIComponent(streamUrl)}&referer=${encodeURIComponent("https://hentaimama.io/")}`;
+          ? `${workerOrigin}/proxy/m3u8?url=${encodeURIComponent(streamUrl)}&referer=${encodeURIComponent("https://hentaimama.io/")}&sig=${sig}`
+          : `${workerOrigin}/proxy/video?url=${encodeURIComponent(streamUrl)}&referer=${encodeURIComponent("https://hentaimama.io/")}&sig=${sig}`;
 
         if (!results.some(r => r.server === "Spiral")) {
           results.push({
@@ -1489,7 +2270,8 @@ async function resolveAdultAnimeStreams(title, episode, workerOrigin, romaji = "
                   const srcMatch = unescaped.match(/src=["']([^"']+\.mp4[^"']*)["']/i);
                   if (srcMatch) {
                     const directMp4 = srcMatch[1];
-                    const proxyUrl = `${workerOrigin}/proxy/video?url=${encodeURIComponent(directMp4)}&referer=${encodeURIComponent("https://animesex.club/")}`;
+                    const sig = signProxyUrl(directMp4);
+                    const proxyUrl = `${workerOrigin}/proxy/video?url=${encodeURIComponent(directMp4)}&referer=${encodeURIComponent("https://animesex.club/")}&sig=${sig}`;
                     results.push({
                       server: "Spiral",
                       url: proxyUrl,
@@ -1528,7 +2310,8 @@ async function resolveAdultAnimeStreams(title, episode, workerOrigin, romaji = "
 
 async function handleVideoProxy(request, url) {
   const targetUrl = url.searchParams.get("url");
-  if (!targetUrl || !isAllowedTargetUrl(targetUrl)) {
+  const sig = url.searchParams.get("sig") || "";
+  if (!targetUrl || !isAuthorizedProxyRequest(targetUrl, sig)) {
     return jsonResponse({ error: "Missing or invalid url parameter" }, 400);
   }
 
@@ -1552,10 +2335,11 @@ async function handleVideoProxy(request, url) {
   }
 
   try {
-    const res = await fetchWithTimeout(targetUrl, {
+    const isSigned = Boolean(sig && sig === signProxyUrl(targetUrl));
+    const res = await fetchWithManualRedirects(targetUrl, {
       headers: upstreamHeaders,
       cf: { cacheTtl: 86400, cacheEverything: true }
-    }, 10000);
+    }, 10000, 3, isSigned);
 
     const responseHeaders = new Headers();
     Object.entries(corsHeaders()).forEach(([k, v]) => responseHeaders.set(k, v));
@@ -1582,22 +2366,27 @@ async function handleVideoProxy(request, url) {
 
 // --- M3U8 Playlist Proxy & Header Injection --------------------------------
 
-function rewriteUriHelper(rawUri, targetOrigin, targetBasePath, workerOrigin, referer) {
+function rewriteUriHelper(rawUri, targetOrigin, targetBasePath, workerOrigin, referer, forcePlaylist = false) {
   let abs = rawUri.trim();
   if (!abs.startsWith("http://") && !abs.startsWith("https://")) {
     abs = abs.startsWith("/") ? `${targetOrigin}${abs}` : `${targetBasePath}${abs}`;
   }
-  const isPlaylist = abs.includes(".m3u8");
+  const isPlaylist =
+    forcePlaylist ||
+    /\.(m3u8|m3u)(\?|$)/i.test(abs) ||
+    abs.includes(".m3u8");
   const endpoint = isPlaylist ? "/proxy/m3u8" : "/proxy/ts";
-  return `${workerOrigin}${endpoint}?url=${encodeURIComponent(abs)}&referer=${encodeURIComponent(referer)}`;
+  const sig = signProxyUrl(abs);
+  return `${workerOrigin}${endpoint}?url=${encodeURIComponent(abs)}&referer=${encodeURIComponent(referer)}&sig=${sig}`;
 }
 
 async function handleM3u8Proxy(request, url) {
   const targetUrl = url.searchParams.get("url");
   const referer = url.searchParams.get("referer") || "https://google.com/";
+  const sig = url.searchParams.get("sig") || "";
 
-  if (!targetUrl || !isAllowedTargetUrl(targetUrl)) {
-    return jsonResponse({ error: "Missing or invalid url parameter" }, 400);
+  if (!targetUrl || !isAuthorizedProxyRequest(targetUrl, sig)) {
+    return jsonResponse({ error: "Missing or unauthorized url parameter" }, 400);
   }
 
   const upstreamHeaders = {
@@ -1607,30 +2396,48 @@ async function handleM3u8Proxy(request, url) {
   };
 
   try {
-    const response = await fetchWithTimeout(targetUrl, { headers: upstreamHeaders }, 6000);
+    const isSigned = Boolean(sig && sig === signProxyUrl(targetUrl));
+    const response = await fetchWithManualRedirects(targetUrl, { headers: upstreamHeaders }, 6000, 3, isSigned);
     if (!response.ok) {
       return new Response(response.body, { status: response.status, headers: corsHeaders() });
     }
 
-    let playlist = await response.text();
-    const targetOrigin = new URL(targetUrl).origin;
-    const targetBasePath = targetUrl.substring(0, targetUrl.lastIndexOf("/") + 1);
+    const playlist = await response.text();
+    const finalOrigin = new URL(targetUrl).origin;
+    const finalBasePath = targetUrl.substring(0, targetUrl.lastIndexOf("/") + 1);
 
-    // Rewrite nested M3U8, media keys, audio tracks and .ts segment URLs
     const lines = playlist.split("\n");
+    let expectVariantOnNextLine = false;
+
     const rewrittenLines = lines.map(line => {
       const trimmed = line.trim();
       if (!trimmed) return line;
 
-      // Rewrite URI="..." inside #EXT-X-MEDIA, #EXT-X-KEY, #EXT-X-MAP, #EXT-X-I-FRAME-STREAM-INF
       if (trimmed.startsWith("#")) {
+        if (trimmed.startsWith("#EXT-X-STREAM-INF")) {
+          expectVariantOnNextLine = true;
+        }
+        // #EXT-X-MEDIA (TYPE=AUDIO / SUBTITLES) and #EXT-X-I-FRAME-STREAM-INF point to child playlists
+        const isChildPlaylistTag =
+          trimmed.startsWith("#EXT-X-MEDIA") ||
+          trimmed.startsWith("#EXT-X-I-FRAME-STREAM-INF");
+
         return line.replace(/URI="([^"]+)"/gi, (match, uriVal) => {
-          const proxied = rewriteUriHelper(uriVal, targetOrigin, targetBasePath, url.origin, referer);
+          const proxied = rewriteUriHelper(
+            uriVal,
+            finalOrigin,
+            finalBasePath,
+            url.origin,
+            referer,
+            isChildPlaylistTag
+          );
           return `URI="${proxied}"`;
         });
       }
 
-      return rewriteUriHelper(trimmed, targetOrigin, targetBasePath, url.origin, referer);
+      const forceM3u8 = expectVariantOnNextLine;
+      expectVariantOnNextLine = false;
+      return rewriteUriHelper(trimmed, finalOrigin, finalBasePath, url.origin, referer, forceM3u8);
     });
 
     const rewrittenPlaylist = rewrittenLines.join("\n");
@@ -1651,9 +2458,10 @@ async function handleM3u8Proxy(request, url) {
 async function handleSegmentProxy(request, url) {
   const targetUrl = url.searchParams.get("url");
   const referer = url.searchParams.get("referer") || "https://google.com/";
+  const sig = url.searchParams.get("sig") || "";
 
-  if (!targetUrl || !isAllowedTargetUrl(targetUrl)) {
-    return jsonResponse({ error: "Missing or invalid url parameter" }, 400);
+  if (!targetUrl || !isAuthorizedProxyRequest(targetUrl, sig)) {
+    return jsonResponse({ error: "Missing or unauthorized url parameter" }, 400);
   }
 
   const headers = {
@@ -1666,7 +2474,8 @@ async function handleSegmentProxy(request, url) {
   if (range) headers["Range"] = range;
 
   try {
-    const res = await fetchWithTimeout(targetUrl, { headers }, 8000);
+    const isSigned = Boolean(sig && sig === signProxyUrl(targetUrl));
+    const res = await fetchWithManualRedirects(targetUrl, { headers }, 8000, 3, isSigned);
     const responseHeaders = new Headers(res.headers);
     Object.entries(corsHeaders()).forEach(([k, v]) => responseHeaders.set(k, v));
     responseHeaders.set("Cache-Control", "public, max-age=86400"); // Segments are immutable
@@ -1710,6 +2519,29 @@ async function handleSearch(request, url) {
 
 // --- TMDB / Metadata Helper ------------------------------------------------
 
+async function getTmdbMediaDetails(tmdbId, type, env) {
+  if (!tmdbId) return null;
+  try {
+    const mediaType = (type === "tv" || type === "series" || type === "anime") ? "tv" : "movie";
+    const apiKey = (typeof env !== "undefined" && env?.TMDB_API_KEY) ? env.TMDB_API_KEY : TMDB_API_KEY;
+    const res = await fetchWithTimeout(`https://api.themoviedb.org/3/${mediaType}/${tmdbId}?api_key=${apiKey}`, {}, 2500);
+    if (res.ok) {
+      const data = await res.json();
+      const isAnimation = Array.isArray(data.genres) && data.genres.some(g => g.id === 16);
+      return {
+        originalLanguage: data.original_language || null,
+        isAnimation: isAnimation
+      };
+    }
+  } catch (_) {}
+  return null;
+}
+
+async function getTmdbOriginalLanguage(tmdbId, type, env) {
+  const d = await getTmdbMediaDetails(tmdbId, type, env);
+  return d ? d.originalLanguage : null;
+}
+
 async function lookupMediaMetadata(title, type, year, env) {
   try {
     const query = encodeURIComponent(title.trim());
@@ -1740,7 +2572,9 @@ async function lookupMediaMetadata(title, type, year, env) {
         tmdbId: tmdbId,
         imdbId: imdbId,
         title: first.title || first.name || title,
-        year: (first.release_date || first.first_air_date || "").substring(0, 4)
+        year: (first.release_date || first.first_air_date || "").substring(0, 4),
+        originalLanguage: first.original_language || null,
+        genreIds: first.genre_ids || []
       };
     }
   } catch (_) {}

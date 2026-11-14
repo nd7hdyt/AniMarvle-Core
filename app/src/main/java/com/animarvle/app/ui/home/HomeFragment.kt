@@ -307,7 +307,7 @@ class HomeFragment : Fragment() {
         val isTmdb = if (isExplicitAnime) false else (isMoviesTv || effectiveType.equals("MOVIE", ignoreCase = true) || effectiveType.equals("TV", ignoreCase = true))
         val id = item.originalId ?: item.mediaUrl?.toLongOrNull() ?: item.id.toLongOrNull() ?: 0L
         val app = requireActivity().application as? AnimarvleApp
-        val savedStream = app?.container?.history?.getSavedStream(item.title, item.episodeNumber ?: 1)
+        val savedStream = app?.container?.history?.getSavedStream(item.title, item.episodeNumber ?: 1, item.seasonNumber ?: 1)
         val args = Bundle().apply {
             putLong("sourceId", 0L)
             if (id > 0L) {

@@ -12,7 +12,8 @@ class GoogleDriveSyncRepositoryTest {
         mediaId: Long,
         title: String,
         status: MyListStatus,
-        updatedAtMs: Long
+        updatedAtMs: Long,
+        mediaType: String? = null,
     ): MyListItem {
         return MyListItem(
             mediaId = mediaId,
@@ -24,7 +25,8 @@ class GoogleDriveSyncRepositoryTest {
             progress = 1,
             totalEpisodes = 12,
             updatedAtMs = updatedAtMs,
-            year = 2026
+            year = 2026,
+            mediaType = mediaType,
         )
     }
 
@@ -114,5 +116,52 @@ class GoogleDriveSyncRepositoryTest {
         val merged = GoogleDriveSyncRepository.mergeLists(local, remote)
 
         assertEquals(listOf(2L, 3L, 4L, 1L), merged.map { it.mediaId })
+    }
+
+    @Test
+    fun testTombstonePreventsRemoteResurrection() {
+        val local = emptyList<MyListItem>()
+        val remote = listOf(
+            createItem(1L, "Deleted Anime", MyListStatus.WATCHING, 2000L, mediaType = "ANIME"),
+            createItem(2L, "Kept Anime", MyListStatus.COMPLETED, 2500L, mediaType = "ANIME")
+        )
+        // Item 1 was deleted locally at t=3000 (after remote update at t=2000)
+        val tombstones = mapOf("ANIME:1" to 3000L)
+
+        val merged = GoogleDriveSyncRepository.mergeLists(local, remote, tombstones)
+
+        assertEquals(1, merged.size)
+        assertEquals(2L, merged[0].mediaId)
+    }
+
+    @Test
+    fun testRemoteUpdatedAfterTombstoneWins() {
+        val local = emptyList<MyListItem>()
+        val remote = listOf(
+            createItem(1L, "Re-added Anime On Another Device", MyListStatus.WATCHING, 4000L, mediaType = "ANIME")
+        )
+        // Item 1 was deleted locally earlier at t=2000, but updated remotely later at t=4000
+        val tombstones = mapOf("ANIME:1" to 2000L)
+
+        val merged = GoogleDriveSyncRepository.mergeLists(local, remote, tombstones)
+
+        assertEquals(1, merged.size)
+        assertEquals(1L, merged[0].mediaId)
+    }
+
+    @Test
+    fun testSameNumericIdDifferentMediaTypesDoNotCollide() {
+        val local = listOf(
+            createItem(550L, "Fight Club", MyListStatus.COMPLETED, 2000L, mediaType = "MOVIE")
+        )
+        val remote = listOf(
+            createItem(550L, "Anime Show 550", MyListStatus.WATCHING, 3000L, mediaType = "ANIME")
+        )
+
+        val merged = GoogleDriveSyncRepository.mergeLists(local, remote)
+
+        assertEquals(2, merged.size)
+        assertTrue(merged.any { it.uniqueKey == "MOVIE:550" && it.title == "Fight Club" })
+        assertTrue(merged.any { it.uniqueKey == "ANIME:550" && it.title == "Anime Show 550" })
     }
 }

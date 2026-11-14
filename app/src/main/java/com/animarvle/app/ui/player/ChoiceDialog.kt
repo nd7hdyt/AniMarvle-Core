@@ -278,9 +278,15 @@ private class RowAdapter(
             holder.binding.rowLabel.alpha = if (row.enabled) 1f else 0.4f
         } else {
             holder.binding.rowIcon.visibility = View.GONE
-            holder.binding.rowValue.visibility = View.GONE
             holder.binding.rowChevron.visibility = View.GONE
             holder.binding.rowRadio.visibility = View.VISIBLE
+
+            if (row.subtitle != null) {
+                holder.binding.rowValue.visibility = View.VISIBLE
+                holder.binding.rowValue.text = row.subtitle
+            } else {
+                holder.binding.rowValue.visibility = View.GONE
+            }
 
             holder.binding.rowLabel.alpha = if (row.enabled) 1f else 0.4f
             if (row.selected) {

@@ -13,6 +13,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
@@ -57,17 +59,28 @@ class GoogleDriveSyncRepository(
         private const val DRIVE_FILES_API = "https://www.googleapis.com/drive/v3/files"
         private const val DRIVE_UPLOAD_API = "https://www.googleapis.com/upload/drive/v3/files"
 
-        fun mergeLists(local: List<MyListItem>, remote: List<MyListItem>): List<MyListItem> {
-            val map = LinkedHashMap<Long, MyListItem>()
+        fun mergeLists(
+            local: List<MyListItem>,
+            remote: List<MyListItem>,
+            tombstones: Map<String, Long> = emptyMap()
+        ): List<MyListItem> {
+            val map = LinkedHashMap<String, MyListItem>()
 
-            // 1. Put all remote items
-            remote.forEach { map[it.mediaId] = it }
+            // 1. Put all remote items EXCEPT those with an active tombstone newer than the remote update
+            remote.forEach { remoteItem ->
+                val key = remoteItem.uniqueKey
+                val tombstoneTime = tombstones[key] ?: tombstones[remoteItem.mediaId.toString()]
+                if (tombstoneTime == null || remoteItem.updatedAtMs > tombstoneTime) {
+                    map[key] = remoteItem
+                }
+            }
 
             // 2. Merge local items: if local item was updated more recently, overwrite remote (last-write-wins)
             local.forEach { localItem ->
-                val remoteItem = map[localItem.mediaId]
+                val key = localItem.uniqueKey
+                val remoteItem = map[key]
                 if (remoteItem == null || localItem.updatedAtMs >= remoteItem.updatedAtMs) {
-                    map[localItem.mediaId] = localItem
+                    map[key] = localItem
                 }
             }
 
@@ -104,41 +117,45 @@ class GoogleDriveSyncRepository(
         }
     }
 
-    suspend fun sync(): Result<Int> = withContext(Dispatchers.IO) {
-        _syncState.value = SyncState.Syncing
+    private val syncMutex = Mutex()
 
-        val tokenResult = getAccessToken(context)
-        if (tokenResult.isFailure) {
-            val err = tokenResult.exceptionOrNull()
-            val msg = if (err is UserRecoverableAuthException) {
-                "Google Drive permission required. Please allow access."
-            } else {
-                err?.localizedMessage ?: "Failed to acquire Google Drive auth token"
-            }
-            val isRecoverable = err is UserRecoverableAuthException
-            _syncState.value = SyncState.Error(msg, isRecoverable)
-            return@withContext Result.failure(err ?: Exception(msg))
-        }
+    suspend fun sync(): Result<Int> = syncMutex.withLock {
+        withContext(Dispatchers.IO) {
+            _syncState.value = SyncState.Syncing
 
-        var token = tokenResult.getOrThrow()
-
-        try {
-            // 1. Locate existing sync file in appDataFolder
-            val existingFileId = findSyncFile(token)
-
-            // 2. Fetch remote items if file exists
-            val remoteItems: List<MyListItem> = if (existingFileId != null) {
-                downloadSyncFile(existingFileId, token)
-            } else {
-                emptyList()
+            val tokenResult = getAccessToken(context)
+            if (tokenResult.isFailure) {
+                val err = tokenResult.exceptionOrNull()
+                val msg = if (err is UserRecoverableAuthException) {
+                    "Google Drive permission required. Please allow access."
+                } else {
+                    err?.localizedMessage ?: "Failed to acquire Google Drive auth token"
+                }
+                val isRecoverable = err is UserRecoverableAuthException
+                _syncState.value = SyncState.Error(msg, isRecoverable)
+                return@withContext Result.failure(err ?: Exception(msg))
             }
 
-            // 3. Merge local and remote lists
-            val localItems = myListRepo.itemsFlow.value
-            val mergedList = mergeLists(localItems, remoteItems)
+            var token = tokenResult.getOrThrow()
 
-            // 4. Save merged list locally
-            myListRepo.saveAll(mergedList)
+            try {
+                // 1. Locate existing sync file in appDataFolder
+                val existingFileId = findSyncFile(token)
+
+                // 2. Fetch remote items if file exists
+                val remoteItems: List<MyListItem> = if (existingFileId != null) {
+                    downloadSyncFile(existingFileId, token)
+                } else {
+                    emptyList()
+                }
+
+                // 3. Merge local and remote lists with tombstones
+                val localItems = myListRepo.itemsFlow.value
+                val tombstones = myListRepo.getTombstones()
+                val mergedList = mergeLists(localItems, remoteItems, tombstones)
+
+                // 4. Save merged list locally WITHOUT triggering onListChangedListener (breaks feedback loop)
+                myListRepo.saveAll(mergedList, notifyListener = false)
 
             // 5. Upload merged list back to Google Drive AppData
             val serialized = myListRepo.serialize(mergedList)
@@ -163,6 +180,7 @@ class GoogleDriveSyncRepository(
             Result.failure(e)
         }
     }
+}
 
     private fun findSyncFile(token: String): String? {
         val query = "name = '$SYNC_FILENAME' and trashed = false"
@@ -208,9 +226,9 @@ class GoogleDriveSyncRepository(
 
         val response = client.newCall(request).execute()
         if (!response.isSuccessful) {
-            return emptyList()
+            throw java.io.IOException("Google Drive sync file download failed with HTTP ${response.code}")
         }
-        val raw = response.body?.string() ?: return emptyList()
+        val raw = response.body?.string() ?: throw java.io.IOException("Empty response body from Google Drive")
         return myListRepo.deserialize(raw)
     }
 

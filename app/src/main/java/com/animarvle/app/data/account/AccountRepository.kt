@@ -80,7 +80,7 @@ class AccountRepository(context: Context) {
             id = "pwd_" + UUID.randomUUID().toString().take(8),
             username = defaultUsername,
             email = email,
-            provider = "Animarvle Account",
+            provider = "Local Profile (Device Only)",
             isLoggedIn = true,
             syncedItemsCount = currentAccount?.syncedItemsCount ?: 0,
         )
@@ -108,7 +108,7 @@ class AccountRepository(context: Context) {
             id = "user_" + UUID.randomUUID().toString().take(8),
             username = username,
             email = email,
-            provider = "Animarvle Account",
+            provider = "Local Profile (Device Only)",
             isLoggedIn = true,
             syncedItemsCount = 0,
         )

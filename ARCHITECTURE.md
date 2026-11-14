@@ -17,6 +17,10 @@ memory — **verify before relying on it** (fetch docs/source, cite in `docs/VER
 4. **Pure-Kotlin core.** `:source-api`, `:domain` and the resolver have no Android dependency so they unit-test on the JVM.
 5. **One source of truth per concern** (Room for library/history/downloads, DataStore for settings, in-memory + disk
    cache for network). UI observes `StateFlow`.
+6. **Strict Domain & Content Quarantine.** Anime, Mainstream Hollywood/TV, and Adult (Hentai, JAV, Asian 18+, Vivamax)
+   live in strictly isolated scraping, metadata, and server domains. Adult scrapers are never queried for anime or
+   Hollywood titles; anime scrapers are never queried for adult content; and adult servers are never surfaced in the
+   UI during mainstream movie or anime playback.
 
 ## 2. Module layout (Gradle, Kotlin DSL, version catalog) `[D]`
 
@@ -206,9 +210,33 @@ resolve(episode, requested):
   position; for adaptive streams apply a track-selection override `[A verify API]`, for flat lists re-prepare
   at the saved position (± 1 s tolerance).
 
+### 7.5 Content Quarantine & Anti-Mixing Pipeline `[D]`
+To prevent mixing anime, Hentai, mainstream Hollywood/TV movies, and Asian adult/live-action 18+ content:
+1. **Source Instantiation Partitioning (`PlayerFragment.kt`):** At fragment initialization, if `!isAdultAsian`, `AsianCinemaSource` (40006L) and `PinoyMoviePediaSource` (40005L) are stripped from the active source list entirely.
+2. **Metadata Title Heuristics & Studio Codes (`AnimarvleApp.kt`, `MetadataRepository.kt`):** Detects 80+ Vivamax and Asian adult title keywords (e.g. `hot moves`, `sex drive`, `gl forever`, `choosy`, `palitan`, `alindog`) and Japanese studio production codes (`\b[A-Za-z]{2,6}[-_]?\d{2,5}\b` including `SW-339`, `SSIS`, `IPX`, `MIDV`, `JUL`, `SONE`, `STARS`, `ABP`, `SSNI`, `PRED`).
+3. **Error Fallback Isolation (`PlayerViewModel.kt:handleSourceFailure`):**
+   - Adult/18+ title failures fall back strictly within adult sources (`AsianCinemaSource` ↔ `PinoyMoviePediaSource`).
+   - Mainstream movie failures fall back strictly to Hollywood sources (`Halo`, `Solara`, etc.), never querying anime scrapers.
+   - Anime failures fall back strictly across anime engines (`Onyx`, `Kitsune`, `Velvet`, etc.), never querying adult sources.
+
+### 7.6 Dedicated Branded Server Architecture `[D]`
+Replaced dynamic/morphing plugin-named hoster displays with fixed, predictable server identities:
+- **Server Identity Specification (`AudioModels.kt:BrandedServer`):**
+  - `CAT3_DIRECT`: "Cat3 Direct HD" 🇯🇵 (direct high-speed HLS CDN, instant 800ms start, `isAdultOnly = true`).
+  - `VIDHIDE`: "VidHide / DooPlayer HD" 🇯🇵 (VidHide, DooPlayer, and JavMost stream mirrors, `isAdultOnly = true`).
+  - `PINOY_VIVAMAX`: "Pinoy / Vivamax" 🇵🇭 (Vivamax & Tagalog adult streams, `isAdultOnly = true`).
+  - `HALO`: "Halo" 🇺🇸 (mainstream Hollywood CDN, `isAdultOnly = false`).
+- **Server-Name Invariance:** Server labels are invariant between the player HUD chips and the Source Selector Modal; they never morph into raw plugin names (e.g. "Asian Cinema (18+)") or raw CDN descriptors.
+- **Hoster De-Aliasing:** In `fromRawServerName`, `sourceId == 40005L` and Pinoy hosters (`playmogo`, `mixdrop`, `streamhls`, `abstream`, `voe`) map directly to `PINOY_VIVAMAX`, preventing `Playmogo` from falling through to `HALO`.
+- **Adult Server UI Masking:** In `PlayerViewModel.kt:updateServerModalItems`, all `isAdultOnly = true` servers are strictly stripped when playing mainstream Hollywood/TV movies or standard anime.
+
 ## 8. Player (`:app`, Media3) `[D]`/`[A]`
 
 - Media3 ExoPlayer + HLS (+DASH) modules. Custom control layout in XML matching AniVortex design geometry (lock, speed, ±10 s, fullscreen, PiP, skip 90s, subtitle selector, settings).
+- **ExoPlayer LoadControl & Byte Ceiling (Instant 800ms Playback & Zero Data Waste):**
+  - **8 MB Buffer Cap:** `DefaultLoadControl.Builder.setTargetBufferBytes(8 * 1024 * 1024)` with `setPrioritizeTimeOverSizeThresholds(false)` eliminates 20–35 MB segment download spikes on short visits.
+  - **Buffer Durations:** `minBufferMs = 2_000`, `maxBufferMs = 6_000`, `bufferForPlaybackMs = 800` (guaranteeing instant 800ms start time), and `bufferForPlaybackAfterRebufferMs = 1_200`. Back-buffer set to `10_000ms`.
+  - **Immediate Socket Abortion:** `player?.stop()` is invoked before `setMediaItem()` in `PlayerCommand.Prepare`, immediately aborting lingering HTTP sockets from stuck or buffering servers when switching streams.
 - **Unified Dual-Layer Multi-Audio Architecture (`AudioModels.kt`, `PlayerViewModel.kt`, `PlayerFragment.kt`):**
   - **Dynamic Language Aggregator:** Unifies in-stream ExoPlayer audio tracks (`C.TRACK_TYPE_AUDIO`) and server-level language options into a single reactive hierarchy (`ResolvedAudioOption.EmbeddedTrack` vs. `ResolvedAudioOption.ServerStream`), replacing the hardcoded `listOf(defaultOriginalLang, "English")` fallback.
   - **Instant In-Stream Audio Switching:** Automatically detects embedded HLS `#EXT-X-MEDIA:TYPE=AUDIO`, MKV, and MP4 audio tracks via `onTracksChanged`. Instantaneously applies `TrackSelectionOverride` on `C.TRACK_TYPE_AUDIO` without stream reloading or buffering interruption.

@@ -66,6 +66,10 @@ data class SubtitleTrack(
     val language: String,
     val label: String,
     val format: SubFormat,
+    val display: String? = null,
+    val release: String? = null,
+    val isHearingImpaired: Boolean = false,
+    val matchScore: Int? = null,
 )
 
 /** Opening/ending ranges in milliseconds; the host renders Skip buttons from these. */

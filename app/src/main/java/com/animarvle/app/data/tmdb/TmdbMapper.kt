@@ -92,6 +92,7 @@ object TmdbMapper {
                 )
             },
             isTmdb = true,
+            originalLanguage = item.originalLanguage,
         )
     }
 

@@ -116,14 +116,12 @@ class HistoryRepository(context: Context) {
         }
     }
 
-    fun getSavedStream(title: String, episodeNumber: Int = 1): HistoryItem? {
+    fun getSavedStream(title: String, episodeNumber: Int = 1, seasonNumber: Int = 1): HistoryItem? {
         val clean = title.trim()
         return _historyFlow.value.firstOrNull {
             it.title.trim().equals(clean, ignoreCase = true) &&
                 it.episodeNumber == episodeNumber &&
-                !it.streamUrl.isNullOrBlank()
-        } ?: _historyFlow.value.firstOrNull {
-            it.title.trim().equals(clean, ignoreCase = true) &&
+                it.seasonNumber == seasonNumber &&
                 !it.streamUrl.isNullOrBlank()
         }
     }

@@ -91,15 +91,18 @@ class MyListFragment : Fragment() {
 
         adapter = MyListAdapter(
             onItemClick = { item ->
-                val isMovie = item.format?.equals("MOVIE", ignoreCase = true) == true ||
+                val isExplicitAnime = item.mediaType?.equals("ANIME", ignoreCase = true) == true
+                val isExplicitMovie = item.mediaType?.equals("MOVIE", ignoreCase = true) == true
+                val isExplicitTv = item.mediaType?.equals("TV", ignoreCase = true) == true
+
+                val isMovie = isExplicitMovie || item.format?.equals("MOVIE", ignoreCase = true) == true ||
                     item.format?.equals("Movie", ignoreCase = true) == true
-                val isTv = item.format?.equals("TV", ignoreCase = true) == true ||
+                val isTv = isExplicitTv || item.format?.equals("TV", ignoreCase = true) == true ||
                     item.format?.contains("SERIES", ignoreCase = true) == true
-                val mediaType = if (isMovie) "MOVIE" else if (isTv) "TV" else "ANIME"
-                val isExplicitAnime = mediaType.equals("ANIME", ignoreCase = true)
+                val mediaType = if (isExplicitAnime) "ANIME" else if (isMovie) "MOVIE" else if (isTv) "TV" else "ANIME"
                 val isMoviesTv = com.animarvle.app.data.MediaTypeManager.getInstance(requireContext())
                     .currentMode.value == com.animarvle.app.data.AppMediaMode.MOVIES_TV
-                val preferTmdb = if (isExplicitAnime) false else isMoviesTv
+                val preferTmdb = if (isExplicitAnime) false else (isMoviesTv || isMovie || isTv)
                 val args = Bundle().apply {
                     putLong("mediaId", item.mediaId)
                     putString("mediaType", mediaType)

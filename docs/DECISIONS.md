@@ -2410,3 +2410,60 @@ Following the feature and layout implementations across the app, an audit of int
      - Implemented multi-query candidate generation (cleanTitle, alphaTitle, first 3 words, and romaji) in both Android and Cloudflare Worker (resolveAdultAnimeEpisodes).
   4. *Snapshot Thumbnail Preservation (PlayerViewModel.kt):*
      - Protected existing episode snapshot URLs containing .webp, hentaimama, gdvid, or yesterdaymail from being overwritten by generic or empty metadata.
+
+## Decision 47: Content Quarantine, Dedicated Branded Server Architecture & Buffer Ceilings (2026-11-12)
+- **Context:**
+  1. *Anime, Hentai, and Mainstream Movie Mixing:*
+     - Standard anime scrapers (Gogo, HiAnime, Zoro) were occasionally queried during adult playback failures, and adult plugins (`AsianCinemaSource`, `PinoyMoviePediaSource`) were instantiating for mainstream movies.
+  2. *Server Disappearance & Inconsistent Naming:*
+     - When playing Asian Cinema, its internal hoster was named "Cat3 Direct HD (HLS / MP4)", but when playing another source (like Halo), it was labeled with its plugin name "Asian Cinema (18+)". The server appeared to vanish or change identity depending on what was currently selected.
+  3. *Halo / Pinoy Collision & Grey Dot:*
+     - When playing PinoyMoviePedia, its direct hoster (`Playmogo (Direct MP4)`) was unmapped in `BrandedServer.fromRawServerName` and fell through to `else -> HALO`. Halo erroneously inherited the Tagalog flag (🇵🇭) and displayed as active, while the dedicated `Pinoy / Vivamax` entry in the modal remained unselected with a grey dot (`AVAILABLE`).
+  4. *Mobile Data Usage & MB Spikes:*
+     - ExoPlayer's default unbounded buffer caused 20–35 MB pre-fetch spikes on cellular networks even for short previews or looping servers.
+- **Resolution:**
+  1. *Complete Content Quarantine (`PlayerFragment.kt`, `PlayerViewModel.kt`, `AnimarvleApp.kt`):*
+     - Partitioned `sources` list in `PlayerFragment.kt` based on `isAdultAsian`. Non-adult media never loads or receives `AsianCinemaSource` (40006L) or `PinoyMoviePediaSource` (40005L).
+     - Guarded `handleSourceFailure` in `PlayerViewModel.kt`: Adult titles fall back strictly within adult sources (`AsianCinemaSource` ↔ `PinoyMoviePediaSource`), while mainstream movies fall back strictly to Hollywood scrapers (`Halo`, `Solara`, etc.), eliminating loops into anime sources.
+     - Added 80+ Vivamax and Asian adult title keywords and studio codes (`\b[A-Za-z]{2,6}[-_]?\d{2,5}\b`) in `AnimarvleApp.kt`.
+  2. *Dedicated Branded Server Architecture (`AudioModels.kt`, `PlayerViewModel.kt`):*
+     - Created `BrandedServer` enum with `isAdultOnly = true` for `CAT3_DIRECT`, `VIDHIDE`, and `PINOY_VIVAMAX`.
+     - Standardized display names across all states: `Cat3 Direct HD` 🇯🇵, `VidHide / DooPlayer HD` 🇯🇵, `Pinoy / Vivamax` 🇵🇭, and `Halo` 🇺🇸.
+     - In `PlayerViewModel.kt:updateServerModalItems`, strictly hide `isAdultOnly` servers when playing mainstream movies and anime.
+  3. *Halo / Pinoy De-Aliasing & Active State Sync:*
+     - Bound `sourceId == 40005L` and hoster names (`playmogo`, `mixdrop`, `streamhls`, `abstream`, `voe`, `filipino`) to `PINOY_VIVAMAX`.
+     - In `updateServerModalItems`, correctly mark `PINOY_VIVAMAX` as `isSelected = true` with a green checkmark and `READY` status.
+     - Added fallback embed resolution in `PinoyMoviePediaSource.resolve` when no pipe-delimited embed URL is supplied.
+     - Restored `HALO` as an independent US-flagged mainstream server 🇺🇸.
+  4. *ExoPlayer 8 MB LoadControl & Immediate Socket Cancellation:*
+     - Set `setTargetBufferBytes(8 * 1024 * 1024)` with `minBufferMs = 2_000`, `maxBufferMs = 6_000`, and `bufferForPlaybackMs = 800` (guaranteeing 800ms start time).
+     - Added `player?.stop()` before `setMediaItem()` in `PlayerCommand.Prepare` to immediately abort dangling sockets on server switch.
+
+## Decision 48: Strict Adult Modal Domain Filtering, In-App Hentai Direct Resolution & Episode Preview Thumbnails (2026-11-12)
+- **Context:**
+  1. *Mainstream Servers on Adult Videos:*
+     - On adult titles (e.g., *Alindog Ni Aiko*, *The Happy Life of a Delivery Guy*), mainstream Hollywood/TV servers (`Halo`, `Velvet`, `Spiral`, `Turbo`, `Nebula`, `Prism`, `Solara`) were visible in the Source Selector Modal. Furthermore, `baseSources` (FlixHQ) caused `Halo` to be selected and enter an endless buffering loop.
+     - The server modal showed two servers with green dots simultaneously, and `Pinoy / Vivamax` occasionally inherited a US flag (`🇺🇸`) when unmapped.
+  2. *Animated Hentai Scraper Probing & Timeout:*
+     - Hentai titles were probing live-action Cat3 or falling back to 15 mainstream anime scrapers (`Anikoto`, `AnimeKai`, `Anichi`, etc.) because `isHentai` was not passed through `PlayerViewModel`.
+     - Furthermore, querying the remote Cloudflare worker waited 13.5 seconds before returning HTTP 404 because the deployed edge worker had not yet updated its slug matching logic.
+  3. *Missing Episode Preview Thumbnails & HTTP 403 Forbidden:*
+     - Episode cards on Hentai titles displayed generic cover posters because the Cloudflare `/api/episodes` endpoint returned 0 episodes, and direct Coil requests to `https://hentaimama.io/wp-content/...webp` failed with `HTTP 403 Forbidden` due to missing `Referer` and browser `User-Agent` headers.
+- **Resolution:**
+  1. *Adult Server Modal Strict Domain Isolation (`PlayerViewModel.kt`, `PlayerFragment.kt`):*
+     - Completely removed `baseSources` from `PlayerFragment.kt:sources` on adult titles (`isAdultAsian`), ensuring only `[pinoy, asianAdult]` (or vice versa) are candidate sources.
+     - In `PlayerViewModel.kt:updateServerModalItems`:
+       - When `isAdultContent == true`, filter out all non-adult servers (`!branded.isAdultOnly`).
+       - Mainstream Hollywood/TV servers (`Halo`, `Velvet`, `Spiral`, `Turbo`, `Nebula`, `Prism`, `Solara`) are 100% excluded from appearing on adult content.
+       - Hardcoded flags: `Pinoy / Vivamax` strictly gets `🇵🇭`; `Cat3 Direct HD` and `VidHide` receive `🇯🇵`.
+       - Single checkmark and status dot enforcement: only the active playing stream receives `READY` (🟢) and checkmark (`✓`); all other candidate servers receive `AVAILABLE` (⚪). Deduplicated checkmarks to ensure strictly one active selection.
+  2. *Animated Hentai Quarantine & Fast Direct In-App Resolver (`AnimarvleStreamSource.kt`):*
+     - Plumbed `isHentai` and `isAdult` across `PlayerFragment` -> `PlayerViewModel` -> `AnimarvleStreamSource`.
+     - Queries are explicitly dispatched with `type=hentai&adult=1`.
+     - Implemented native in-app fallback `resolveHentaiMamaDirect` that scrapes `hentaimama.io`, fetches the player from `admin-ajax.php`, and extracts the direct 1080p/720p stream from `gdvid.info`.
+     - Added required streaming headers (`Referer: https://hentaimama.io/` and `Origin: https://hentaimama.io`) in `AnimarvleStreamSource.buildHeadersForUrl()`.
+     - Prioritized `resolveHentaiMamaDirect` upfront on adult hentai titles to bypass the 14-second Cloudflare worker timeout when the edge worker is unavailable or missing matching slugs, reducing time-to-stream from ~16s down to <2s.
+  3. *Episode Preview Thumbnails & Coil Interceptor (`AnimarvleStreamSource.kt`, `AnimarvleApp.kt`):*
+     - Implemented `fetchHentaiMamaEpisodes` directly in `AnimarvleStreamSource.kt` to extract all episode numbers, titles, and 1280x720 HD `.webp` preview thumbnails from HentaiMama's show page when the worker returns empty.
+     - Fixed Coil HTTP 403 Forbidden by updating `AnimarvleApp.kt:newImageLoader()` to intercept `hentaimama.io` and `hentaini.com` requests and inject `Referer: https://hentaimama.io/` and browser `User-Agent`.
+

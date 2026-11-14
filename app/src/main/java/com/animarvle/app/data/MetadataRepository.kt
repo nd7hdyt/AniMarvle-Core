@@ -442,7 +442,7 @@ class MetadataRepository(
 
             if (title.isNotBlank()) {
                 val codeMatch = Regex("""\b([A-Za-z]{2,6})[-_]?(\d{2,5})\b""").find(title)
-                if (codeMatch != null) {
+                if (codeMatch != null && !codeMatch.groupValues[1].equals("JAV", ignoreCase = true)) {
                     val prefix = codeMatch.groupValues[1]
                     val studioRecs = runCatching { searchAsianCinema(prefix) }.getOrDefault(emptyList()).filter { it.id != id }
                     recs.addAll(studioRecs.take(12))
@@ -855,7 +855,8 @@ class MetadataRepository(
             "kuroinu", "shoujo ramune", "ane wa yanmama",
             "dropout", "kyonyuu", "tamashii insert", "dokidoki little",
             "onichichi", "succubus stayed", "shoujo kyouiku", "harem camp",
-            "hentai"
+            "hentai", "bitch ni", "shiboraretai", "jacked off", "school slut",
+            "shoujo", "ecchi", "erotic", "creampie", "milf", "bitch"
         )
 
         fun isAdultTitle(title: String?): Boolean {
@@ -1091,6 +1092,7 @@ class MetadataRepository(
                 nextAiringEpisode = null,
                 nextAiringAtEpochSec = null,
                 isTmdb = false,
+                mediaUrl = link,
             )
             customMediaCache[id] = media
             if (isVivamax) {
@@ -1170,6 +1172,7 @@ class MetadataRepository(
                 nextAiringEpisode = null,
                 nextAiringAtEpochSec = null,
                 isTmdb = false,
+                mediaUrl = link,
             )
             customMediaCache[id] = media
             com.animarvle.app.AnimarvleApp.registerPinoy(cleanTitle, rawTitle)
@@ -1266,32 +1269,41 @@ class MetadataRepository(
         val isPinoySearch = listOf("vivamax", "pinoy", "tagalog", "alindog", "sukdulan", "dutdot", "angeli", "raval", "tbonx").any { q.contains(it, ignoreCase = true) }
 
         if (isExplicitJavQuery) {
+            val queriesToSearch = if (q.equals("jav", ignoreCase = true)) {
+                listOf("SSIS", "MIDE", "ADN", "IPX")
+            } else {
+                listOf(q)
+            }
             // 1. JavMost instant JSON search
-            for (pageIdx in startPage until (startPage + pages)) {
-                runCatching {
-                    val encoded = java.net.URLEncoder.encode(q, "UTF-8")
-                    val url = "https://www.javmost.ws/showlist2/$encoded/$pageIdx/search/"
-                    val req = Request.Builder()
-                        .url(url)
-                        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
-                        .header("X-Requested-With", "XMLHttpRequest")
-                        .header("Referer", "https://www.javmost.ws/")
-                        .build()
-                    val body = httpClient.newCall(req).execute().use { if (it.isSuccessful) it.body?.string() else null }
-                    if (body != null) {
-                        val root = JSONObject(body)
-                        val arr = root.optJSONArray("result")
-                        if (arr != null) {
-                            for (i in 0 until arr.length()) {
-                                val obj = arr.getJSONObject(i)
-                                val fullUrl = obj.optString("url")
-                                if (fullUrl.isBlank() || !seen.add(fullUrl)) continue
-                                val cover = obj.optString("cover").takeIf { it.isNotBlank() }
-                                if (cover == null || cover.contains("now-printing", ignoreCase = true) || cover.contains("now_printing", ignoreCase = true)) {
-                                    continue
-                                }
-                                val name = obj.optString("name").replace(Regex("<[^>]+>"), "").trim()
-                                val fullName = obj.optString("full_name").replace(Regex("<[^>]+>"), "").trim()
+            for (subQ in queriesToSearch) {
+                for (pageIdx in startPage until (startPage + (if (queriesToSearch.size > 1) 1 else pages))) {
+                    runCatching {
+                        val encoded = java.net.URLEncoder.encode(subQ, "UTF-8")
+                        val url = "https://www.javmost.ws/showlist2/$encoded/$pageIdx/search/"
+                        val req = Request.Builder()
+                            .url(url)
+                            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+                            .header("X-Requested-With", "XMLHttpRequest")
+                            .header("Referer", "https://www.javmost.ws/")
+                            .build()
+                        val body = httpClient.newCall(req).execute().use { if (it.isSuccessful) it.body?.string() else null }
+                        if (body != null) {
+                            val root = JSONObject(body)
+                            val arr = root.optJSONArray("result")
+                            if (arr != null) {
+                                for (i in 0 until arr.length()) {
+                                    val obj = arr.getJSONObject(i)
+                                    val fullUrl = obj.optString("url")
+                                    if (fullUrl.isBlank() || !seen.add(fullUrl)) continue
+                                    val cover = obj.optString("cover").takeIf { it.isNotBlank() }
+                                    if (cover == null || cover.contains("now-printing", ignoreCase = true) || cover.contains("now_printing", ignoreCase = true)) {
+                                        continue
+                                    }
+                                    val name = obj.optString("name").replace(Regex("<[^>]+>"), "").trim()
+                                    val fullName = obj.optString("full_name").replace(Regex("<[^>]+>"), "").trim()
+                                    if (name.matches(Regex("""^JAV-\d+$""", RegexOption.IGNORE_CASE)) || fullUrl.contains(Regex("""/JAV-\d+/?$""", RegexOption.IGNORE_CASE))) {
+                                        continue
+                                    }
                                 val isUncensored = fullUrl.contains("uncensored", ignoreCase = true) ||
                                     name.contains("uncensored", ignoreCase = true) ||
                                     fullName.contains("uncensored", ignoreCase = true)
@@ -1323,6 +1335,7 @@ class MetadataRepository(
                                     nextAiringEpisode = null,
                                     nextAiringAtEpochSec = null,
                                     isTmdb = false,
+                                    mediaUrl = fullUrl,
                                 )
                                 customMediaCache[id] = media
                                 com.animarvle.app.AnimarvleApp.registerAsianAdult(title, name, fullName)
@@ -1331,6 +1344,7 @@ class MetadataRepository(
                         }
                     }
                 }
+            }
             }
 
             // 2. Jav.com.co search
@@ -1385,6 +1399,7 @@ class MetadataRepository(
                             nextAiringEpisode = null,
                             nextAiringAtEpochSec = null,
                             isTmdb = false,
+                            mediaUrl = link,
                         )
                         customMediaCache[id] = media
                         com.animarvle.app.AnimarvleApp.registerAsianAdult(cleanText)

@@ -556,6 +556,19 @@
                         app:tint="#FFFFFF" />
 
                     <androidx.appcompat.widget.AppCompatImageButton
+                        android:id="@+id/btnSourceBottom"
+                        android:layout_width="36dp"
+                        android:layout_height="36dp"
+                        android:layout_marginStart="8dp"
+                        android:background="?android:attr/selectableItemBackgroundBorderless"
+                        android:contentDescription="Select Source"
+                        android:padding="6dp"
+                        android:src="@drawable/ic_cloud"
+                        android:tint="#FFFFFF"
+                        android:visibility="gone"
+                        app:tint="#FFFFFF" />
+
+                    <androidx.appcompat.widget.AppCompatImageButton
                         android:id="@+id/btnPip"
                         android:layout_width="36dp"
                         android:layout_height="36dp"
@@ -1039,7 +1052,7 @@
                 android:textSize="13sp"
                 android:textStyle="italic" />
 
-            <!-- AniVortex Servers Row: "Servers :" + [Spiral] [Turbo] Pills -->
+            <!-- 1-to-1 Branded Server Selector Pill / Button -->
             <LinearLayout
                 android:id="@+id/serverContainer"
                 android:layout_width="match_parent"
@@ -1055,17 +1068,61 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginEnd="10dp"
-                    android:text="Servers :"
+                    android:text="Source :"
                     android:textColor="#FFFFFF"
                     android:textSize="14sp"
                     android:textStyle="bold" />
 
+                <!-- Compact status pill opening floating Source modal: [ 🟢 🇺🇸 Halo ▾ ] -->
+                <LinearLayout
+                    android:id="@+id/btnOpenSourceModal"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:background="@drawable/bg_server_pill_inactive"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="14dp">
+
+                    <View
+                        android:id="@+id/sourceStatusDot"
+                        android:layout_width="8dp"
+                        android:layout_height="8dp"
+                        android:layout_marginEnd="8dp"
+                        android:background="@drawable/bg_status_dot_ready" />
+
+                    <TextView
+                        android:id="@+id/sourceFlagEmoji"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="6dp"
+                        android:text="\ud83c\uddfa\ud83c\uddf8"
+                        android:textSize="14sp" />
+
+                    <TextView
+                        android:id="@+id/sourceCurrentName"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="8dp"
+                        android:fontFamily="sans-serif-medium"
+                        android:text="Halo"
+                        android:textColor="#FFFFFF"
+                        android:textSize="13.5sp" />
+
+                    <ImageView
+                        android:layout_width="14dp"
+                        android:layout_height="14dp"
+                        android:src="@drawable/ic_chevron_down"
+                        app:tint="#B3FFFFFF" />
+                </LinearLayout>
+
+                <!-- Hidden ScrollView & serverRow for backward compatibility -->
                 <HorizontalScrollView
                     android:id="@+id/serverScroll"
                     android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:scrollbars="none">
+                    android:layout_height="0dp"
+                    android:visibility="gone">
 
                     <LinearLayout
                         android:id="@+id/serverRow"

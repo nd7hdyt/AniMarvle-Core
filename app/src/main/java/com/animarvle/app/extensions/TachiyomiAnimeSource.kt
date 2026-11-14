@@ -58,7 +58,7 @@ class TachiyomiAnimeSource(
     override val language: String get() = source.lang
 
     /** Aniyomi anime extensions carry both series and anime movies. */
-    override val supportedTypes: Set<MediaType> = setOf(MediaType.ANIME, MediaType.MOVIE)
+    override val supportedTypes: Set<MediaType> = setOf(MediaType.ANIME, MediaType.MOVIE, MediaType.TV)
 
     override val capabilities: SourceCapabilities = SourceCapabilities(
         sub = true,
@@ -187,10 +187,12 @@ class TachiyomiAnimeSource(
                 val base = h.hosterName.ifEmpty { source.name }
                 val count = occurrences.getOrDefault(base, 0)
                 occurrences[base] = count + 1
+                val branded = com.animarvle.app.ui.player.BrandedServer.fromRawServerName(base)
+                val cleanLabel = branded.displayName
                 if (count == 0) {
-                    subHosters.add(ServerOption(key = "idx:$idx", label = "$base (Sub)", audioLanguage = allServers.getOrNull(idx)?.audioLanguage ?: origLang))
+                    subHosters.add(ServerOption(key = "idx:$idx", label = cleanLabel, audioLanguage = allServers.getOrNull(idx)?.audioLanguage ?: origLang))
                 } else {
-                    dubHosters.add(ServerOption(key = "idx:$idx", label = "$base (Dub)", audioLanguage = allServers.getOrNull(idx)?.audioLanguage ?: "English"))
+                    dubHosters.add(ServerOption(key = "idx:$idx", label = cleanLabel, audioLanguage = allServers.getOrNull(idx)?.audioLanguage ?: "English"))
                 }
             }
         } else {

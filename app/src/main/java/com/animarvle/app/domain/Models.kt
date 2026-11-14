@@ -32,6 +32,8 @@ data class MediaUi(
     val nextAiringAtEpochSec: Long?,
     val seasons: List<SeasonUi> = emptyList(),
     val isTmdb: Boolean = false,
+    val originalLanguage: String? = null,
+    val mediaUrl: String? = null,
 )
 
 data class SeasonUi(

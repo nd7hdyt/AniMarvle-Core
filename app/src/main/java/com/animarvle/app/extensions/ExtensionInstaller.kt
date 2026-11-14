@@ -26,6 +26,7 @@ class ExtensionInstaller(private val context: Context) {
     suspend fun downloadAndInstallApk(
         apkUrl: String,
         packageName: String,
+        expectedSha256: String = "",
         onProgress: (Int) -> Unit = {},
     ): InstallResult = withContext(Dispatchers.IO) {
         try {
@@ -47,6 +48,7 @@ class ExtensionInstaller(private val context: Context) {
                 val body = response.body ?: return@withContext InstallResult.Error("Empty download body")
                 val totalLength = body.contentLength()
                 var downloaded: Long = 0
+                val digest = java.security.MessageDigest.getInstance("SHA-256")
 
                 body.byteStream().use { input ->
                     FileOutputStream(apkFile).use { output ->
@@ -54,6 +56,7 @@ class ExtensionInstaller(private val context: Context) {
                         var bytesRead: Int
                         while (input.read(buffer).also { bytesRead = it } != -1) {
                             output.write(buffer, 0, bytesRead)
+                            digest.update(buffer, 0, bytesRead)
                             downloaded += bytesRead
                             if (totalLength > 0) {
                                 val progress = ((downloaded * 100) / totalLength).toInt()
@@ -61,6 +64,14 @@ class ExtensionInstaller(private val context: Context) {
                             }
                         }
                         output.flush()
+                    }
+                }
+
+                if (expectedSha256.isNotBlank()) {
+                    val computedHash = digest.digest().joinToString("") { "%02x".format(it) }
+                    if (!computedHash.equals(expectedSha256.trim(), ignoreCase = true)) {
+                        apkFile.delete()
+                        return@withContext InstallResult.Error("Extension checksum mismatch! Expected $expectedSha256 but got $computedHash")
                     }
                 }
             }

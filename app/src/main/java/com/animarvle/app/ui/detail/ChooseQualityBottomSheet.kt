@@ -135,7 +135,7 @@ class ChooseQualityBottomSheet : BottomSheetDialogFragment() {
         posterUrl = arguments?.getString(ARG_POSTER_URL)
         epNumbers = arguments?.getIntegerArrayList(ARG_EPISODES) ?: arrayListOf(1)
         val typeStr = arguments?.getString(ARG_MEDIA_TYPE)
-        mediaType = if (isDonghua) MediaType.ANIME else if (typeStr == MediaType.MOVIE.name) MediaType.MOVIE else MediaType.ANIME
+        mediaType = if (isDonghua) MediaType.ANIME else if (typeStr == MediaType.MOVIE.name) MediaType.MOVIE else if (typeStr == MediaType.TV.name) MediaType.TV else MediaType.ANIME
         val y = arguments?.getInt(ARG_MEDIA_YEAR, -1) ?: -1
         mediaYear = if (y > 0) y else null
 
@@ -286,7 +286,10 @@ class ChooseQualityBottomSheet : BottomSheetDialogFragment() {
         headers: Map<String, String>,
     ): Long? {
         val lower = url.lowercase(Locale.US)
-        if (lower.contains(".m3u8") || lower.contains("/proxy/m3u8") || lower.contains(".mpd")) {
+        if (lower.contains(".m3u8") || lower.contains("/proxy/m3u8")) {
+            return probeHlsStreamSize(http, url, headers)
+        }
+        if (lower.contains(".mpd")) {
             return null
         }
 
@@ -344,6 +347,92 @@ class ChooseQualityBottomSheet : BottomSheetDialogFragment() {
         }
 
         return null
+    }
+
+    private fun probeHlsStreamSize(
+        http: okhttp3.OkHttpClient,
+        url: String,
+        headers: Map<String, String>,
+    ): Long? {
+        return runCatching {
+            val reqBuilder = okhttp3.Request.Builder().url(url)
+            headers.forEach { (k, v) -> reqBuilder.header(k, v) }
+            http.newCall(reqBuilder.build()).execute().use { resp ->
+                if (!resp.isSuccessful) return null
+                val body = resp.body.string()
+
+                // Case A: Master playlist with BANDWIDTH declaration
+                if (body.contains("#EXT-X-STREAM-INF", ignoreCase = true)) {
+                    val bwMatch = Regex("(?:AVERAGE-BANDWIDTH|BANDWIDTH)=(\\d+)", RegexOption.IGNORE_CASE).find(body)
+                    val bw = bwMatch?.groupValues?.getOrNull(1)?.toLongOrNull()
+                    if (bw != null && bw > 0L) {
+                        val durSec = (if (durationMinutes > 0) durationMinutes else 24) * 60L
+                        val total = (bw / 8L) * durSec
+                        if (total > 100_000L) return total
+                    }
+                }
+
+                // Case B: Media playlist with segments (#EXTINF)
+                if (body.contains("#EXTINF", ignoreCase = true)) {
+                    val lines = body.lines()
+                    val segments = lines.map { it.trim() }.filter { it.isNotBlank() && !it.startsWith("#") }
+                    if (segments.isNotEmpty()) {
+                        val firstSeg = segments.first()
+                        val baseUri = URI(url)
+                        val resolvedSeg = runCatching { baseUri.resolve(firstSeg).toString() }.getOrDefault(firstSeg)
+                        val segHeaders = AnimarvleStreamSource.buildHeadersForUrl(resolvedSeg, url)
+                        val segSize = probeSingleSegmentSize(http, resolvedSeg, segHeaders)
+                        if (segSize != null && segSize > 0L) {
+                            val total = segSize * segments.size
+                            if (total > 100_000L) return total
+                        }
+                    }
+                }
+                null
+            }
+        }.getOrNull()
+    }
+
+    private fun probeSingleSegmentSize(
+        http: okhttp3.OkHttpClient,
+        url: String,
+        headers: Map<String, String>,
+    ): Long? {
+        return runCatching {
+            val reqBuilder = okhttp3.Request.Builder()
+                .url(url)
+                .header("Range", "bytes=0-0")
+                .header("Accept-Encoding", "identity")
+            headers.forEach { (k, v) -> reqBuilder.header(k, v) }
+            http.newCall(reqBuilder.build()).execute().use { resp ->
+                if (resp.isSuccessful || resp.code == 206) {
+                    val cr = resp.header("Content-Range")
+                    if (cr != null && cr.contains("/")) {
+                        val total = cr.substringAfterLast("/").trim().toLongOrNull()
+                        if (total != null && total > 10_000L) return total
+                    }
+                    val cl = resp.header("Content-Length")?.toLongOrNull()
+                    if (cl != null && cl > 10_000L) return cl
+                }
+                null
+            }
+        }.getOrNull()
+    }
+
+    private fun estimateSizeFromQualityAndDuration(qualityBadge: String, durationMinutes: Int): Long {
+        val durMin = (if (durationMinutes > 0) durationMinutes else 24).toLong()
+        val durSec = durMin * 60L
+        val bps = when (qualityBadge.uppercase(Locale.US)) {
+            "4K", "2160P" -> 16_000_000L // 16 Mbps (~120 MB/min)
+            "1440P", "2K" -> 8_000_000L   // 8 Mbps (~60 MB/min)
+            "1080P" -> 3_200_000L          // 3.2 Mbps (~24 MB/min)
+            "720P" -> 1_600_000L           // 1.6 Mbps (~12 MB/min)
+            "480P" -> 800_000L             // 800 Kbps (~6 MB/min)
+            "360P" -> 450_000L             // 450 Kbps (~3.4 MB/min)
+            "240P", "144P" -> 250_000L     // 250 Kbps (~1.9 MB/min)
+            else -> 2_500_000L
+        }
+        return (bps / 8L) * durSec
     }
 
     private data class StreamFetchResult(
@@ -468,9 +557,7 @@ class ChooseQualityBottomSheet : BottomSheetDialogFragment() {
                 ) {
                     val hlsVariants = parseHlsMasterQualities(app.http, primaryUrl, mergedHeaders)
                     for ((qBadge, qUrl) in hlsVariants) {
-                        if (!qualityMap.containsKey(qBadge)) {
-                            qualityMap[qBadge] = qUrl
-                        }
+                        qualityMap[qBadge] = qUrl
                     }
                 }
 
@@ -499,7 +586,19 @@ class ChooseQualityBottomSheet : BottomSheetDialogFragment() {
             }
         }.awaitAll()
 
-        val entries = resolvedEntriesLists.flatten()
+        val allEntries = resolvedEntriesLists.flatten()
+        val entries = mutableListOf<ServerEntry>()
+        for (entry in allEntries) {
+            val isDuplicate = entries.any { existing ->
+                (existing.streamUrl.isNotBlank() && existing.streamUrl == entry.streamUrl) ||
+                (existing.qualityMap.isNotEmpty() && existing.qualityMap.values.toSet() == entry.qualityMap.values.toSet()) ||
+                (existing.serverName.equals("Halo", ignoreCase = true) && entry.serverName.equals("Nebula", ignoreCase = true)) ||
+                (existing.serverName.equals("Nebula", ignoreCase = true) && entry.serverName.equals("Halo", ignoreCase = true))
+            }
+            if (!isDuplicate) {
+                entries.add(entry)
+            }
+        }
         val serverNames = entries.map { it.serverName }.distinct()
         val languages = entries.map { it.audioLanguage }.distinct()
 
@@ -524,7 +623,7 @@ class ChooseQualityBottomSheet : BottomSheetDialogFragment() {
             headers.forEach { (k, v) -> reqBuilder.header(k, v) }
             http.newCall(reqBuilder.build()).execute().use { resp ->
                 if (!resp.isSuccessful) return emptyMap()
-                val body = resp.body?.string().orEmpty()
+                val body = resp.body.string()
                 if (!body.contains("#EXT-X-STREAM-INF")) return emptyMap()
 
                 val lines = body.lines()
@@ -559,6 +658,9 @@ class ChooseQualityBottomSheet : BottomSheetDialogFragment() {
                             val bytes = (pendingBandwidth / 8L) * (durationMinutes * 60L)
                             if (bytes > 0L) {
                                 probedSizes[resolvedVariantUrl] = bytes
+                                probedSizes[masterUrl] = bytes
+                                AnimarvleStreamSource.sizesCache[resolvedVariantUrl] = bytes
+                                AnimarvleStreamSource.sizesCache[masterUrl] = bytes
                             }
                         }
                         pendingQuality = null
@@ -718,7 +820,7 @@ class ChooseQualityBottomSheet : BottomSheetDialogFragment() {
 
         qualityLadder = uniqueUrlTargets.map { target ->
             val qBadge = target.badge
-            val directUrl = target.url
+            val directUrl = AnimarvleStreamSource.normalizeCdnUrl(target.url)
             val entry = target.entry
             val format = inferFormat(directUrl, entry.kind)
 
@@ -729,29 +831,29 @@ class ChooseQualityBottomSheet : BottomSheetDialogFragment() {
                 }?.totalBytes
             }.getOrNull()
 
-            // 2. Check probed CDN Content-Length for this exact URL
+            // 2. Check probed CDN Content-Length for this exact URL or parent stream URL
             val singleEpBytes = cachedDownloadBytes
                 ?: probedSizes[directUrl]
                 ?: AnimarvleStreamSource.sizesCache[directUrl]
+                ?: probedSizes[entry.streamUrl]
+                ?: AnimarvleStreamSource.sizesCache[entry.streamUrl]
 
-            val totalVerifiedBytes = if (singleEpBytes != null && singleEpBytes > 0L) {
-                singleEpBytes * count
-            } else {
-                0L
-            }
+            val isExact = singleEpBytes != null && singleEpBytes > 0L
+            val singleEpEstimated = if (isExact) singleEpBytes else estimateSizeFromQualityAndDuration(qBadge, durationMinutes)
+            val totalBytes = singleEpEstimated * count
 
-            val sizeLabel = when {
-                totalVerifiedBytes > 0L -> {
-                    val mb = totalVerifiedBytes.toDouble() / (1024.0 * 1024.0)
-                    if (mb >= 1024.0) {
-                        String.format(Locale.US, "%.2f GB (%.1f MB)", mb / 1024.0, mb)
-                    } else {
-                        String.format(Locale.US, "%.1f MB", mb)
-                    }
+            val sizeLabel = if (totalBytes > 0L) {
+                val mb = totalBytes.toDouble() / (1024.0 * 1024.0)
+                val prefix = if (!isExact) "~" else ""
+                if (mb >= 1024.0) {
+                    String.format(Locale.US, "%s%.2f GB", prefix, mb / 1024.0)
+                } else {
+                    String.format(Locale.US, "%s%.0f MB", prefix, mb)
                 }
-                format == "HLS" || format == "DASH" -> "Adaptive Stream"
-                isProbingSizes -> "Checking size..."
-                else -> "Direct Stream"
+            } else if (isProbingSizes) {
+                "Checking size..."
+            } else {
+                "Standard Size"
             }
 
             // Build updated serverKey with the specific quality's URL so batch/detail downloaders use the exact chosen resolution
@@ -769,7 +871,7 @@ class ChooseQualityBottomSheet : BottomSheetDialogFragment() {
                 streamUrl = directUrl,
                 language = selectedLanguage,
                 sizeText = sizeLabel,
-                estimatedBytes = totalVerifiedBytes,
+                estimatedBytes = totalBytes,
                 headers = AnimarvleStreamSource.buildHeadersForUrl(directUrl, entry.streamUrl),
             )
         }

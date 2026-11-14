@@ -25,6 +25,7 @@ class AddToMyListBottomSheet : BottomSheetDialogFragment() {
 
     private var totalEpisodes: Int? = null
     private var year: Int? = null
+    private var mediaType: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -36,6 +37,7 @@ class AddToMyListBottomSheet : BottomSheetDialogFragment() {
             score = if (it.containsKey(ARG_SCORE)) it.getDouble(ARG_SCORE) else null
             totalEpisodes = if (it.containsKey(ARG_TOTAL_EPISODES)) it.getInt(ARG_TOTAL_EPISODES) else null
             year = if (it.containsKey(ARG_YEAR)) it.getInt(ARG_YEAR) else null
+            mediaType = it.getString(ARG_MEDIA_TYPE)
         }
     }
 
@@ -74,6 +76,7 @@ class AddToMyListBottomSheet : BottomSheetDialogFragment() {
                     progress = existing?.progress ?: 0,
                     totalEpisodes = totalEpisodes ?: existing?.totalEpisodes,
                     year = year ?: existing?.year,
+                    mediaType = mediaType ?: existing?.mediaType,
                 )
                 repository.upsert(item)
                 Toast.makeText(
@@ -169,6 +172,7 @@ class AddToMyListBottomSheet : BottomSheetDialogFragment() {
         private const val ARG_SCORE = "score"
         private const val ARG_TOTAL_EPISODES = "total_episodes"
         private const val ARG_YEAR = "year"
+        private const val ARG_MEDIA_TYPE = "media_type"
 
         fun newInstance(
             mediaId: Long,
@@ -178,6 +182,7 @@ class AddToMyListBottomSheet : BottomSheetDialogFragment() {
             score: Double? = null,
             totalEpisodes: Int? = null,
             year: Int? = null,
+            mediaType: String? = null,
         ): AddToMyListBottomSheet {
             return AddToMyListBottomSheet().apply {
                 arguments = Bundle().apply {
@@ -188,6 +193,7 @@ class AddToMyListBottomSheet : BottomSheetDialogFragment() {
                     if (score != null) putDouble(ARG_SCORE, score)
                     if (totalEpisodes != null) putInt(ARG_TOTAL_EPISODES, totalEpisodes)
                     if (year != null) putInt(ARG_YEAR, year)
+                    if (!mediaType.isNullOrBlank()) putString(ARG_MEDIA_TYPE, mediaType)
                 }
             }
         }

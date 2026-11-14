@@ -67,13 +67,17 @@ class DownloadFragment : Fragment() {
             onItemClick = { item ->
                 if (item.status == DownloadStatus.COMPLETED) {
                     playDownload(item)
+                } else if (item.status == DownloadStatus.FAILED) {
+                    viewLifecycleOwner.lifecycleScope.launch {
+                        downloadRepo.resumeDownload(item.id)
+                    }
                 }
             },
             onPauseResumeClick = { item ->
                 viewLifecycleOwner.lifecycleScope.launch {
                     if (item.status == DownloadStatus.DOWNLOADING) {
                         downloadRepo.pauseDownload(item.id)
-                    } else if (item.status == DownloadStatus.PAUSED) {
+                    } else if (item.status == DownloadStatus.PAUSED || item.status == DownloadStatus.FAILED) {
                         downloadRepo.resumeDownload(item.id)
                     }
                 }
@@ -153,7 +157,8 @@ class DownloadFragment : Fragment() {
         val inProgressItems = items.filter {
             it.status == DownloadStatus.DOWNLOADING ||
             it.status == DownloadStatus.QUEUED ||
-            it.status == DownloadStatus.PAUSED
+            it.status == DownloadStatus.PAUSED ||
+            it.status == DownloadStatus.FAILED
         }
         val completedItems = items.filter { it.status == DownloadStatus.COMPLETED }
 

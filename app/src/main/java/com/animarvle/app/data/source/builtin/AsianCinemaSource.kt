@@ -76,8 +76,9 @@ class AsianCinemaSource(
         Log.i("AsianCinemaSource", "Searching Asian Cinema for: '$query' (clean: '$cleanQuery', type: $type)")
 
         // 1. Check if the query contains a JAV studio code (e.g. MIDE-500, ADN-165, SW-216, DSOD-122, JUFE-250)
+        // Note: "JAV" is a genre tag and not a studio prefix; avoid treating JAV-\d+ as studio codes.
         val codeMatch = Regex("""\b([A-Za-z]{2,6})[-_]?(\d{2,5})\b""").find(query)
-        if (codeMatch != null) {
+        if (codeMatch != null && !codeMatch.groupValues[1].equals("JAV", ignoreCase = true)) {
             val alphaPrefix = codeMatch.groupValues[1]
             val digits = codeMatch.groupValues[2]
             val fullCode = "$alphaPrefix-$digits"
@@ -94,6 +95,7 @@ class AsianCinemaSource(
             val combined = mostRes + javCoRes + cat3Res
             if (combined.isNotEmpty()) {
                 Log.i("AsianCinemaSource", "Found ${combined.size} cards for studio code '$fullCode'")
+                combined.forEach { com.animarvle.app.AnimarvleApp.registerAsianAdult(it.title) }
                 return@withContext combined
             }
 
@@ -102,10 +104,8 @@ class AsianCinemaSource(
             val filteredPrefix = prefixResults.filter { it.title.contains(digits, ignoreCase = true) }
             if (filteredPrefix.isNotEmpty()) {
                 Log.i("AsianCinemaSource", "Found ${filteredPrefix.size} cards matching digits '$digits' under prefix '$alphaPrefix'")
+                filteredPrefix.forEach { com.animarvle.app.AnimarvleApp.registerAsianAdult(it.title) }
                 return@withContext filteredPrefix
-            }
-            if (prefixResults.isNotEmpty()) {
-                return@withContext prefixResults
             }
         }
 
@@ -121,6 +121,7 @@ class AsianCinemaSource(
         if (cat3Res.isNotEmpty() || mostTitleRes.isNotEmpty() || javCoTitleRes.isNotEmpty()) {
             val combined = cat3Res + mostTitleRes + javCoTitleRes
             Log.i("AsianCinemaSource", "Found ${combined.size} cards for '$cleanQuery'")
+            combined.forEach { com.animarvle.app.AnimarvleApp.registerAsianAdult(it.title) }
             return@withContext combined
         }
 
@@ -133,6 +134,7 @@ class AsianCinemaSource(
             val mainCombined = mainCat3 + mainJavMost + mainJavCo
             if (mainCombined.isNotEmpty()) {
                 Log.i("AsianCinemaSource", "Found ${mainCombined.size} cards for main title '$mainTitle'")
+                mainCombined.forEach { com.animarvle.app.AnimarvleApp.registerAsianAdult(it.title) }
                 return@withContext mainCombined
             }
         }
@@ -145,6 +147,7 @@ class AsianCinemaSource(
                 val subResults = searchCat3Movie(firstWord, type) + searchJavMostJson(firstWord, type) + searchJavComCo(firstWord, type)
                 if (subResults.isNotEmpty()) {
                     Log.i("AsianCinemaSource", "Found ${subResults.size} cards for '$firstWord'")
+                    subResults.forEach { com.animarvle.app.AnimarvleApp.registerAsianAdult(it.title) }
                     return@withContext subResults
                 }
             }
@@ -261,6 +264,9 @@ class AsianCinemaSource(
                 if (fullUrl.isBlank() || !seen.add(fullUrl)) continue
                 val name = obj.optString("name").cleanHtml()
                 val fullName = obj.optString("full_name").cleanHtml()
+                if (name.matches(Regex("""^JAV-\d+$""", RegexOption.IGNORE_CASE)) || fullUrl.contains(Regex("""/JAV-\d+/?$""", RegexOption.IGNORE_CASE))) {
+                    continue
+                }
                 val isUncensored = fullUrl.contains("uncensored", ignoreCase = true) ||
                     name.contains("uncensored", ignoreCase = true) ||
                     fullName.contains("uncensored", ignoreCase = true)
@@ -353,19 +359,28 @@ class AsianCinemaSource(
 
     override suspend fun options(episode: SourceEpisode): EpisodeOptions = withContext(Dispatchers.IO) {
         val pageUrl = episode.extra["mediaUrl"] ?: episode.url
-        val lang = if (pageUrl.contains("cat3movie.club")) "Korean" else "Japanese"
-        val label = if (pageUrl.contains("cat3movie.club")) "Cat3 Direct HD (HLS / MP4)" else "VidHide / DooPlayer HD"
+        val isCat3Page = pageUrl.contains("cat3movie.club")
+
+        val cat3Option = ServerOption(
+            key = "server:cat3",
+            label = "Cat3 Direct HD",
+            hint = "Instant 800ms Direct CDN",
+            audioLanguage = if (isCat3Page) "Korean / Japanese" else "Multi",
+        )
+        val vidhideOption = ServerOption(
+            key = "server:vidhide",
+            label = "VidHide / DooPlayer HD",
+            hint = "Multi-Host Stream",
+            audioLanguage = "Japanese",
+        )
+
+        // Always list Cat3 Direct as primary server option so it resolves first with instant 800ms start,
+        // with VidHide / DooPlayer as secondary option.
+        val serverList = listOf(cat3Option, vidhideOption)
 
         EpisodeOptions(
             byAudio = mapOf(
-                Audio.SUB to listOf(
-                    ServerOption(
-                        key = "server:default",
-                        label = label,
-                        hint = "High Speed Direct CDN",
-                        audioLanguage = lang,
-                    )
-                )
+                Audio.SUB to serverList
             )
         )
     }
@@ -374,101 +389,210 @@ class AsianCinemaSource(
 
     override suspend fun resolve(episode: SourceEpisode, choice: Choice): ResolvedMedia = withContext(Dispatchers.IO) {
         val episodeUrl = episode.extra["mediaUrl"] ?: episode.url
+        val serverKey = choice.serverKey.lowercase()
 
-        // 1. Cat3Movie Native Resolution (direct m3u8 or mp4)
+        val codeMatch = Regex("""\b([A-Za-z]{2,6})[-_]?(\d{2,5})\b""").find(episodeUrl)
+            ?: Regex("""\b([A-Za-z]{2,6})[-_]?(\d{2,5})\b""").find(episode.title.orEmpty())
+        val code = if (codeMatch != null && !codeMatch.groupValues[1].equals("JAV", ignoreCase = true)) {
+            "${codeMatch.groupValues[1]}-${codeMatch.groupValues[2]}"
+        } else null
+
+        val cleanKey = serverKey.removePrefix("server:")
+
+        // 1. Explicit Cat3 Direct server requested
+        if (cleanKey.contains("cat3") || cleanKey == "cat3_direct") {
+            if (episodeUrl.contains("cat3movie.club")) {
+                val cat3Media = resolveCat3(episodeUrl)
+                if (cat3Media != null) return@withContext cat3Media
+            } else {
+                val cat3Media = resolveCat3ByTitleOrCode(episode.title.orEmpty(), code)
+                if (cat3Media != null) return@withContext cat3Media
+            }
+            throw SourceException(SourceErrorKind.NOT_FOUND, "Stream not available on Cat3 Direct server")
+        }
+
+        // 2. Explicit VidHide server requested
+        if (cleanKey.contains("vidhide") || cleanKey.contains("dooplayer")) {
+            return@withContext resolveVidHidePipeline(episode, episodeUrl, code)
+        }
+
+        // 3. Default / unspecified server key
         if (episodeUrl.contains("cat3movie.club")) {
-            val pageHtml = fetchHtml(episodeUrl, CAT3_DOMAIN)
-            val m3u8Url = Regex("""file\s*:\s*["'](https?://[^"']+\.m3u8[^"']*)["']""").find(pageHtml)?.groupValues?.get(1)
-                ?: Regex("""https?://[^\s"\'<>]+sooplive[^\s"\'<>]*\.m3u8[^\s"\'<>]*""").find(pageHtml)?.value
-                ?: Regex("""https?://[^\s"\'<>]+\.m3u8[^\s"\'<>]*""").find(pageHtml)?.value
+            val cat3Media = resolveCat3(episodeUrl)
+            if (cat3Media != null) return@withContext cat3Media
+            return@withContext resolveVidHidePipeline(episode, episodeUrl, code)
+        }
 
-            if (m3u8Url != null) {
-                Log.i("AsianCinemaSource", "Resolved Cat3Movie HLS stream: $m3u8Url")
-                return@withContext ResolvedMedia(
+        // Prioritize instant 800ms Cat3 Direct CDN for non-cat3 cards as well
+        val cat3First = resolveCat3ByTitleOrCode(episode.title.orEmpty(), code)
+        if (cat3First != null) {
+            Log.i("AsianCinemaSource", "Auto-resolved Asian adult title via Cat3Movie high-speed CDN: ${cat3First.streams.firstOrNull()?.url}")
+            return@withContext cat3First
+        }
+
+        return@withContext resolveVidHidePipeline(episode, episodeUrl, code)
+    }
+
+    private fun resolveCat3(pageUrl: String): ResolvedMedia? {
+        val pageHtml = runCatching { fetchHtml(pageUrl, CAT3_DOMAIN) }.getOrNull() ?: return null
+        val m3u8Url = Regex("""file\s*:\s*["'](https?://[^"']+\.m3u8[^"']*)["']""").find(pageHtml)?.groupValues?.get(1)
+            ?: Regex("""https?://[^\s"\'<>]+sooplive[^\s"\'<>]*\.m3u8[^\s"\'<>]*""").find(pageHtml)?.value
+            ?: Regex("""https?://[^\s"\'<>]+\.m3u8[^\s"\'<>]*""").find(pageHtml)?.value
+
+        if (m3u8Url != null) {
+            Log.i("AsianCinemaSource", "Resolved Cat3Movie HLS stream: $m3u8Url")
+            return ResolvedMedia(
+                streams = listOf(
+                    Stream(
+                        url = m3u8Url,
+                        kind = StreamKind.HLS,
+                        qualityLabel = "1080p HD",
+                        headers = mapOf(
+                            "User-Agent" to USER_AGENT,
+                            "Referer" to "$CAT3_DOMAIN/",
+                        ),
+                    )
+                ),
+                headers = mapOf(
+                    "User-Agent" to USER_AGENT,
+                    "Referer" to "$CAT3_DOMAIN/",
+                ),
+            )
+        }
+
+        val mp4Url = Regex("""(?:file\s*:\s*|src\s*=\s*)["'](https?://[^"']+\.mp4[^"']*)["']""").find(pageHtml)?.groupValues?.get(1)
+            ?: Regex("""https?://[^\s"\'<>]+bigo\.sg[^\s"\'<>]*\.mp4[^\s"\'<>]*""").find(pageHtml)?.value
+            ?: Regex("""https?://[^\s"\'<>]+\.mp4[^\s"\'<>]*""").find(pageHtml)?.value
+
+        if (mp4Url != null) {
+            Log.i("AsianCinemaSource", "Resolved Cat3Movie MP4 stream: $mp4Url")
+            return ResolvedMedia(
+                streams = listOf(
+                    Stream(
+                        url = mp4Url,
+                        kind = StreamKind.PROGRESSIVE,
+                        qualityLabel = "1080p HD",
+                        headers = mapOf(
+                            "User-Agent" to USER_AGENT,
+                            "Referer" to "$CAT3_DOMAIN/",
+                        ),
+                    )
+                ),
+                headers = mapOf(
+                    "User-Agent" to USER_AGENT,
+                    "Referer" to "$CAT3_DOMAIN/",
+                ),
+            )
+        }
+
+        // Check if iframe embed
+        val iframeUrl = Regex("""<iframe[^>]+src=["']([^"']+)["']""").find(pageHtml)?.groupValues?.get(1)
+        if (iframeUrl != null) {
+            val embedHtml = runCatching {
+                val req = Request.Builder().url(iframeUrl).header("Referer", pageUrl).build()
+                http.newCall(req).execute().use { it.body?.string().orEmpty() }
+            }.getOrDefault("")
+            val embedM3u8 = Regex("""https?://[^\s"\'<>]+\.m3u8[^\s"\'<>]*""").find(embedHtml)?.value
+            if (embedM3u8 != null) {
+                return ResolvedMedia(
                     streams = listOf(
                         Stream(
-                            url = m3u8Url,
+                            url = embedM3u8,
                             kind = StreamKind.HLS,
                             qualityLabel = "1080p HD",
                             headers = mapOf(
                                 "User-Agent" to USER_AGENT,
-                                "Referer" to "$CAT3_DOMAIN/",
+                                "Referer" to iframeUrl,
                             ),
                         )
                     ),
                     headers = mapOf(
                         "User-Agent" to USER_AGENT,
-                        "Referer" to "$CAT3_DOMAIN/",
+                        "Referer" to iframeUrl,
                     ),
                 )
             }
-
-            val mp4Url = Regex("""(?:file\s*:\s*|src\s*=\s*)["'](https?://[^"']+\.mp4[^"']*)["']""").find(pageHtml)?.groupValues?.get(1)
-                ?: Regex("""https?://[^\s"\'<>]+bigo\.sg[^\s"\'<>]*\.mp4[^\s"\'<>]*""").find(pageHtml)?.value
-                ?: Regex("""https?://[^\s"\'<>]+\.mp4[^\s"\'<>]*""").find(pageHtml)?.value
-
-            if (mp4Url != null) {
-                Log.i("AsianCinemaSource", "Resolved Cat3Movie MP4 stream: $mp4Url")
-                return@withContext ResolvedMedia(
-                    streams = listOf(
-                        Stream(
-                            url = mp4Url,
-                            kind = StreamKind.PROGRESSIVE,
-                            qualityLabel = "1080p HD",
-                            headers = mapOf(
-                                "User-Agent" to USER_AGENT,
-                                "Referer" to "$CAT3_DOMAIN/",
-                            ),
-                        )
-                    ),
-                    headers = mapOf(
-                        "User-Agent" to USER_AGENT,
-                        "Referer" to "$CAT3_DOMAIN/",
-                    ),
-                )
-            }
-
-            // Check if iframe embed
-            val iframeUrl = Regex("""<iframe[^>]+src=["']([^"']+)["']""").find(pageHtml)?.groupValues?.get(1)
-            if (iframeUrl != null) {
-                val embedHtml = runCatching {
-                    val req = Request.Builder().url(iframeUrl).header("Referer", episodeUrl).build()
-                    http.newCall(req).execute().use { it.body?.string().orEmpty() }
-                }.getOrDefault("")
-                val embedM3u8 = Regex("""https?://[^\s"\'<>]+\.m3u8[^\s"\'<>]*""").find(embedHtml)?.value
-                if (embedM3u8 != null) {
-                    return@withContext ResolvedMedia(
-                        streams = listOf(
-                            Stream(
-                                url = embedM3u8,
-                                kind = StreamKind.HLS,
-                                qualityLabel = "1080p HD",
-                            )
-                        )
-                    )
-                }
-            }
-
-            throw SourceException(SourceErrorKind.NOT_FOUND, "Could not extract video stream from Cat3Movie")
         }
 
-        // 2. jav.com.co Native Resolution via VidHide
+        return null
+    }
+
+    private fun resolveCat3ByTitleOrCode(title: String, code: String?): ResolvedMedia? {
+        if (!code.isNullOrBlank()) {
+            val codeResults = searchCat3Movie(code, MediaType.MOVIE)
+            for (card in codeResults) {
+                val res = resolveCat3(card.url)
+                if (res != null) return res
+            }
+        }
+        val clean = cleanCat3Title(title)
+        if (clean.isNotBlank()) {
+            val titleResults = searchCat3Movie(clean, MediaType.MOVIE)
+            for (card in titleResults) {
+                val res = resolveCat3(card.url)
+                if (res != null) return res
+            }
+            val words = clean.split(Regex("""\s+""")).filter { it.length >= 4 }
+            if (words.size >= 2) {
+                val shortQuery = words.take(2).joinToString(" ")
+                val shortResults = searchCat3Movie(shortQuery, MediaType.MOVIE)
+                for (card in shortResults) {
+                    val res = resolveCat3(card.url)
+                    if (res != null) return res
+                }
+            }
+        }
+        return null
+    }
+
+    private suspend fun resolveVidHidePipeline(
+        episode: SourceEpisode,
+        episodeUrl: String,
+        code: String?,
+    ): ResolvedMedia = withContext(Dispatchers.IO) {
         if (episodeUrl.contains("jav.com.co")) {
             return@withContext resolveJavComCo(episodeUrl)
         }
 
-        // 3. JavMenu Native Resolution
         if (episodeUrl.contains("javmenu.com")) {
-            val codeMatch = Regex("""\b([a-zA-Z]{2,6})[-_]?(\d{2,5})\b""").find(episodeUrl)
-                ?: Regex("""\b([a-zA-Z]{2,6})[-_]?(\d{2,5})\b""").find(episode.title.orEmpty())
-            if (codeMatch != null) {
-                val code = "${codeMatch.groupValues[1]}-${codeMatch.groupValues[2]}"
+            if (code != null) {
                 val jm = resolveJavMenu(code)
                 if (jm != null) return@withContext jm
             }
         }
 
-        // 4. JavMost Native Resolution via DooPlayer / MostPlayer
+        var javUrl = episodeUrl
+        if (episodeUrl.contains("cat3movie.club")) {
+            val candidateCards = if (code != null) searchJavMostJson(code, MediaType.MOVIE) else emptyList()
+            val bestCard = candidateCards.firstOrNull()
+                ?: searchJavMostJson(cleanCat3Title(episode.title.orEmpty()), MediaType.MOVIE).firstOrNull()
+            if (bestCard != null) {
+                javUrl = bestCard.url
+            } else if (code != null) {
+                val javCoCards = searchJavComCo(code, MediaType.MOVIE)
+                val jcCard = javCoCards.firstOrNull()
+                if (jcCard != null) {
+                    return@withContext resolveJavComCo(jcCard.url)
+                }
+                val jm = resolveJavMenu(code)
+                if (jm != null) return@withContext jm
+            }
+        }
+
+        if (javUrl.contains("cat3movie.club")) {
+            val cat3Media = resolveCat3(episodeUrl)
+            if (cat3Media != null) return@withContext cat3Media
+            throw SourceException(SourceErrorKind.NOT_FOUND, "Could not find VidHide mirror for this Cat3 title")
+        }
+
+        return@withContext resolveJavMost(javUrl, episode, code)
+    }
+
+    private suspend fun resolveJavMost(
+        episodeUrl: String,
+        episode: SourceEpisode,
+        code: String?,
+    ): ResolvedMedia = withContext(Dispatchers.IO) {
         val html = fetchHtml(episodeUrl, PRIMARY_DOMAIN)
 
         val y1 = Regex("""var\s+YWRzMQo\s*=\s*'([^']+)'""").find(html)?.groupValues?.get(1)
@@ -487,7 +611,6 @@ class AsianCinemaSource(
         data class JavCandidate(val group: String, val y4: String, val y5: String, val y6: String)
         val candidates = mutableListOf<JavCandidate>()
 
-        // Collect all server buttons
         val btnMatches = Regex("""select_part\s*\(\s*'1'\s*,\s*'([^']+)'\s*,\s*this\s*,\s*'parent'\s*,\s*'([^']+)'\s*,\s*'([^']+)'\s*,\s*'([^']+)'\s*\)""").findAll(html)
         for (m in btnMatches) {
             candidates.add(JavCandidate(m.groupValues[1], m.groupValues[2], m.groupValues[3], m.groupValues[4]))
@@ -496,7 +619,6 @@ class AsianCinemaSource(
             candidates.add(JavCandidate(defaultY2, defaultY4, defaultY5, defaultY6))
         }
 
-        // Prioritize group 54 (MostPlayer) and 60 first as they are active and fast
         val sortedCandidates = candidates.sortedWith(compareByDescending { c ->
             when (c.group) {
                 "54" -> 100 // MostPlayer
@@ -591,24 +713,27 @@ class AsianCinemaSource(
                         return@runCatching null
                     }
 
-                    // Fast probe candidate stream URL to ensure it is not 403 Forbidden or timed out
-                    val isLive = runCatching {
+                    // Fast probe candidate stream URL to verify it is not 404/410 dead
+                    val isDead = runCatching {
                         val pReq = Request.Builder()
                             .url(streamUrl)
+                            .get()
                             .header("User-Agent", USER_AGENT)
                             .header("Referer", embedUrl)
                             .header("Origin", "https://$host")
                             .header("Range", "bytes=0-100")
                             .build()
                         val pClient = http.newBuilder()
-                            .connectTimeout(3000, java.util.concurrent.TimeUnit.MILLISECONDS)
-                            .readTimeout(3000, java.util.concurrent.TimeUnit.MILLISECONDS)
+                            .connectTimeout(5000, java.util.concurrent.TimeUnit.MILLISECONDS)
+                            .readTimeout(5000, java.util.concurrent.TimeUnit.MILLISECONDS)
                             .build()
-                        pClient.newCall(pReq).execute().use { it.isSuccessful }
+                        pClient.newCall(pReq).execute().use { resp ->
+                            resp.code == 404 || resp.code == 410
+                        }
                     }.getOrDefault(false)
 
-                    if (!isLive) {
-                        Log.w("AsianCinemaSource", "Stream candidate on server ${candidate.group} probe failed: $streamUrl")
+                    if (isDead) {
+                        Log.w("AsianCinemaSource", "Stream candidate on server ${candidate.group} returned 404/410 dead: $streamUrl")
                         return@runCatching null
                     }
 
@@ -642,11 +767,14 @@ class AsianCinemaSource(
             }
         }
 
-        // Fallback: Check JavMenu and jav.com.co for working streams
-        val codeMatch = Regex("""\b([a-zA-Z]{2,6})[-_]?(\d{2,5})\b""").find(episodeUrl)
-            ?: Regex("""\b([a-zA-Z]{2,6})[-_]?(\d{2,5})\b""").find(episode.title.orEmpty())
-        if (codeMatch != null) {
-            val code = "${codeMatch.groupValues[1]}-${codeMatch.groupValues[2]}"
+        // Fallback: Check Cat3Movie first, then JavMenu and jav.com.co
+        if (code != null) {
+            val cat3Fallback = runCatching { resolveCat3ByTitleOrCode(episode.title.orEmpty(), code) }.getOrNull()
+            if (cat3Fallback != null) {
+                Log.i("AsianCinemaSource", "JavMost servers failed, recovered via Cat3Movie high-speed CDN for $code")
+                return@withContext cat3Fallback
+            }
+
             Log.i("AsianCinemaSource", "JavMost servers failed or dead, falling back to JavMenu for $code")
             val jmResolved = runCatching { resolveJavMenu(code) }.getOrNull()
             if (jmResolved != null) return@withContext jmResolved
@@ -657,9 +785,15 @@ class AsianCinemaSource(
                 val fbResolved = runCatching { resolveJavComCo(card.url) }.getOrNull()
                 if (fbResolved != null) return@withContext fbResolved
             }
+        } else {
+            val cat3Fallback = runCatching { resolveCat3ByTitleOrCode(episode.title.orEmpty(), null) }.getOrNull()
+            if (cat3Fallback != null) {
+                Log.i("AsianCinemaSource", "JavMost servers failed, recovered via Cat3Movie high-speed CDN for '${episode.title}'")
+                return@withContext cat3Fallback
+            }
         }
 
-        throw SourceException(SourceErrorKind.NOT_FOUND, "Could not resolve stream from any JavMost server")
+        throw SourceException(SourceErrorKind.NOT_FOUND, "Could not resolve stream from any JavMost/VidHide server")
     }
 
     // --- Helpers --------------------------------------------------------------------------------
@@ -707,15 +841,17 @@ class AsianCinemaSource(
             val isWorking = runCatching {
                 val probeReq = Request.Builder()
                     .url(m3u8)
+                    .get()
                     .header("User-Agent", USER_AGENT)
                     .header("Referer", "https://javmenu.com/")
-                    .header("Range", "bytes=0-100")
                     .build()
                 val probeClient = http.newBuilder()
-                    .connectTimeout(3000, java.util.concurrent.TimeUnit.MILLISECONDS)
-                    .readTimeout(3000, java.util.concurrent.TimeUnit.MILLISECONDS)
+                    .connectTimeout(5000, java.util.concurrent.TimeUnit.MILLISECONDS)
+                    .readTimeout(5000, java.util.concurrent.TimeUnit.MILLISECONDS)
                     .build()
-                probeClient.newCall(probeReq).execute().use { it.isSuccessful }
+                probeClient.newCall(probeReq).execute().use { resp ->
+                    resp.isSuccessful || resp.code == 416 || resp.code in 300..399
+                }
             }.getOrDefault(false)
 
             if (isWorking) {
@@ -759,27 +895,29 @@ class AsianCinemaSource(
             resp.body?.string().orEmpty()
         }
 
-        val m3u8Url = unpackVidHide(iframeHtml)
+        val m3u8Url = unpackVidHide(iframeHtml, iframeUrl)
             ?: Regex("""https?://[^\s"'<>]+\.m3u8[^\s"'<>]*""").find(iframeHtml)?.value
             ?: throw SourceException(SourceErrorKind.NOT_FOUND, "Could not resolve stream from VidHide player")
 
-        // Fast probe VidHide m3u8 to verify server is not timing out (504)
-        val isVidHideLive = runCatching {
+        // Fast probe VidHide m3u8 to verify server is not 404/410 dead
+        val isVidHideDead = runCatching {
             val pReq = Request.Builder()
                 .url(m3u8Url)
+                .get()
                 .header("User-Agent", USER_AGENT)
                 .header("Referer", iframeUrl)
-                .header("Range", "bytes=0-100")
                 .build()
             val pClient = http.newBuilder()
-                .connectTimeout(3000, java.util.concurrent.TimeUnit.MILLISECONDS)
-                .readTimeout(3000, java.util.concurrent.TimeUnit.MILLISECONDS)
+                .connectTimeout(5000, java.util.concurrent.TimeUnit.MILLISECONDS)
+                .readTimeout(5000, java.util.concurrent.TimeUnit.MILLISECONDS)
                 .build()
-            pClient.newCall(pReq).execute().use { it.isSuccessful }
+            pClient.newCall(pReq).execute().use { resp ->
+                resp.code == 404 || resp.code == 410
+            }
         }.getOrDefault(false)
 
-        if (!isVidHideLive) {
-            throw SourceException(SourceErrorKind.NOT_FOUND, "VidHide stream probe failed or server timed out")
+        if (isVidHideDead) {
+            throw SourceException(SourceErrorKind.NOT_FOUND, "VidHide stream removed or deleted (HTTP 404/410)")
         }
 
         Log.i("AsianCinemaSource", "Resolved and verified jav.com.co VidHide stream: $m3u8Url")
@@ -810,7 +948,7 @@ class AsianCinemaSource(
             ?: Regex("""content="?([^"\s>]+)"?\s*name=$name""").find(doc)?.groupValues?.get(1)
     }
 
-    private fun unpackVidHide(html: String): String? {
+    private fun unpackVidHide(html: String, iframeUrl: String): String? {
         val match = Regex("""eval\(function\(p,a,c,k,e,d\)[\s\S]*?\}\('(.*)',(\d+),(\d+),'(.*)'\.split\('\|'\)""").find(html)
             ?: return null
         val p = match.groupValues[1]
@@ -834,6 +972,34 @@ class AsianCinemaSource(
                 v = v * a + digit
             }
             if (valid && v < k.size && k[v].isNotBlank()) k[v] else word
+        }
+
+        val iframeUri = runCatching { URI(iframeUrl) }.getOrNull()
+        val iframeHost = if (iframeUri != null && !iframeUri.host.isNullOrBlank()) {
+            "${iframeUri.scheme ?: "https"}://${iframeUri.host}"
+        } else {
+            "https://videohidefree.online"
+        }
+
+        // JWPlayer setup prioritizes: links.hls4 || links.hls3 || links.hls2
+        val hls4 = Regex("""["']hls4["']\s*:\s*["']([^"']+)["']""").find(decoded)?.groupValues?.get(1)
+        if (!hls4.isNullOrBlank()) {
+            return if (hls4.startsWith("http", ignoreCase = true)) hls4 else "$iframeHost${if (hls4.startsWith("/")) "" else "/"}$hls4"
+        }
+
+        val hls3 = Regex("""["']hls3["']\s*:\s*["']([^"']+)["']""").find(decoded)?.groupValues?.get(1)
+        if (!hls3.isNullOrBlank()) {
+            return if (hls3.startsWith("http", ignoreCase = true)) hls3 else "$iframeHost${if (hls3.startsWith("/")) "" else "/"}$hls3"
+        }
+
+        val hls2 = Regex("""["']hls2["']\s*:\s*["']([^"']+)["']""").find(decoded)?.groupValues?.get(1)
+        if (!hls2.isNullOrBlank()) {
+            return if (hls2.startsWith("http", ignoreCase = true)) hls2 else "$iframeHost${if (hls2.startsWith("/")) "" else "/"}$hls2"
+        }
+
+        val fileMatch = Regex("""file\s*:\s*["']([^"']+)["']""").find(decoded)?.groupValues?.get(1)
+        if (!fileMatch.isNullOrBlank()) {
+            return if (fileMatch.startsWith("http", ignoreCase = true)) fileMatch else "$iframeHost${if (fileMatch.startsWith("/")) "" else "/"}$fileMatch"
         }
 
         return Regex("""https?://[^\s"'<>]+\.m3u8[^\s"'<>]*""").find(decoded)?.value

@@ -234,6 +234,7 @@ class DetailsFragment : Fragment() {
                 score = media.score,
                 totalEpisodes = media.episodes,
                 year = media.year,
+                mediaType = "ANIME",
             )
             sheet.show(childFragmentManager, AddToMyListBottomSheet.TAG)
         }
@@ -562,11 +563,23 @@ class DetailsFragment : Fragment() {
 
         val appContainer = (requireActivity().application as AnimarvleApp).container
         val isDonghua = AnimarvleApp.isDonghua(targetTitle)
+        val isHentai = media.genres.any { it.equals("Hentai", ignoreCase = true) } ||
+            com.animarvle.app.data.MetadataRepository.isAdultTitle(targetTitle) ||
+            com.animarvle.app.data.MetadataRepository.isAdultTitle(media.romajiTitle)
+        val hasAdultLiveGenre = media.genres.any {
+            it.contains("JAV", ignoreCase = true) ||
+            it.equals("Adult (18+)", ignoreCase = true) ||
+            it.equals("Erotic", ignoreCase = true)
+        }
+        val isAsianAdult = !isHentai && (targetMediaId >= 800000000L || media.id >= 800000000L || media.mediaUrl != null || hasAdultLiveGenre || AnimarvleApp.isAsianAdultTitle(targetTitle) || AnimarvleApp.isPinoyTitle(targetTitle))
         val candidateBound = appContainer.sourceBindings.getBoundSourceId(targetMediaId)
         val sources = appContainer.sourcesFor(type, targetTitle)
         val boundSourceId: Long? = if (isDonghua) {
             val isCandidateValid = sources.any { s -> s.id == candidateBound && (s.name.contains("anichi", ignoreCase = true) || s.name.contains("kisskh", ignoreCase = true)) }
             if (isCandidateValid) candidateBound else sources.firstOrNull()?.id
+        } else if (isAsianAdult) {
+            val isPinoy = media.mediaUrl?.contains("pinoy") == true || AnimarvleApp.isPinoyTitle(targetTitle)
+            if (isPinoy) 40005L else 40006L
         } else {
             candidateBound ?: sources.firstOrNull()?.id
         }
@@ -574,6 +587,7 @@ class DetailsFragment : Fragment() {
         val args = Bundle().apply {
             boundSourceId?.let { putLong("sourceId", it) }
             putLong("mediaId", targetMediaId)
+            media.mediaUrl?.let { putString("mediaUrl", it) }
             putString("mediaTitle", targetTitle)
             putString("romajiTitle", media.romajiTitle)
             putString("nativeTitle", media.nativeTitle)
@@ -604,6 +618,10 @@ class DetailsFragment : Fragment() {
             }
             putBoolean("preferTmdb", preferTmdb)
             putBoolean("isMovie", isMovie)
+            putBoolean("isAdult", isAsianAdult)
+            putBoolean("isAsianAdult", isAsianAdult)
+            putBoolean("isHentai", isHentai)
+            media.originalLanguage?.let { putString("originalLanguage", it) }
         }
         findNavController().navigate(R.id.playerFragment, args)
     }
@@ -691,7 +709,11 @@ class DetailsFragment : Fragment() {
 
                     val sourceEpisodes = if (source != null && epNumbers.size > 1) {
                         withContext(Dispatchers.IO) {
-                            runCatching { source.episodes(result.media) }.getOrNull()
+                            runCatching {
+                                withTimeoutOrNull(15_000L) {
+                                    source.episodes(result.media)
+                                }
+                            }.getOrNull()
                         }.orEmpty()
                     } else {
                         emptyList()
@@ -700,24 +722,38 @@ class DetailsFragment : Fragment() {
                     epNumbers.forEach { epNum ->
                         val epTitle = "Episode $epNum"
                         val epStreamUrl: String = if (epNum == epNumbers.first() && !option?.streamUrl.isNullOrBlank()) {
-                            option!!.streamUrl
+                            option.streamUrl
                         } else if (source != null) {
                             val ep = sourceEpisodes.firstOrNull { it.number.toInt() == epNum }
                             if (ep != null) {
                                 withContext(Dispatchers.IO) {
                                     runCatching {
-                                        val choice = com.animarvle.sourceapi.Choice(option?.audio ?: com.animarvle.sourceapi.Audio.SUB, option?.serverKey.orEmpty())
-                                        val resolved = source.resolve(ep, choice)
-                                        resolved.streams.firstOrNull {
-                                            it.qualityLabel.equals(option?.qualityBadge, ignoreCase = true)
-                                        }?.url ?: resolved.streams.firstOrNull()?.url
+                                        withTimeoutOrNull(12_000L) {
+                                            val audioChoice = option?.audio ?: com.animarvle.sourceapi.Audio.SUB
+                                            val epOptions = source.options(ep)
+                                            val serverList = epOptions.byAudio[audioChoice]
+                                                ?: epOptions.byAudio.values.flatten()
+                                            val targetServer = serverList.firstOrNull {
+                                                it.label.contains(option?.serverName.orEmpty(), ignoreCase = true) ||
+                                                it.key.contains(option?.serverName.orEmpty(), ignoreCase = true)
+                                            } ?: serverList.firstOrNull()
+
+                                            if (targetServer != null) {
+                                                val resolved = source.resolve(ep, com.animarvle.sourceapi.Choice(audioChoice, targetServer.key))
+                                                resolved.streams.firstOrNull {
+                                                    it.qualityLabel.equals(option?.qualityBadge, ignoreCase = true)
+                                                }?.url ?: resolved.streams.firstOrNull()?.url
+                                            } else {
+                                                null
+                                            }
+                                        }
                                     }.getOrNull()
-                                } ?: option?.streamUrl.orEmpty()
+                                }.orEmpty()
                             } else {
-                                option?.streamUrl.orEmpty()
+                                ""
                             }
                         } else {
-                            option?.streamUrl.orEmpty()
+                            ""
                         }
 
                         if (epStreamUrl.isNotBlank()) {
@@ -762,8 +798,10 @@ class DetailsFragment : Fragment() {
         val isMovie = isMovieFormat || (isTmdbMedia && !isAnimation && !isDonghuaMedia && (media?.episodes ?: 1) <= 1 && media?.seasons.isNullOrEmpty())
         val type = if (isDonghuaMedia || isAnimation) {
             MediaType.ANIME
-        } else if (isMovie || isTmdbMedia) {
+        } else if (isMovie) {
             MediaType.MOVIE
+        } else if (isTmdbMedia) {
+            MediaType.TV
         } else {
             MediaType.ANIME
         }

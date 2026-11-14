@@ -23,6 +23,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.ResponseBody.Companion.toResponseBody
 import okhttp3.OkHttpClient
 import androidx.media3.database.StandaloneDatabaseProvider
 import androidx.media3.datasource.DefaultDataSource
@@ -62,6 +64,8 @@ class AnimarvleApp : Application(), ImageLoaderFactory {
                     builder.header("Referer", "https://pinoymoviepedia.ru/")
                 } else if (urlStr.contains("cat3movie") || urlStr.contains("blogger.googleusercontent.com") || urlStr.contains("bp.blogspot.com")) {
                     builder.header("Referer", "https://www.cat3movie.club/")
+                } else if (urlStr.contains("hentaimama") || urlStr.contains("hentaini")) {
+                    builder.header("Referer", "https://hentaimama.io/")
                 }
                 chain.proceed(builder.build())
             }
@@ -122,9 +126,22 @@ class AnimarvleApp : Application(), ImageLoaderFactory {
             val tl = title.lowercase().trim()
             if (registeredPinoyTitles.contains(tl)) return true
             if (registeredPinoyTitles.any { tl.contains(it) || it.contains(tl) }) return true
-            return tl.contains("vivamax") || tl.contains("pinoy") || tl.contains("tagalog") ||
-                tl.contains("scorpio nights") || tl.contains("alindog") || tl.contains("sukdulan") ||
-                tl.contains("dutdot")
+            val keywords = listOf(
+                "vivamax", "pinoy", "tagalog", "scorpio nights", "alindog", "sukdulan",
+                "dutdot", "palitan", "bela luna", "haliparot", "virgin forest", "selina's gold",
+                "silip sa apoy", "putahe", "kolehiyala", "hilom", "us x her", "relyebo",
+                "bula", "pamasahe", "sabel", "siklo", "moonlight butterfly", "kinsenas",
+                "katapusan", "eva", "mahjong nights", "kaliwaan", "island of desire",
+                "hugot", "doblado", "laruan", "afam", "sex hub", "hosto", "boso dos",
+                "tuhog", "salawahan", "paupahan", "pantaxa", "kabayo", "bomba", "suki",
+                "bugso", "nightbird", "tayuan", "fall guy", "balisong", "balikbayan",
+                "showroom", "tubero", "star dancer", "alapaap", "bellas artes", "high on sex",
+                "salamat dapit hapon", "pitas", "haslers", "resbak", "patikim", "langit",
+                "pauwi", "tag-init", "bata", "malisya", "hugas", "halik", "lingap",
+                "subo", "rapsa", "pangil", "lawin", "pantyon", "sitio diablo", "sugar baby",
+                "hot moves", "sex drive", "gl forever", "choosy"
+            )
+            return keywords.any { tl.contains(it) }
         }
 
         fun isDonghua(title: String?, mediaId: Long? = null): Boolean {
@@ -193,7 +210,7 @@ class AnimarvleApp : Application(), ImageLoaderFactory {
 
             if (isDonghua(tl) || tl.contains("delicious in dungeon") || tl.contains("dungeon meshi")) return false
 
-            val hasJavCode = Regex("""\b(?:ipx|ssis|mide|jul|sone|stars|abp|abw|ssni|pred|adn|jufe|fset|sdde|fc2)[-_]?\d{2,5}\b""").containsMatchIn(tl)
+            val hasJavCode = Regex("""\b(?:[a-z]{2,6}[-_]\d{2,5}|(?:ipx|ssis|mide|jul|sone|stars|abp|abw|ssni|pred|adn|jufe|fset|sdde|fc2|mrxd|jav|sw|ebod|miaa|cawd|dldss|midv|ipz|snis|soe|wanz|atid|tek|meyd|hnd|dasd|pppd|mimk|waaa|start)[-_]?\d{2,5})\b""", RegexOption.IGNORE_CASE).containsMatchIn(tl)
             val hasAdultKeyword = listOf(
                 "hitozuma", "in'yoku", "musebinaki", "jav ", "[uncensored]", "pink film",
                 "roman porno", "erotic tutor", "soapland", "fuzoku", "chikan",
@@ -201,7 +218,17 @@ class AnimarvleApp : Application(), ImageLoaderFactory {
                 "creampie", "blowjob", "shoko takahashi", "delicious flight",
                 "cat3", "mov18plus", "scarlet innocence", "green chair",
                 "female hostel", "house with a nice view", "delicious room",
-                "good lawyer's wife", "love clinic", "purpose of reunion"
+                "good lawyer's wife", "love clinic", "purpose of reunion",
+                "wife's friend", "bottom hurts", "older friend lover", "boarding house",
+                "friend's mother", "young mother", "mother-in-law", "stepmother",
+                "stepmom", "step-mom", "k-cup", "breasts", "busty", "milf", "erotic",
+                "義母", "人妻", "熟女", "痴漢", "潮吹き", "中出し",
+                "mother in law", "sister in law", "daughter in law", "taboo",
+                "haruna", "mikami", "yua", "fukada", "aika", "hatano",
+                "secret tutor", "private tutor", "sexy tutor", "sister-in-law", "young sister",
+                "swapping", "cat3movie", "affair", "sensual", "lust", "seduction",
+                "forbidden love", "secret relationship", "infidelity", "temptation",
+                "scandal", "erotic movie", "18+", "korean erotic", "japanese erotic"
             ).any { tl.contains(it) }
             return hasJavCode || hasAdultKeyword
         }
@@ -374,7 +401,7 @@ class AppContainer(
                     }
                 })
             }
-            type == MediaType.MOVIE || isAsianAdultTitle || isPinoyTitle -> {
+            type == MediaType.MOVIE || type == MediaType.TV || isAsianAdultTitle || isPinoyTitle -> {
                 extra.sortedWith(compareByDescending { src ->
                     val n = src.name.lowercase()
                     when {
@@ -404,11 +431,21 @@ class AppContainer(
         }
 
         return when {
-            isPinoyTitle -> listOfNotNull(pinoy, asianAdult) + sortedExtra + listOfNotNull(relay)
-            isAsianAdultTitle -> listOfNotNull(asianAdult, pinoy) + sortedExtra + listOfNotNull(relay)
+            isPinoyTitle -> listOfNotNull(pinoy, asianAdult)
+            isAsianAdultTitle -> listOfNotNull(asianAdult, pinoy)
             isDonghuaTitle -> sortedExtra + listOf(relay)
-            type == MediaType.MOVIE -> listOfNotNull(relay) + sortedExtra + listOfNotNull(pinoy, asianAdult)
-            else -> listOfNotNull(relay) + sortedExtra + listOfNotNull(asianAdult, pinoy)
+            type == MediaType.MOVIE || type == MediaType.TV -> {
+                // Filter out anime-only scrapers for non-anime movies/TV so we don't loop through anime engines
+                val nonAnimeScrapers = sortedExtra.filter { src ->
+                    val n = src.name.lowercase()
+                    !n.contains("anime") && !n.startsWith("ani") && !n.contains("gogo") &&
+                    !n.contains("hianime") && !n.contains("zoro") && !n.contains("otaku") &&
+                    !n.contains("toki") && !n.contains("onsen") && !n.contains("av1") &&
+                    !n.contains("take") && !n.contains("paradise") && !n.contains("sogo")
+                }
+                listOfNotNull(relay) + nonAnimeScrapers + listOfNotNull(pinoy, asianAdult)
+            }
+            else -> listOfNotNull(relay) + sortedExtra
         }
     }
 
@@ -445,16 +482,74 @@ class AppContainer(
         val downloadHttp = http.newBuilder()
             .addInterceptor { chain ->
                 val req = chain.request()
-                val urlStr = req.url.toString()
+                val rawUrlStr = req.url.toString()
+                val urlStr = com.animarvle.app.data.source.builtin.AnimarvleStreamSource.normalizeCdnUrl(rawUrlStr)
                 val cdnHeaders = com.animarvle.app.data.source.builtin.AnimarvleStreamSource.buildHeadersForUrl(urlStr)
-                val newReq = req.newBuilder().apply {
+                val newReq = (if (urlStr != rawUrlStr) req.newBuilder().url(urlStr) else req.newBuilder()).apply {
                     cdnHeaders.forEach { (k, v) ->
-                        if (req.header(k) == null) {
-                            header(k, v)
-                        }
+                        header(k, v)
+                    }
+                    if (urlStr.contains("bcdn", ignoreCase = true) || urlStr.contains("hakunaymatata", ignoreCase = true)) {
+                        removeHeader("Referer")
+                        removeHeader("referer")
+                        removeHeader("Origin")
+                        removeHeader("origin")
+                        header("User-Agent", "okhttp/4.12.0")
                     }
                 }.build()
-                chain.proceed(newReq)
+
+                // Automatic retry with exponential backoff on HTTP 429 (rate limits) or 502..504 (worker spikes)
+                var attempts = 0
+                var resp = chain.proceed(newReq)
+                while (!resp.isSuccessful && (resp.code == 429 || resp.code in 502..504) && attempts < 4) {
+                    attempts++
+                    resp.close()
+                    val retryAfter = resp.header("Retry-After")?.toLongOrNull()?.times(1000L)
+                        ?: (attempts * 1200L)
+                    try {
+                        Thread.sleep(retryAfter.coerceIn(1000L, 5000L))
+                    } catch (_: InterruptedException) {
+                        break
+                    }
+                    resp = chain.proceed(newReq)
+                }
+
+                // If HTTP 403 occurs on any numbered node (e.g. bcdn4.hakunaymatata.com), automatically rewrite to primary bcdn.hakunaymatata.com
+                if (!resp.isSuccessful && resp.code == 403 && urlStr.contains("hakunaymatata.com", ignoreCase = true) && !urlStr.contains("bcdn.hakunaymatata.com", ignoreCase = true)) {
+                    resp.close()
+                    val fallbackUrl = urlStr.replace(Regex("""bcdn\d*\.hakunaymatata\.com""", RegexOption.IGNORE_CASE), "bcdn.hakunaymatata.com")
+                    val fallbackReq = newReq.newBuilder().url(fallbackUrl).build()
+                    resp = chain.proceed(fallbackReq)
+                }
+
+                val isIframe = urlStr.contains("iframe", ignoreCase = true)
+                if (!resp.isSuccessful && isIframe) {
+                    val emptyM3u8 = "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:1\n#EXT-X-ENDLIST\n"
+                    val mediaType = "application/vnd.apple.mpegurl".toMediaTypeOrNull()
+                    return@addInterceptor resp.newBuilder()
+                        .code(200)
+                        .message("OK")
+                        .body(emptyM3u8.toResponseBody(mediaType))
+                        .build()
+                }
+
+                if (resp.isSuccessful && (urlStr.contains(".m3u8", ignoreCase = true) || resp.header("Content-Type")?.contains("mpegurl", ignoreCase = true) == true)) {
+                    val bodyString = resp.body.string()
+                    if (bodyString.contains("#EXT-X-I-FRAME-STREAM-INF", ignoreCase = true)) {
+                        val cleaned = bodyString.lines().filterNot {
+                            it.trim().startsWith("#EXT-X-I-FRAME-STREAM-INF", ignoreCase = true)
+                        }.joinToString("\n")
+                        val mediaType = resp.body.contentType() ?: "application/vnd.apple.mpegurl".toMediaTypeOrNull()
+                        return@addInterceptor resp.newBuilder()
+                            .body(cleaned.toResponseBody(mediaType))
+                            .build()
+                    }
+                    val mediaType = resp.body.contentType() ?: "application/vnd.apple.mpegurl".toMediaTypeOrNull()
+                    return@addInterceptor resp.newBuilder()
+                        .body(bodyString.toResponseBody(mediaType))
+                        .build()
+                }
+                resp
             }
             .build()
         val okHttpFactory = OkHttpDataSource.Factory(downloadHttp)
@@ -474,7 +569,7 @@ class AppContainer(
     }
 
     val downloadManager: DownloadManager by lazy {
-        val executor = Executors.newFixedThreadPool(4)
+        val executor = Executors.newFixedThreadPool(2)
         val isWifiOnly = appContext.getSharedPreferences(
             com.animarvle.app.ui.profile.PlayerSettingsFragment.PREFS_NAME,
             android.content.Context.MODE_PRIVATE,

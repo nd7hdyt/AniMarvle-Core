@@ -23,4 +23,7 @@ data class MyListItem(
     val totalEpisodes: Int? = null,
     val updatedAtMs: Long = System.currentTimeMillis(),
     val year: Int? = null,
-)
+    val mediaType: String? = null,
+) {
+    val uniqueKey: String get() = "${mediaType?.uppercase() ?: "UNKNOWN"}:$mediaId"
+}

@@ -376,8 +376,8 @@
     <string name="auth_dont_have_account">Don\'t have an account? </string>
     <string name="auth_sign_up">Sign up</string>
     <string name="auth_already_have_account">Already have an account? </string>
-    <string name="auth_login_title">Login to your\nAccount</string>
-    <string name="auth_create_title">Create your\nAccount</string>
+    <string name="auth_login_title">Local Profile\n(Device Only)</string>
+    <string name="auth_create_title">Create Local Profile\n(Device Only)</string>
     <string name="auth_email">Email</string>
     <string name="auth_password">Password</string>
     <string name="auth_confirm_password">Confirm Password</string>

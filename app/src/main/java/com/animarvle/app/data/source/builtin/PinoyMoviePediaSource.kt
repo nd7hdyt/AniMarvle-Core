@@ -223,9 +223,15 @@ class PinoyMoviePediaSource(
     // --- Resolve --------------------------------------------------------------------------------
 
     override suspend fun resolve(episode: SourceEpisode, choice: Choice): ResolvedMedia = withContext(Dispatchers.IO) {
-        val embedUrl = choice.serverKey.substringAfter("|")
+        val embedUrl = if (choice.serverKey.contains("|")) {
+            choice.serverKey.substringAfter("|")
+        } else {
+            val opts = options(episode)
+            val firstOpt = opts.byAudio[Audio.SUB]?.firstOrNull() ?: opts.byAudio[Audio.DUB]?.firstOrNull()
+            firstOpt?.key?.substringAfter("|") ?: ""
+        }
         if (embedUrl.isBlank()) {
-            throw SourceException(SourceErrorKind.NOT_FOUND, "Invalid server key: ${choice.serverKey}")
+            throw SourceException(SourceErrorKind.NOT_FOUND, "No streaming server found for this title on PinoyMoviePedia")
         }
 
         Log.i(TAG, "Resolving PinoyMoviePedia embed: $embedUrl")

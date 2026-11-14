@@ -145,18 +145,40 @@ class PlayerFragment : Fragment() {
 
         val mediaTitle = args.getString("mediaTitle").orEmpty()
         val rawMediaUrl = args.getString("mediaUrl").orEmpty()
+        val mediaId = args.getLong("mediaId", 0L)
         val posterUrl = args.getString("poster")
-        val sanitizedTypeStr = HistoryRepository.sanitizeMediaType(
-            args.getString("mediaType") ?: "ANIME",
+        val rawMediaTypeStr = args.getString("mediaType") ?: "ANIME"
+        val isHentai = args.getBoolean("isHentai", false) ||
+                (rawMediaTypeStr.equals("ANIME", ignoreCase = true) && com.animarvle.app.data.MetadataRepository.isAdultTitle(mediaTitle))
+        val isAdultAsianArg = args.getBoolean("isAsianAdult", args.getBoolean("isAdult", false))
+        val isAdultAsian = !isHentai && (isAdultAsianArg || mediaId >= 800000000L || rawMediaUrl.contains("cat3movie") || rawMediaUrl.contains("pinoy") || rawMediaUrl.contains("jav") || AnimarvleApp.isAsianAdultTitle(mediaTitle) || AnimarvleApp.isPinoyTitle(mediaTitle))
+        val sanitizedTypeStr = if (isAdultAsian) "MOVIE" else if (isHentai) "ANIME" else HistoryRepository.sanitizeMediaType(
+            rawMediaTypeStr,
             mediaTitle,
             rawMediaUrl,
             posterUrl = posterUrl
         )
         val rawMediaType = PlayerViewModel.typeFrom(sanitizedTypeStr)
         val isDonghua = AnimarvleApp.isDonghua(mediaTitle)
-        val mediaType = if (isDonghua) MediaType.ANIME else rawMediaType
+        val mediaType = if (isAdultAsian) MediaType.MOVIE else if (isDonghua || isHentai) MediaType.ANIME else rawMediaType
         val sourceId = args.getLong("sourceId", 0L).takeIf { it != 0L }
-        val sources = container.sourcesFor(mediaType, mediaTitle)
+        val baseSources = container.sourcesFor(mediaType, mediaTitle)
+        val sources = if (isAdultAsian) {
+            val asianAdult = container.builtinSources.find { it is com.animarvle.app.data.source.builtin.AsianCinemaSource }
+            val pinoy = container.builtinSources.find { it is com.animarvle.app.data.source.builtin.PinoyMoviePediaSource }
+            val isPinoy = rawMediaUrl.contains("pinoy") || AnimarvleApp.isPinoyTitle(mediaTitle)
+            buildList {
+                if (isPinoy) {
+                    if (pinoy != null) add(pinoy)
+                    if (asianAdult != null) add(asianAdult)
+                } else {
+                    if (asianAdult != null) add(asianAdult)
+                    if (pinoy != null) add(pinoy)
+                }
+            }
+        } else {
+            baseSources.filter { it.id != 40006L && it.id != 40005L }
+        }
         val candidateSource = sources.firstOrNull { it.id == sourceId }
         val isMovieSource = candidateSource != null && (
             candidateSource.supportedTypes.contains(MediaType.MOVIE) ||
@@ -178,6 +200,11 @@ class PlayerFragment : Fragment() {
             candidateSource.name.contains("kisskh", ignoreCase = true)
         )
         val initialSource = when {
+            isAdultAsian -> {
+                val isPinoy = rawMediaUrl.contains("pinoy") || AnimarvleApp.isPinoyTitle(mediaTitle)
+                val targetId = if (isPinoy) 40005L else 40006L
+                sources.firstOrNull { it.id == targetId } ?: candidateSource ?: sources.firstOrNull()
+            }
             isDonghua -> if (isDonghuaSource) candidateSource else sources.firstOrNull()
             mediaType == MediaType.MOVIE -> if (isMovieSource) candidateSource else sources.firstOrNull()
             else -> candidateSource ?: sources.firstOrNull()
@@ -187,15 +214,14 @@ class PlayerFragment : Fragment() {
         val synonyms = args.getStringArrayList("synonyms").orEmpty()
         val year = args.getInt("year", 0).takeIf { it > 0 }
         val episodeCount = args.getInt("episodeCount", 0).takeIf { it > 0 }
-        val mediaId = args.getLong("mediaId", 0L)
 
         val isExplicitAnime = mediaType == MediaType.ANIME || isDonghua
-        val preferTmdb = if (isExplicitAnime) {
-            false
-        } else if (args.containsKey("preferTmdb")) {
+        val preferTmdb = if (args.containsKey("preferTmdb")) {
             args.getBoolean("preferTmdb", false)
+        } else if (isExplicitAnime) {
+            false
         } else {
-            (mediaType == MediaType.MOVIE) ||
+            (mediaType == MediaType.MOVIE) || (mediaType == MediaType.TV) ||
                 (com.animarvle.app.data.MediaTypeManager.getInstance(requireContext()).currentMode.value == com.animarvle.app.data.AppMediaMode.MOVIES_TV)
         }
         val metaPrefix = if (preferTmdb) "tmdb" else "anilist"
@@ -212,7 +238,7 @@ class PlayerFragment : Fragment() {
             episodeCount = episodeCount,
         )
 
-        val isExplicitSourceMatch = sourceId != null && candidateSource != null && candidateSource.id == initialSource?.id
+        val isExplicitSourceMatch = (sourceId != null && candidateSource != null && candidateSource.id == initialSource?.id) || isAdultAsian
         val isExtensionUrl = rawMediaUrl.startsWith("http://") || rawMediaUrl.startsWith("https://") || rawMediaUrl.startsWith("/")
         val isRawNumberId = rawMediaUrl.isNotEmpty() && rawMediaUrl.all { it.isDigit() }
 
@@ -229,6 +255,12 @@ class PlayerFragment : Fragment() {
                     animeUrl.let { put("sAnimeUrl", it) }
                     val animeTitle = args.getString("animeTitle") ?: mediaTitle
                     put("animeTitle", animeTitle)
+                    put("mediaUrl", rawMediaUrl)
+                    if (isHentai) {
+                        put("isAdult", "1")
+                        put("isHentai", "1")
+                        put("mediaType", "hentai")
+                    }
                 },
             )
         } else null
@@ -256,7 +288,7 @@ class PlayerFragment : Fragment() {
             args.getSerializable("seasons") as? ArrayList<com.animarvle.app.domain.SeasonUi>
         } ?: emptyList()
 
-        val savedStream = container.history.getSavedStream(mediaTitle, initialEpNum)
+        val savedStream = container.history.getSavedStream(mediaTitle, initialEpNum, initialSeasonNum)
         val resumePos = args.getLong("resumePositionMs", savedStream?.positionMs ?: 0L)
         if (resumePos > 0L) {
             savedPlaybackPositionMs = resumePos
@@ -286,6 +318,9 @@ class PlayerFragment : Fragment() {
                 savedStream = savedStream,
                 httpClient = container.http,
                 initialPositionMs = resumePos,
+                originalLanguage = args.getString("originalLanguage"),
+                isAdult = isAdultAsian,
+                isHentai = isHentai,
             ),
         )[PlayerViewModel::class.java]
 
@@ -350,7 +385,8 @@ class PlayerFragment : Fragment() {
             binding.serverContainer.isVisible = false
             binding.audioTabs.isVisible = false
             binding.playerSourceCard.isVisible = false
-            enterFullscreen()
+            binding.playerScrollView.isVisible = false
+            applyFullscreenUi(true)
         }
 
         requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner, object : androidx.activity.OnBackPressedCallback(true) {
@@ -411,12 +447,14 @@ class PlayerFragment : Fragment() {
 
         val loadControl = androidx.media3.exoplayer.DefaultLoadControl.Builder()
             .setBufferDurationsMs(
-                /* minBufferMs = */ 2_500,
-                /* maxBufferMs = */ 15_000,
+                /* minBufferMs = */ 2_000,
+                /* maxBufferMs = */ 6_000,
                 /* bufferForPlaybackMs = */ 800,
-                /* bufferForPlaybackAfterRebufferMs = */ 1_500,
+                /* bufferForPlaybackAfterRebufferMs = */ 1_200,
             )
-            .setPrioritizeTimeOverSizeThresholds(true)
+            .setTargetBufferBytes(8 * 1024 * 1024)
+            .setPrioritizeTimeOverSizeThresholds(false)
+            .setBackBuffer(10_000, false)
             .build()
 
         val exo = ExoPlayer.Builder(requireContext())
@@ -469,10 +507,15 @@ class PlayerFragment : Fragment() {
 
             override fun onTracksChanged(tracks: Tracks) {
                 reportQualityLevels(tracks)
-                val targetLangCode = viewModel.selectedLanguageCode.value
+                val targetLangCode = viewModel.selectedLanguageCode.value.substringBefore("_")
                 if (targetLangCode.isNotBlank()) {
                     player?.let { p ->
-                        if (p.trackSelectionParameters.preferredAudioLanguages.firstOrNull() != targetLangCode) {
+                        val hasExplicitAudioOverride = p.trackSelectionParameters.overrides.keys.any { group ->
+                            group.type == C.TRACK_TYPE_AUDIO
+                        }
+                        if (!hasExplicitAudioOverride &&
+                            p.trackSelectionParameters.preferredAudioLanguages.firstOrNull() != targetLangCode
+                        ) {
                             p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
                                 .setPreferredAudioLanguage(targetLangCode)
                                 .build()
@@ -544,6 +587,13 @@ class PlayerFragment : Fragment() {
         }
         binding.episodesDrawerContent.setOnClickListener {
             // Consume click so tapping drawer container doesn't close it
+        }
+        binding.btnSourceBottom.setOnClickListener {
+            showSourceModal()
+            scheduleHideControls()
+        }
+        binding.btnOpenSourceModal.setOnClickListener {
+            showSourceModal()
         }
         binding.ccButton.setOnClickListener {
             showSubtitleDialog()
@@ -786,10 +836,13 @@ class PlayerFragment : Fragment() {
         val state = if (::viewModel.isInitialized) viewModel.state.value else null
         val canShowEpisodes = state == null || (!state.isMovie || state.episodes.size > 1)
 
+        val isOffline = arguments?.getBoolean("isOfflineDownload", false) ?: false
+
         // Landscape-only items (hidden in Portrait)
         b.btnEpisodes.isVisible = isFullscreen && canShowEpisodes
         b.btnLock.isVisible = isFullscreen
         b.btnDisplayMode.isVisible = isFullscreen
+        b.btnSourceBottom.isVisible = isFullscreen && !isOffline
 
         // TopBar & BottomControls padding adjustments
         if (isFullscreen) {
@@ -868,6 +921,21 @@ class PlayerFragment : Fragment() {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch { viewModel.state.collect(::render) }
                 launch { viewModel.commands.collect(::execute) }
+                launch {
+                    viewModel.serverModalItems.collect { items ->
+                        val selectedItem = items.firstOrNull { it.isSelected } ?: items.firstOrNull()
+                        if (selectedItem != null) {
+                            binding.sourceCurrentName.text = selectedItem.displayName
+                            binding.sourceFlagEmoji.text = selectedItem.flagEmoji
+                            val dotRes = when (selectedItem.status) {
+                                ServerHealthStatus.READY -> R.drawable.bg_status_dot_ready
+                                ServerHealthStatus.AVAILABLE -> R.drawable.bg_status_dot_available
+                                ServerHealthStatus.FAILED -> R.drawable.bg_status_dot_failed
+                            }
+                            binding.sourceStatusDot.setBackgroundResource(dotRes)
+                        }
+                    }
+                }
                 launch { tick() }
                 launch {
                     val appContainer = (requireActivity().application as AnimarvleApp).container
@@ -924,6 +992,7 @@ class PlayerFragment : Fragment() {
                 currentStreamHeaders = effectiveHeaders
                 okFactory?.setDefaultRequestProperties(effectiveHeaders)
                 val startPos = command.startPositionMs.coerceAtLeast(0L)
+                p.stop()
                 p.setMediaItem(toMediaItem(primaryStream, command.subtitles), startPos)
                 if (startPos > 0L) p.seekTo(startPos)
                 applySubtitle(command.selectedSubtitle)
@@ -960,6 +1029,7 @@ class PlayerFragment : Fragment() {
             builder.setSubtitleConfigurations(
                 subtitles.map {
                     MediaItem.SubtitleConfiguration.Builder(android.net.Uri.parse(it.url))
+                        .setId(it.url)
                         .setMimeType(
                             when (it.format.name) {
                                 "SRT" -> MimeTypes.APPLICATION_SUBRIP
@@ -978,10 +1048,62 @@ class PlayerFragment : Fragment() {
 
     private fun applySubtitle(track: SubtitleTrack?) {
         val p = player ?: return
-        p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
-            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, track == null)
-            .apply { track?.let { setPreferredTextLanguage(it.language) } }
-            .build()
+        if (track == null) {
+            p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
+                .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                .build()
+            return
+        }
+
+        val currentTracks = p.currentTracks
+        var matchedGroup: Tracks.Group? = null
+        var matchedIndex = -1
+
+        for (group in currentTracks.groups) {
+            if (group.type == C.TRACK_TYPE_TEXT) {
+                for (i in 0 until group.length) {
+                    val format = group.getTrackFormat(i)
+                    if (format.id == track.url || format.label == track.label) {
+                        matchedGroup = group
+                        matchedIndex = i
+                        break
+                    }
+                }
+            }
+            if (matchedGroup != null) break
+        }
+
+        if (matchedGroup != null && matchedIndex != -1) {
+            p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
+                .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                .setPreferredTextLanguage(track.language)
+                .addOverride(TrackSelectionOverride(matchedGroup.mediaTrackGroup, matchedIndex))
+                .build()
+        } else {
+            val streams = viewModel.currentStreams()
+            val primaryStream = streams.firstOrNull()
+            if (primaryStream != null) {
+                val allSubs = viewModel.state.value.subtitles
+                val newMediaItem = toMediaItem(primaryStream, allSubs)
+                val currentPos = p.currentPosition
+                val isPlaying = p.isPlaying
+                p.setMediaItem(newMediaItem, currentPos)
+                p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
+                    .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+                    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                    .setPreferredTextLanguage(track.language)
+                    .build()
+                if (isPlaying) p.play()
+            } else {
+                p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
+                    .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+                    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                    .setPreferredTextLanguage(track.language)
+                    .build()
+            }
+        }
     }
 
     private fun reportQualityLevels(tracks: Tracks) {
@@ -1698,22 +1820,26 @@ class PlayerFragment : Fragment() {
         val hasBothTypes = options.any { it is ResolvedAudioOption.EmbeddedTrack } &&
                 options.any { it is ResolvedAudioOption.ServerStream }
 
-        val labels = options.map { option ->
-            when (option) {
-                is ResolvedAudioOption.EmbeddedTrack -> option.languageName
-                is ResolvedAudioOption.ServerStream -> {
-                    if (hasBothTypes) "${option.languageName} (Switch Server)" else option.languageName
-                }
-            }
-        }
-
         val selectedIndex = options.indexOfFirst { opt ->
             opt.languageCode.equals(activeLangCode, ignoreCase = true) ||
             opt.languageName.equals(state.audioLanguage, ignoreCase = true)
         }.coerceAtLeast(0)
 
-        val rows = labels.mapIndexed { idx, label ->
-            ChoiceRow(label, idx == selectedIndex)
+        val rows = options.mapIndexed { idx, option ->
+            val subtitle = if (hasBothTypes) {
+                when (option) {
+                    is ResolvedAudioOption.EmbeddedTrack -> "Instant"
+                    is ResolvedAudioOption.ServerStream -> "Switch Server"
+                }
+            } else null
+
+            ChoiceRow(
+                title = option.languageName,
+                subtitle = subtitle,
+                iconRes = null,
+                selected = (idx == selectedIndex),
+                enabled = true
+            )
         }
 
         return rows to { which ->
@@ -1734,7 +1860,7 @@ class PlayerFragment : Fragment() {
                     .clearOverridesOfType(C.TRACK_TYPE_AUDIO)
                     .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
                     .addOverride(override)
-                    .setPreferredAudioLanguage(option.languageCode)
+                    .setPreferredAudioLanguage(option.languageCode.substringBefore("_"))
                     .build()
 
                 viewModel.onLanguageSelected(option.languageCode, option.languageName)
@@ -1916,7 +2042,7 @@ class PlayerFragment : Fragment() {
             val appContainer = (requireActivity().application as AnimarvleApp).container
             val epTitle = currentEp?.title ?: getString(R.string.player_watching_episode, epNumber)
             val streamUrl = option.streamUrl.ifBlank { currentEp?.url.orEmpty() }
-            val id = "${title.hashCode()}_ep$epNumber"
+            val id = if (mediaId > 0L) "${mediaId}_ep$epNumber" else "${title.hashCode()}_ep$epNumber"
             viewLifecycleOwner.lifecycleScope.launch {
                 appContainer.downloads.enqueue(
                     id = id,
@@ -2060,19 +2186,24 @@ class PlayerFragment : Fragment() {
     }
 
     private fun showServerDialog() {
-        val state = viewModel.state.value
-        val sheet = ServerSelectionBottomSheet.newInstance(
-            servers = state.servers,
-            selectedKey = state.selectedServer,
-            audio = state.audio,
-        ) { pickedKey, targetAudio ->
-            val pos = player?.currentPosition ?: 0L
-            if (targetAudio != null && targetAudio != state.audio) {
-                viewModel.selectAudio(targetAudio, resumeAtMs = pos)
-            }
-            viewModel.selectServer(pickedKey, resumeAtMs = pos)
+        showSourceModal()
+    }
+
+    private fun showSourceModal() {
+        viewModel.updateServerModalItems()
+        val items = viewModel.serverModalItems.value
+        if (items.isEmpty()) {
+            toast("No sources available")
+            return
         }
-        sheet.show(childFragmentManager, "ServerSelectionBottomSheet")
+        SourceSelectorModal.show(
+            context = requireContext(),
+            servers = items,
+            onDismiss = { restorePlayerAfterDialog() }
+        ) { picked ->
+            val pos = player?.currentPosition ?: 0L
+            viewModel.selectServer(picked.underlyingSourceKey ?: picked.serverKey, resumeAtMs = pos)
+        }
     }
 
     // ---- position loop / skip ----
@@ -2518,6 +2649,12 @@ class PlayerFragment : Fragment() {
 
     private fun setupOrientationHandling() {
         val act = activity ?: return
+        val isOffline = arguments?.getBoolean("isOfflineDownload", false) ?: false
+        if (isOffline) {
+            act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            applyFullscreenUi(true)
+            return
+        }
 
         if (isAutoRotateEnabled()) {
             act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_USER
@@ -2534,6 +2671,8 @@ class PlayerFragment : Fragment() {
 
             override fun onOrientationChanged(orientation: Int) {
                 if (orientation == ORIENTATION_UNKNOWN) return
+                val isOfflineRunning = arguments?.getBoolean("isOfflineDownload", false) ?: false
+                if (isOfflineRunning) return
                 if (!isAutoRotateEnabled()) return
 
                 val isLandscape = (orientation in 60..120) || (orientation in 240..300)
@@ -2560,6 +2699,12 @@ class PlayerFragment : Fragment() {
 
     override fun onStart() {
         super.onStart()
+        val isOffline = arguments?.getBoolean("isOfflineDownload", false) ?: false
+        if (isOffline) {
+            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            applyFullscreenUi(true)
+            return
+        }
         if (isAutoRotateEnabled()) {
             activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_USER
         }
@@ -2573,6 +2718,12 @@ class PlayerFragment : Fragment() {
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
+        val isOffline = arguments?.getBoolean("isOfflineDownload", false) ?: false
+        if (isOffline) {
+            applyFullscreenUi(true)
+            applySubtitleAppearance()
+            return
+        }
         if (!isAutoRotateEnabled()) return
         if (newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE) {
             if (!isFullscreen) {
@@ -2583,14 +2734,17 @@ class PlayerFragment : Fragment() {
                 applyFullscreenUi(false)
             }
         }
+        applySubtitleAppearance()
     }
 
     private fun applyFullscreenUi(fullscreen: Boolean) {
         val act = activity ?: return
         val b = _binding ?: return
-        isFullscreen = fullscreen
+        val isOffline = arguments?.getBoolean("isOfflineDownload", false) ?: false
+        val effectiveFullscreen = if (isOffline) true else fullscreen
+        isFullscreen = effectiveFullscreen
 
-        if (fullscreen) {
+        if (effectiveFullscreen) {
             b.playerScrollView.isVisible = false
             b.statusBarSpacer.layoutParams = b.statusBarSpacer.layoutParams.apply {
                 height = 0
@@ -2608,14 +2762,7 @@ class PlayerFragment : Fragment() {
                 systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             }
         } else {
-            val isOffline = arguments?.getBoolean("isOfflineDownload", false) ?: false
             b.playerScrollView.isVisible = true
-            if (isOffline) {
-                b.serverNoticeText.isVisible = false
-                b.serverContainer.isVisible = false
-                b.audioTabs.isVisible = false
-                b.playerSourceCard.isVisible = false
-            }
             val statusBarTop = requireView().rootWindowInsets?.let {
                 WindowInsetsCompat.toWindowInsetsCompat(it).getInsets(WindowInsetsCompat.Type.statusBars()).top
             } ?: dp(24)
@@ -2634,6 +2781,7 @@ class PlayerFragment : Fragment() {
             }
         }
         updateOrientationUi()
+        applySubtitleAppearance()
     }
 
     private fun enterFullscreen(fromSensor: Boolean = false) {
@@ -2645,6 +2793,8 @@ class PlayerFragment : Fragment() {
     }
 
     private fun exitFullscreen(fromSensor: Boolean = false) {
+        val isOffline = arguments?.getBoolean("isOfflineDownload", false) ?: false
+        if (isOffline) return // Offline downloads are permanently locked to landscape fullscreen
         val act = activity ?: return
         if (!fromSensor) {
             act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
@@ -2655,6 +2805,11 @@ class PlayerFragment : Fragment() {
     }
 
     private fun toggleFullscreen() {
+        val isOffline = arguments?.getBoolean("isOfflineDownload", false) ?: false
+        if (isOffline) {
+            cycleDisplayMode()
+            return
+        }
         if (isFullscreen) {
             exitFullscreen(fromSensor = false)
         } else {
@@ -2739,7 +2894,8 @@ class PlayerFragment : Fragment() {
 
     private fun applySubtitleAppearance() {
         val subView = _binding?.playerView?.subtitleView ?: return
-        val subPrefs = requireContext().getSharedPreferences(
+        val ctx = context ?: return
+        val subPrefs = ctx.getSharedPreferences(
             com.animarvle.app.ui.profile.SubtitleSettingsFragment.PREFS_NAME,
             android.content.Context.MODE_PRIVATE,
         )
@@ -2757,9 +2913,22 @@ class PlayerFragment : Fragment() {
             20,
         )
 
-        subView.setFixedTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, subSize.toFloat())
-        // Convert bottom padding dp (0..60) into SubtitleView bottom padding fraction
-        val bottomFraction = (bottomPaddingDp.toFloat() / 250f).coerceIn(0.02f, 0.35f)
+        val isLandscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        val isLandscapeOrFullscreen = isFullscreen || isLandscape
+
+        // In portrait mini-player (230dp box vs ~392dp landscape height), scale font size down proportionally (0.60x)
+        // so captions don't look gigantic or cover the entire 16:9 video frame.
+        val effectiveSizeSp = if (isLandscapeOrFullscreen) {
+            subSize.toFloat()
+        } else {
+            (subSize.toFloat() * 0.60f).coerceAtLeast(10f)
+        }
+
+        subView.setFixedTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, effectiveSizeSp)
+
+        // Convert bottom padding dp into SubtitleView bottom padding fraction
+        val maxContainerHeight = if (isLandscapeOrFullscreen) 360f else 230f
+        val bottomFraction = (bottomPaddingDp.toFloat() / maxContainerHeight).coerceIn(0.02f, 0.25f)
         subView.setBottomPaddingFraction(bottomFraction)
 
         val edgeType = if (outlineEnabled) {

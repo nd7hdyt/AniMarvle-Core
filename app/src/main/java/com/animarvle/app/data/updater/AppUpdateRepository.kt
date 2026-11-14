@@ -365,6 +365,10 @@ object AppUpdateRepository {
                             onError(SecurityException("SHA-256 checksum mismatch! Expected $expectedSha256 but got $computedHash"))
                             return
                         }
+                    } else {
+                        apkFile.delete()
+                        onError(SecurityException("Security verification failed: Update package must include a valid SHA-256 checksum."))
+                        return
                     }
 
                     onComplete(apkFile)

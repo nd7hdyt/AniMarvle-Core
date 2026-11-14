@@ -268,10 +268,16 @@ class DownloadRepository(
         val raw = prefs.getString(KEY_ITEMS, null) ?: return
         runCatching {
             val arr = JSONArray(raw)
+            var needsResave = false
             val list = (0 until arr.length()).mapNotNull { i ->
                 val o = arr.getJSONObject(i)
                 val statusStr = o.optString("status", DownloadStatus.QUEUED.name)
                 val status = runCatching { DownloadStatus.valueOf(statusStr) }.getOrDefault(DownloadStatus.QUEUED)
+                val rawUrl = o.getString("streamUrl")
+                val cleanUrl = com.animarvle.app.data.source.builtin.AnimarvleStreamSource.normalizeCdnUrl(rawUrl)
+                if (cleanUrl != rawUrl) {
+                    needsResave = true
+                }
                 DownloadItem(
                     id = o.getString("id"),
                     mediaId = if (o.has("mediaId") && !o.isNull("mediaId")) o.getLong("mediaId") else null,
@@ -279,7 +285,7 @@ class DownloadRepository(
                     episodeTitle = o.getString("episodeTitle"),
                     episodeNumber = o.optInt("episodeNumber", 1),
                     posterUrl = if (o.has("posterUrl") && !o.isNull("posterUrl")) o.getString("posterUrl") else null,
-                    streamUrl = o.getString("streamUrl"),
+                    streamUrl = cleanUrl,
                     status = status,
                     progressPercent = o.optInt("progressPercent", 0),
                     downloadedBytes = o.optLong("downloadedBytes", 0L),
@@ -293,6 +299,9 @@ class DownloadRepository(
                 )
             }
             _downloadsFlow.value = list
+            if (needsResave) {
+                save(list)
+            }
         }
     }
 
@@ -309,6 +318,7 @@ class DownloadRepository(
         serverName: String? = null,
         language: String = "English",
     ) = withContext(Dispatchers.IO) {
+        val cleanStreamUrl = com.animarvle.app.data.source.builtin.AnimarvleStreamSource.normalizeCdnUrl(streamUrl)
         val current = _downloadsFlow.value.toMutableList()
         val existingIndex = current.indexOfFirst { it.id == id }
         val newItem = DownloadItem(
@@ -318,7 +328,7 @@ class DownloadRepository(
             episodeTitle = episodeTitle,
             episodeNumber = episodeNumber,
             posterUrl = posterUrl,
-            streamUrl = streamUrl,
+            streamUrl = cleanStreamUrl,
             status = DownloadStatus.QUEUED,
             progressPercent = 0,
             downloadedBytes = 0L,
@@ -335,11 +345,11 @@ class DownloadRepository(
         }
         save(current)
 
-        val uri = Uri.parse(streamUrl)
+        val uri = Uri.parse(cleanStreamUrl)
         val mimeType = when {
-            streamUrl.contains(".m3u8", ignoreCase = true) -> MimeTypes.APPLICATION_M3U8
-            streamUrl.contains(".mpd", ignoreCase = true) -> MimeTypes.APPLICATION_MPD
-            streamUrl.contains(".mp4", ignoreCase = true) -> MimeTypes.VIDEO_MP4
+            cleanStreamUrl.contains(".m3u8", ignoreCase = true) -> MimeTypes.APPLICATION_M3U8
+            cleanStreamUrl.contains(".mpd", ignoreCase = true) -> MimeTypes.APPLICATION_MPD
+            cleanStreamUrl.contains(".mp4", ignoreCase = true) -> MimeTypes.VIDEO_MP4
             else -> null
         }
         val requestBuilder = DownloadRequest.Builder(id, uri)
@@ -386,17 +396,43 @@ class DownloadRepository(
     }
 
     suspend fun resumeDownload(id: String) = withContext(Dispatchers.IO) {
-        DownloadService.sendSetStopReason(
-            context,
-            AnimarvleDownloadService::class.java,
-            id,
-            Download.STOP_REASON_NONE,
-            false,
-        )
-        val current = _downloadsFlow.value.map { item ->
-            if (item.id == id) item.copy(status = DownloadStatus.DOWNLOADING) else item
+        val targetItem = _downloadsFlow.value.firstOrNull { it.id == id }
+        if (targetItem != null && targetItem.status == DownloadStatus.FAILED) {
+            val cleanUrl = com.animarvle.app.data.source.builtin.AnimarvleStreamSource.normalizeCdnUrl(targetItem.streamUrl)
+            val uri = Uri.parse(cleanUrl)
+            val mimeType = when {
+                cleanUrl.contains(".m3u8", ignoreCase = true) -> MimeTypes.APPLICATION_M3U8
+                cleanUrl.contains(".mpd", ignoreCase = true) -> MimeTypes.APPLICATION_MPD
+                cleanUrl.contains(".mp4", ignoreCase = true) -> MimeTypes.VIDEO_MP4
+                else -> null
+            }
+            val requestBuilder = DownloadRequest.Builder(id, uri)
+            if (mimeType != null) {
+                requestBuilder.setMimeType(mimeType)
+            }
+            DownloadService.sendAddDownload(
+                context,
+                AnimarvleDownloadService::class.java,
+                requestBuilder.build(),
+                false,
+            )
+            val current = _downloadsFlow.value.map { item ->
+                if (item.id == id) item.copy(status = DownloadStatus.DOWNLOADING, streamUrl = cleanUrl, speedText = "") else item
+            }
+            save(current)
+        } else {
+            DownloadService.sendSetStopReason(
+                context,
+                AnimarvleDownloadService::class.java,
+                id,
+                Download.STOP_REASON_NONE,
+                false,
+            )
+            val current = _downloadsFlow.value.map { item ->
+                if (item.id == id) item.copy(status = DownloadStatus.DOWNLOADING, speedText = "") else item
+            }
+            save(current)
         }
-        save(current)
         withContext(Dispatchers.Main) {
             startProgressTracking()
         }
