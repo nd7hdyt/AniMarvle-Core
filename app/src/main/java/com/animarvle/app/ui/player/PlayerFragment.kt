@@ -2029,14 +2029,29 @@ class PlayerFragment : Fragment() {
         val durationMinutes = (player?.duration?.takeIf { it > 0 }?.div(60_000L))?.toInt()
             ?: arguments?.getInt("durationMinutes", 0)?.takeIf { it > 0 }
 
+        val rawMediaTypeArg = arguments?.getString("mediaType")
+        val isDonghua = AnimarvleApp.isDonghua(title)
+        val isExplicitAnime = isDonghua ||
+            rawMediaTypeArg?.equals("ANIME", ignoreCase = true) == true ||
+            HistoryRepository.isAnimeTitle(title)
+        val resolvedMediaType = when {
+            isMovie -> MediaType.MOVIE
+            isExplicitAnime -> MediaType.ANIME
+            rawMediaTypeArg?.equals("TV", ignoreCase = true) == true -> MediaType.TV
+            rawMediaTypeArg?.equals("MOVIE", ignoreCase = true) == true -> MediaType.MOVIE
+            (arguments?.getBoolean("preferTmdb", false) == true) || mediaId > 0L -> MediaType.TV
+            else -> MediaType.ANIME
+        }
+
         val sheet = ChooseQualityBottomSheet.newInstance(
             mediaId = mediaId,
             mediaTitle = title,
             posterUrl = poster,
             episodes = listOf(epNumber),
-            mediaType = if (isMovie) MediaType.MOVIE else MediaType.ANIME,
+            mediaType = resolvedMediaType,
             year = year,
             durationMinutes = durationMinutes,
+            seasonNumber = state.seasonNumber,
         )
         sheet.setOnConfirmListener { option, _ ->
             val appContainer = (requireActivity().application as AnimarvleApp).container

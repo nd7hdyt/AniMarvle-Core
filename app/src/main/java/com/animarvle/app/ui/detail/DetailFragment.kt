@@ -29,6 +29,7 @@ import com.animarvle.app.extensions.TachiyomiAnimeSource
 import com.animarvle.app.extensions.TachiyomiAnimeSource.Companion.KEY_ANIME_URL
 import com.animarvle.app.ui.theme.AppTheme
 import com.animarvle.sourceapi.MediaSource
+import com.animarvle.sourceapi.SourceEpisode
 import com.animarvle.sourceapi.SourceMedia
 import com.animarvle.domain.MatchResult
 import com.animarvle.domain.MetaQuery
@@ -587,6 +588,7 @@ class DetailFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             binding.downloadButton.isEnabled = false
             val (type, _) = resolveMediaType(media)
+            val maxEp = epNumbers.maxOrNull() ?: 1
             val meta = MetaQuery(
                 metaId = "anilist:${media.id}",
                 type = type,
@@ -597,7 +599,7 @@ class DetailFragment : Fragment() {
                 ),
                 synonyms = media.synonyms,
                 year = media.year,
-                episodeCount = media.episodes,
+                episodeCount = maxOf(media.episodes ?: 0, maxEp),
             )
             val result = withContext(Dispatchers.IO) {
                 runCatching {
@@ -613,11 +615,18 @@ class DetailFragment : Fragment() {
                     val source = container.sourcesFor(type).firstOrNull { it.id == result.sourceId }
                         ?: container.sourcesFor(type).firstOrNull()
 
+                    val enrichedMedia = result.media.copy(
+                        episodeCount = maxOf(result.media.episodeCount ?: 0, maxEp),
+                        extra = result.media.extra.toMutableMap().apply {
+                            put("season", "1")
+                            put("episodeCount", maxEp.toString())
+                        }
+                    )
                     val sourceEpisodes = if (source != null && epNumbers.size > 1) {
                         withContext(Dispatchers.IO) {
                             runCatching {
                                 withTimeoutOrNull(15_000L) {
-                                    source.episodes(result.media)
+                                    source.episodes(enrichedMedia)
                                 }
                             }.getOrNull()
                         }.orEmpty()
@@ -631,33 +640,40 @@ class DetailFragment : Fragment() {
                             option.streamUrl
                         } else if (source != null) {
                             val ep = sourceEpisodes.firstOrNull { it.number.toInt() == epNum }
-                            if (ep != null) {
-                                withContext(Dispatchers.IO) {
-                                    runCatching {
-                                        withTimeoutOrNull(12_000L) {
-                                            val audioChoice = option?.audio ?: com.animarvle.sourceapi.Audio.SUB
-                                            val epOptions = source.options(ep)
-                                            val serverList = epOptions.byAudio[audioChoice]
-                                                ?: epOptions.byAudio.values.flatten()
-                                            val targetServer = serverList.firstOrNull {
-                                                it.label.contains(serverName.orEmpty(), ignoreCase = true) ||
-                                                it.key.contains(serverName.orEmpty(), ignoreCase = true)
-                                            } ?: serverList.firstOrNull()
+                                ?: SourceEpisode(
+                                    url = "${result.media.url}&season=1&episode=$epNum",
+                                    number = epNum.toFloat(),
+                                    title = "Episode $epNum",
+                                    thumbnail = result.media.poster,
+                                    extra = buildMap {
+                                        putAll(result.media.extra)
+                                        put("season", "1")
+                                        put("episode", epNum.toString())
+                                    }
+                                )
+                            withContext(Dispatchers.IO) {
+                                runCatching {
+                                    withTimeoutOrNull(12_000L) {
+                                        val audioChoice = option?.audio ?: com.animarvle.sourceapi.Audio.SUB
+                                        val epOptions = source.options(ep)
+                                        val serverList = epOptions.byAudio[audioChoice]
+                                            ?: epOptions.byAudio.values.flatten()
+                                        val targetServer = serverList.firstOrNull {
+                                            it.label.contains(serverName.orEmpty(), ignoreCase = true) ||
+                                            it.key.contains(serverName.orEmpty(), ignoreCase = true)
+                                        } ?: serverList.firstOrNull()
 
-                                            if (targetServer != null) {
-                                                val resolved = source.resolve(ep, com.animarvle.sourceapi.Choice(audioChoice, targetServer.key))
-                                                resolved.streams.firstOrNull {
-                                                    it.qualityLabel.equals(option?.qualityBadge, ignoreCase = true)
-                                                }?.url ?: resolved.streams.firstOrNull()?.url
-                                            } else {
-                                                null
-                                            }
+                                        if (targetServer != null) {
+                                            val resolved = source.resolve(ep, com.animarvle.sourceapi.Choice(audioChoice, targetServer.key))
+                                            resolved.streams.firstOrNull {
+                                                it.qualityLabel.equals(option?.qualityBadge, ignoreCase = true)
+                                            }?.url ?: resolved.streams.firstOrNull()?.url
+                                        } else {
+                                            null
                                         }
-                                    }.getOrNull()
-                                }.orEmpty()
-                            } else {
-                                ""
-                            }
+                                    }
+                                }.getOrNull()
+                            }.orEmpty()
                         } else {
                             ""
                         }

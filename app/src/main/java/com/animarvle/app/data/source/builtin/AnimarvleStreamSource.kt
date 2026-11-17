@@ -183,7 +183,10 @@ class AnimarvleStreamSource(
         val season = media.extra["season"]
             ?: Regex("[?&]season=([0-9]+)").find(media.url)?.groupValues?.get(1)
             ?: "1"
-        val count = media.episodeCount?.takeIf { it > 0 } ?: 1
+        val count = media.extra["episodeCount"]?.toIntOrNull()
+            ?: media.extra["requestedEpisode"]?.toIntOrNull()
+            ?: media.episodeCount?.takeIf { it > 0 }
+            ?: (if (mediaType == "tv" || mediaType == "anime") 100 else 1)
 
         val isAdultOrAnime = mediaType.equals("anime", ignoreCase = true) ||
             media.extra["isAdult"] == "1" ||
@@ -226,15 +229,16 @@ class AnimarvleStreamSource(
             }
         } else null
 
+        val reqEp = media.extra["requestedEpisode"]?.toIntOrNull() ?: 1
         val finalCount = if (!adultMetadataMap.isNullOrEmpty()) {
-            maxOf(count, adultMetadataMap.keys.maxOrNull() ?: count)
+            maxOf(count, adultMetadataMap.keys.maxOrNull() ?: count, reqEp)
         } else {
-            count
+            maxOf(count, reqEp)
         }
 
         (1..finalCount).map { epNum ->
             val meta = adultMetadataMap?.get(epNum)
-            val epTitle = meta?.first?.takeIf { it.isNotBlank() } ?: (if (finalCount == 1) title else "Episode $epNum")
+            val epTitle = meta?.first?.takeIf { it.isNotBlank() } ?: (if (finalCount == 1 && mediaType == "movie") title else "Episode $epNum")
             val epThumb = meta?.second?.takeIf { it.isNotBlank() } ?: media.poster
             SourceEpisode(
                 url = "${media.url}&season=$season&episode=$epNum",

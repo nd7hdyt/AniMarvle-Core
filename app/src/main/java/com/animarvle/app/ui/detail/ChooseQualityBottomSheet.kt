@@ -81,6 +81,7 @@ class ChooseQualityBottomSheet : BottomSheetDialogFragment() {
     private var mediaType: MediaType = MediaType.ANIME
     private var mediaYear: Int? = null
     private var durationMinutes: Int = 95
+    private var seasonNumber: Int = 1
     private val isDonghua: Boolean get() = AnimarvleApp.isDonghua(mediaTitle)
 
     private var activeSource: MediaSource? = null
@@ -139,6 +140,7 @@ class ChooseQualityBottomSheet : BottomSheetDialogFragment() {
         val y = arguments?.getInt(ARG_MEDIA_YEAR, -1) ?: -1
         mediaYear = if (y > 0) y else null
 
+        seasonNumber = arguments?.getInt(ARG_SEASON_NUMBER, 1) ?: 1
         val durArg = arguments?.getInt(ARG_DURATION_MINUTES, -1) ?: -1
         durationMinutes = when {
             durArg > 0 -> durArg
@@ -443,13 +445,15 @@ class ChooseQualityBottomSheet : BottomSheetDialogFragment() {
 
     private suspend fun fetchStreamOptions(): StreamFetchResult = coroutineScope {
         val app = (requireActivity().application as AnimarvleApp).container
+        val targetEpNumber = epNumbers.firstOrNull() ?: 1
+        val maxEpNumber = epNumbers.maxOrNull() ?: targetEpNumber
         val meta = MetaQuery(
             metaId = "anilist:$mediaId",
             type = mediaType,
             titles = Titles(english = mediaTitle),
             synonyms = emptyList(),
             year = mediaYear,
-            episodeCount = epNumbers.maxOrNull() ?: 1,
+            episodeCount = maxEpNumber,
         )
 
         val sources = app.sourcesFor(mediaType, mediaTitle)
@@ -458,14 +462,39 @@ class ChooseQualityBottomSheet : BottomSheetDialogFragment() {
             return@coroutineScope StreamFetchResult(emptyList(), emptyList(), emptyList())
         }
 
-        val sMedia = match.media
+        val enrichedExtra = match.media.extra.toMutableMap().apply {
+            put("season", seasonNumber.toString())
+            put("episodeCount", maxEpNumber.toString())
+            put("requestedEpisode", targetEpNumber.toString())
+            if (!containsKey("mediaType")) {
+                put("mediaType", if (mediaType == MediaType.MOVIE) "movie" else if (mediaType == MediaType.TV) "tv" else "anime")
+            }
+        }
+        val sMedia = match.media.copy(
+            episodeCount = maxOf(match.media.episodeCount ?: 0, maxEpNumber),
+            extra = enrichedExtra,
+        )
         val source = sources.firstOrNull { it.id == match.sourceId }
             ?: return@coroutineScope StreamFetchResult(emptyList(), emptyList(), emptyList())
 
         val episodes = runCatching { source.episodes(sMedia) }.getOrNull().orEmpty()
-        val targetEpNumber = epNumbers.firstOrNull() ?: 1
-        val firstEp = episodes.firstOrNull { it.number.toInt() == targetEpNumber } ?: episodes.firstOrNull()
-            ?: return@coroutineScope StreamFetchResult(emptyList(), emptyList(), emptyList())
+        val firstEp = episodes.firstOrNull { it.number.toInt() == targetEpNumber }
+            ?: SourceEpisode(
+                url = "${sMedia.url}&season=$seasonNumber&episode=$targetEpNumber",
+                number = targetEpNumber.toFloat(),
+                title = "Episode $targetEpNumber",
+                thumbnail = sMedia.poster,
+                extra = buildMap {
+                    putAll(sMedia.extra)
+                    put("season", seasonNumber.toString())
+                    put("episode", targetEpNumber.toString())
+                    sMedia.extra["tmdbId"]?.let { put("tmdbId", it) }
+                    put("title", sMedia.title)
+                    if (!containsKey("mediaType")) {
+                        put("mediaType", if (mediaType == MediaType.MOVIE) "movie" else if (mediaType == MediaType.TV) "tv" else "anime")
+                    }
+                },
+            )
 
         activeSource = source
         activeEpisode = firstEp
@@ -965,6 +994,7 @@ class ChooseQualityBottomSheet : BottomSheetDialogFragment() {
         private const val ARG_MEDIA_TYPE = "media_type"
         private const val ARG_MEDIA_YEAR = "media_year"
         private const val ARG_DURATION_MINUTES = "duration_minutes"
+        private const val ARG_SEASON_NUMBER = "season_number"
 
         fun newInstance(
             mediaId: Long,
@@ -974,6 +1004,7 @@ class ChooseQualityBottomSheet : BottomSheetDialogFragment() {
             mediaType: MediaType = MediaType.ANIME,
             year: Int? = null,
             durationMinutes: Int? = null,
+            seasonNumber: Int = 1,
         ): ChooseQualityBottomSheet {
             return ChooseQualityBottomSheet().apply {
                 arguments = Bundle().apply {
@@ -984,6 +1015,7 @@ class ChooseQualityBottomSheet : BottomSheetDialogFragment() {
                     putString(ARG_MEDIA_TYPE, mediaType.name)
                     if (year != null) putInt(ARG_MEDIA_YEAR, year)
                     if (durationMinutes != null && durationMinutes > 0) putInt(ARG_DURATION_MINUTES, durationMinutes)
+                    putInt(ARG_SEASON_NUMBER, seasonNumber)
                 }
             }
         }

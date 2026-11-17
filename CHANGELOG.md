@@ -6,6 +6,15 @@ semantic versioning once a release cadence is agreed.
 
 Dates are ISO-8601. Milestones follow `PROMPT.md` §10.
 
+## [0.1.4] - 2026-11-17
+
+### Series Episode Download Targeting & Resolution
+- **Dynamic Episode Resolution (`AnimarvleStreamSource.kt`):** Fixed an issue where TV series and Anime sources defaulted to 1 episode when episode counts were unlisted by search metadata. Added checks for `requestedEpisode` and unconstrained TV episode numbering (up to 100+), preventing requests for Episode 2+ from collapsing down to Episode 1.
+- **Choose Quality Sheet Episode Synthesis (`ChooseQualityBottomSheet.kt`):** Eliminated the silent fallback `?: episodes.firstOrNull()` which redirected Episode 2+ downloads to Episode 1. When an episode is not pre-populated in source metadata, the sheet now synthesizes the exact target episode and season request.
+- **TV Season & Multi-Season Routing (`PlayerFragment.kt`, `DetailsFragment.kt`, `DetailFragment.kt`):** Wired `seasonNumber` and accurate media type resolution through `ChooseQualityBottomSheet.newInstance()`, ensuring downloads query the active season instead of defaulting to Season 1.
+- **Batch Download Multi-Episode Resolving (`DetailsFragment.kt`, `DetailFragment.kt`):** Ensured each episode in a batch queue resolves its own unique stream URL instead of cloning the first episode's stream URL.
+- **Serverless Worker Hardening (`worker.js`):** Added `&tmdb=1` support to MultiEmbed for TV series, and guarded VidLink stream response parsing against null stream payloads.
+
 ## [0.1.3] - 2026-11-14
 
 ### Offline Playback Fullscreen & Orientation Lock

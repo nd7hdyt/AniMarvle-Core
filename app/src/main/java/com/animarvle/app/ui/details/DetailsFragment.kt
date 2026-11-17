@@ -42,6 +42,7 @@ import com.animarvle.app.ui.mylist.AddToMyListBottomSheet
 import com.animarvle.app.ui.player.HistoryItem
 import com.animarvle.app.ui.player.VortexBlurHelper
 import com.animarvle.app.ui.theme.AppTheme
+import com.animarvle.sourceapi.SourceEpisode
 import com.animarvle.domain.MatchResult
 import com.animarvle.domain.MetaQuery
 import com.animarvle.sourceapi.MediaType
@@ -663,6 +664,8 @@ class DetailsFragment : Fragment() {
     private fun showQualityPicker(epNumbers: List<Int>) {
         val media = currentMedia ?: return
         val (type, _) = resolveMediaType(media)
+        val seasonObj = media.seasons.getOrNull(selectedSeasonIndex)
+        val targetSeasonNumber = seasonObj?.seasonNumber ?: (selectedSeasonIndex + 1)
         val qualitySheet = ChooseQualityBottomSheet.newInstance(
             mediaId = media.id,
             mediaTitle = media.title,
@@ -671,6 +674,7 @@ class DetailsFragment : Fragment() {
             mediaType = type,
             year = media.year,
             durationMinutes = media.durationMinutes,
+            seasonNumber = targetSeasonNumber,
         )
         qualitySheet.setOnConfirmListener { option, episodes ->
             enqueueEpisodes(episodes, option)
@@ -684,6 +688,9 @@ class DetailsFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             binding.btnDownload.isEnabled = false
             val (type, _) = resolveMediaType(media)
+            val seasonObj = media.seasons.getOrNull(selectedSeasonIndex)
+            val targetSeasonNumber = seasonObj?.seasonNumber ?: (selectedSeasonIndex + 1)
+            val maxEp = epNumbers.maxOrNull() ?: 1
             val meta = MetaQuery(
                 metaId = "anilist:${media.id}",
                 type = type,
@@ -694,7 +701,7 @@ class DetailsFragment : Fragment() {
                 ),
                 synonyms = media.synonyms,
                 year = media.year,
-                episodeCount = media.episodes,
+                episodeCount = maxOf(media.episodes ?: 0, maxEp),
             )
             val result = withContext(Dispatchers.IO) {
                 runCatching {
@@ -707,11 +714,18 @@ class DetailsFragment : Fragment() {
                     val source = container.sourcesFor(type).firstOrNull { it.id == result.sourceId }
                         ?: container.sourcesFor(type).firstOrNull()
 
+                    val enrichedMedia = result.media.copy(
+                        episodeCount = maxOf(result.media.episodeCount ?: 0, maxEp),
+                        extra = result.media.extra.toMutableMap().apply {
+                            put("season", targetSeasonNumber.toString())
+                            put("episodeCount", maxEp.toString())
+                        }
+                    )
                     val sourceEpisodes = if (source != null && epNumbers.size > 1) {
                         withContext(Dispatchers.IO) {
                             runCatching {
                                 withTimeoutOrNull(15_000L) {
-                                    source.episodes(result.media)
+                                    source.episodes(enrichedMedia)
                                 }
                             }.getOrNull()
                         }.orEmpty()
@@ -725,33 +739,40 @@ class DetailsFragment : Fragment() {
                             option.streamUrl
                         } else if (source != null) {
                             val ep = sourceEpisodes.firstOrNull { it.number.toInt() == epNum }
-                            if (ep != null) {
-                                withContext(Dispatchers.IO) {
-                                    runCatching {
-                                        withTimeoutOrNull(12_000L) {
-                                            val audioChoice = option?.audio ?: com.animarvle.sourceapi.Audio.SUB
-                                            val epOptions = source.options(ep)
-                                            val serverList = epOptions.byAudio[audioChoice]
-                                                ?: epOptions.byAudio.values.flatten()
-                                            val targetServer = serverList.firstOrNull {
-                                                it.label.contains(option?.serverName.orEmpty(), ignoreCase = true) ||
-                                                it.key.contains(option?.serverName.orEmpty(), ignoreCase = true)
-                                            } ?: serverList.firstOrNull()
+                                ?: SourceEpisode(
+                                    url = "${result.media.url}&season=$targetSeasonNumber&episode=$epNum",
+                                    number = epNum.toFloat(),
+                                    title = "Episode $epNum",
+                                    thumbnail = result.media.poster,
+                                    extra = buildMap {
+                                        putAll(result.media.extra)
+                                        put("season", targetSeasonNumber.toString())
+                                        put("episode", epNum.toString())
+                                    }
+                                )
+                            withContext(Dispatchers.IO) {
+                                runCatching {
+                                    withTimeoutOrNull(12_000L) {
+                                        val audioChoice = option?.audio ?: com.animarvle.sourceapi.Audio.SUB
+                                        val epOptions = source.options(ep)
+                                        val serverList = epOptions.byAudio[audioChoice]
+                                            ?: epOptions.byAudio.values.flatten()
+                                        val targetServer = serverList.firstOrNull {
+                                            it.label.contains(option?.serverName.orEmpty(), ignoreCase = true) ||
+                                            it.key.contains(option?.serverName.orEmpty(), ignoreCase = true)
+                                        } ?: serverList.firstOrNull()
 
-                                            if (targetServer != null) {
-                                                val resolved = source.resolve(ep, com.animarvle.sourceapi.Choice(audioChoice, targetServer.key))
-                                                resolved.streams.firstOrNull {
-                                                    it.qualityLabel.equals(option?.qualityBadge, ignoreCase = true)
-                                                }?.url ?: resolved.streams.firstOrNull()?.url
-                                            } else {
-                                                null
-                                            }
+                                        if (targetServer != null) {
+                                            val resolved = source.resolve(ep, com.animarvle.sourceapi.Choice(audioChoice, targetServer.key))
+                                            resolved.streams.firstOrNull {
+                                                it.qualityLabel.equals(option?.qualityBadge, ignoreCase = true)
+                                            }?.url ?: resolved.streams.firstOrNull()?.url
+                                        } else {
+                                            null
                                         }
-                                    }.getOrNull()
-                                }.orEmpty()
-                            } else {
-                                ""
-                            }
+                                    }
+                                }.getOrNull()
+                            }.orEmpty()
                         } else {
                             ""
                         }

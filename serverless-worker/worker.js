@@ -819,6 +819,7 @@ async function resolveVidLink(type, tmdbId, season, episode, workerOrigin, media
     if (!res.ok) return [];
 
     const data = await res.json();
+    if (!data || !data.stream) return [];
     const quals = data.stream?.qualities || {};
     const captions = (data.stream?.captions || []).map(c => ({
       label: c.language || "Subtitle",
@@ -1396,9 +1397,10 @@ async function resolvePrismMultiAudio(tmdbId, imdbId, type, season, episode, ori
   const audioTracks = [];
 
   try {
+    const tmdbParam = (id === tmdbId) ? "&tmdb=1" : "";
     const targetUrl = (type === "tv" || type === "series")
-      ? `https://multiembed.mov/?video_id=${id}&s=${season}&e=${episode}`
-      : `https://multiembed.mov/?video_id=${id}&tmdb=1`;
+      ? `https://multiembed.mov/?video_id=${id}${tmdbParam}&s=${season}&e=${episode}`
+      : `https://multiembed.mov/?video_id=${id}${tmdbParam}`;
 
     const res = await fetchWithTimeout(targetUrl, {
       headers: {
